@@ -24,7 +24,7 @@ export function updateAI(m: Match, p: MatchPlayer, dt: number): void {
     return;
   }
   if (b.state !== 'carried') {
-    looseBallAI(m, p, dt);
+    looseBallAI(m, p);
     return;
   }
   if (b.carrier && b.carrier.side === p.side) {
@@ -77,8 +77,7 @@ function predictBall(m: Match, lead: number): { x: number; y: number } {
 
 /* ------------------------------------------------------------- loose ball */
 
-function looseBallAI(m: Match, p: MatchPlayer, dt: number): void {
-  void dt;
+function looseBallAI(m: Match, p: MatchPlayer): void {
   const b = m.ball;
   const lead = clamp(dist(p.x, p.y, b.x, b.y) / 12, 0.05, 0.7);
   const spot = predictBall(m, lead);
@@ -226,7 +225,6 @@ function shotQuality(m: Match, p: MatchPlayer): number {
 
 function carrierAI(m: Match, p: MatchPlayer, dt: number): void {
   const goal = attackingGoal(p.side);
-  const dir = attackDir(p.side);
   const t = m.tacticsOf(p.side).off;
   const d = m.diff;
   const pressure = m.pressureOn(p);
@@ -315,7 +313,6 @@ function carrierAI(m: Match, p: MatchPlayer, dt: number): void {
 
   // --- otherwise drive / reset.
   driveMove(m, p, marker, markerDist);
-  void dir;
 }
 
 function shotQualityAt(m: Match, side: Side, q: MatchPlayer): number {
@@ -505,7 +502,6 @@ export function saveRadius(g: MatchPlayer): number {
 }
 
 export function updateGoalie(m: Match, g: MatchPlayer, dt: number): void {
-  void dt;
   const b = m.ball;
   const own = defendingGoal(g.side);
   const dir = attackDir(g.side);

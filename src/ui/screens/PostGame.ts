@@ -22,14 +22,13 @@ interface Line { side: Side; data: PlayerData; stat: PlayerStats }
 export class PostGameScreen implements Screen {
   el: HTMLElement;
 
-  constructor(app: App, opts: PostGameOptions) {
+  constructor(_app: App, opts: PostGameOptions) {
     const m = opts.match;
     const home = m.setups.home.team;
     const away = m.setups.away.team;
     const box = m.boxScore();
     const winner = m.winner();
     const potg = playerOfTheGame(box, winner);
-    void app;
 
     this.el = screenEl(
       h('div', { class: 'topbar' },

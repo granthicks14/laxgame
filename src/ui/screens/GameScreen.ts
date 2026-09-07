@@ -264,6 +264,7 @@ export class GameScreen implements Screen {
   private bumpScore(side: Side): void {
     const el = side === 'home' ? this.elHomeScore : this.elAwayScore;
     el.classList.remove('is-bump');
+    // Force a reflow so the animation restarts on a second goal in a row.
     void el.offsetWidth;
     el.classList.add('is-bump');
   }

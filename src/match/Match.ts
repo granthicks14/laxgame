@@ -422,7 +422,7 @@ export class Match {
     this.decayPlayers(dt, 0.4);
     const human = this.humanSide ?? 'home';
     const ai = otherSide(human);
-    const done = stepFaceoff(fo, dt, input.actionPressed, this.rng, human, ai);
+    const done = stepFaceoff(fo, dt, input.actionPressed, human, ai);
     if (!done) return;
 
     fo.timer -= dt;
@@ -834,7 +834,7 @@ export class Match {
     this.checkSaves(prevX, prevY);
     this.checkGoals(prevX, prevY);
     if (this.phase !== 'live') return;
-    this.checkOutOfBounds(prevX, prevY);
+    this.checkOutOfBounds();
     if (this.phase !== 'live') return;
     this.checkPickups(dt);
   }
@@ -995,7 +995,7 @@ export class Match {
     if (shooter) { shooter.animPose = 'idle'; shooter.flash = 1.2; }
   }
 
-  private checkOutOfBounds(prevX: number, prevY: number): void {
+  private checkOutOfBounds(): void {
     const b = this.ball;
     if (b.state === 'carried') return;
     const outLeft = b.x < 0;
@@ -1007,7 +1007,6 @@ export class Match {
     const wasShot = b.state === 'shot';
     const exitX = clamp(b.x, 0, FIELD.length);
     const exitY = clamp(b.y, 0, FIELD.width);
-    void prevX; void prevY;
 
     let awardTo: Side;
     if ((outLeft || outRight) && wasShot) {

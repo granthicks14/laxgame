@@ -101,12 +101,10 @@ export function stepFaceoff(
   fo: FaceoffState,
   dt: number,
   pressed: boolean,
-  rng: Rng,
   humanSide: Side,
   aiSide: Side,
 ): boolean {
   if (fo.stage === 'result') return true;
-  void rng;
 
   fo.timer -= dt;
 

@@ -144,7 +144,7 @@ console.log('\nFaceoff win rate by timing precision (human vs AI faceoff rating)
       let guard = 0;
       while (guard++ < 600) {
         const press = fo.stage === 'sweep' && !fo.humanDone && fo.marker >= target;
-        if (stepFaceoff(fo, 1 / 60, press, rng, 'home', 'away')) break;
+        if (stepFaceoff(fo, 1 / 60, press, 'home', 'away')) break;
       }
       if (fo.winner === 'home') wins++;
     }
