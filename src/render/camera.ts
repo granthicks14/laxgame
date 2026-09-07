@@ -36,7 +36,7 @@ export class Camera {
     return (this.rotate ? this.bufW : this.bufH) / this.ppy;
   }
 
-  follow(tx: number, ty: number, dt: number, lead = 0): void {
+  follow(tx: number, ty: number, dt: number, lead = 0, rate = 5.5): void {
     const halfX = this.viewYardsX / 2;
     const halfY = this.viewYardsY / 2;
     // Only ever show a sliver of out-of-bounds: an empty green border reads as
@@ -50,8 +50,8 @@ export class Camera {
     const goalX = minX > maxX ? FIELD.centerX : clamp(tx + lead, minX, maxX);
     const goalY = minY > maxY ? FIELD.centerY : clamp(ty, minY, maxY);
 
-    this.x = damp(this.x, goalX, 5.5, dt);
-    this.y = damp(this.y, goalY, 5.5, dt);
+    this.x = damp(this.x, goalX, rate, dt);
+    this.y = damp(this.y, goalY, rate, dt);
 
     if (this.shake > 0.01) {
       this.shake = damp(this.shake, 0, 7, dt);

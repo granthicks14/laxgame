@@ -5,7 +5,7 @@ import {
   ROSTER_SHAPE, type Grade, type PlayerData, type PlayerAttrs, type PlayerStats,
 } from '../data/players';
 import {
-  TEAMS, getTeam, teamsInDivision, areRivals, type TeamData, type TeamRatings,
+  TEAMS, getTeam, teamsInClass, areRivals, type TeamData, type TeamRatings,
 } from '../data/teams';
 import { DEFAULT_TACTICS } from '../data/tactics';
 import { DIFFICULTIES, type DifficultyKey } from '../data/difficulty';
@@ -52,12 +52,12 @@ export function createCareer(opts: NewCareerOptions): Career {
     seed,
     year: 1,
     teamId: team.id,
-    division: team.division,
+    classKey: team.classKey,
     difficulty: opts.difficulty,
     gameLength: opts.gameLength,
     tactics: { ...DEFAULT_TACTICS },
-    schedule: buildSchedule(team.division, team.id, seed),
-    standings: emptyStandings(team.division),
+    schedule: buildSchedule(team.classKey, team.id, seed),
+    standings: emptyStandings(team.classKey),
     ratingOverrides: {},
     roster: generateRoster(team, `${seed}:1`),
     coachingPoints: 4,
@@ -77,9 +77,9 @@ export function createCareer(opts: NewCareerOptions): Career {
   return career;
 }
 
-function emptyStandings(division: Career['division']): Record<string, StandingRow> {
+function emptyStandings(classKey: Career['classKey']): Record<string, StandingRow> {
   const rows: Record<string, StandingRow> = {};
-  for (const t of teamsInDivision(division)) {
+  for (const t of teamsInClass(classKey)) {
     rows[t.id] = { teamId: t.id, wins: 0, losses: 0, ties: 0, goalsFor: 0, goalsAgainst: 0 };
   }
   return rows;
@@ -240,6 +240,16 @@ const ROUND_NAME: Record<PlayoffRound, string> = {
 };
 export const roundName = (r: PlayoffRound): string => ROUND_NAME[r];
 
+/** How many teams make the playoffs, scaled so qualifying actually means
+ *  something: roughly the top half, rounded to a bracket size. */
+export function playoffFieldSize(teamCount: number): number {
+  if (teamCount >= 12) return 8;
+  if (teamCount >= 6) return 4;
+  return 2;
+}
+
+const roundLabel = (teams: number): PlayoffRound => (teams >= 8 ? 'QF' : teams >= 4 ? 'SF' : 'F');
+
 /** Called whenever the league might need to move to its next stage. */
 export function advancePhase(career: Career): void {
   if (career.seasonComplete) return;
@@ -248,8 +258,9 @@ export function advancePhase(career: Career): void {
   if (anyRegularLeft) return;
 
   if (!career.playoffSeeds) {
-    career.playoffSeeds = standingsSorted(career).slice(0, 8).map((r) => r.teamId);
-    createRound(career, 'QF', career.playoffSeeds, regWeeks + 1);
+    const field = playoffFieldSize(teamsInClass(career.classKey).length);
+    career.playoffSeeds = standingsSorted(career).slice(0, field).map((r) => r.teamId);
+    createRound(career, roundLabel(field), career.playoffSeeds, regWeeks + 1);
     resolveNonFeatured(career);
     return;
   }
@@ -258,17 +269,14 @@ export function advancePhase(career: Career): void {
   if (pending.length > 0) return;
 
   const lastRound = lastPlayoffRound(career);
-  if (lastRound === 'QF') {
-    const winners = roundWinners(career, 'QF');
-    createRound(career, 'SF', winners, regWeeks + 2);
-    resolveNonFeatured(career);
-  } else if (lastRound === 'SF') {
-    const winners = roundWinners(career, 'SF');
-    createRound(career, 'F', winners, regWeeks + 3);
-    resolveNonFeatured(career);
-  } else if (lastRound === 'F') {
-    finishSeason(career);
-  }
+  if (!lastRound) return;
+  if (lastRound === 'F') { finishSeason(career); return; }
+
+  const winners = roundWinners(career, lastRound);
+  if (winners.length < 2) { finishSeason(career); return; }
+  const weekOffset = lastRound === 'QF' ? 2 : 3;
+  createRound(career, roundLabel(winners.length), winners, regWeeks + weekOffset);
+  resolveNonFeatured(career);
 }
 
 function lastPlayoffRound(career: Career): PlayoffRound | null {
@@ -521,8 +529,8 @@ export function runOffseason(career: Career): OffseasonReport {
 
   // 5. New season.
   career.year++;
-  career.schedule = buildSchedule(career.division, career.teamId, career.seed + career.year * 7919);
-  career.standings = emptyStandings(career.division);
+  career.schedule = buildSchedule(career.classKey, career.teamId, career.seed + career.year * 7919);
+  career.standings = emptyStandings(career.classKey);
   career.playoffSeeds = null;
   career.eliminated = false;
   career.seasonComplete = false;

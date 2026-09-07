@@ -30,11 +30,11 @@ function pct(a: number, b: number): string {
 }
 
 const pairs: [string, string][] = [
-  ['highland-park', 'jesuit-dallas'],
-  ['st-marks', 'marcus'],
+  ['highland-park', 'dallas-jesuit'],
+  ['st-marks', 'allen'],
   ['frisco', 'highland-park'],
   ['coppell', 'esd'],
-  ['wylie', 'grapevine'],
+  ['lone-star', 'grapevine'],
   ['prosper', 'plano'],
 ];
 
@@ -73,7 +73,7 @@ for (const diff of DIFFICULTY_ORDER) {
 let upsets = 0;
 const N = 60;
 for (let i = 0; i < N; i++) {
-  const m = runGame('frisco', 'jesuit-dallas', 'varsity', 5000 + i);
+  const m = runGame('frisco', 'dallas-jesuit', 'varsity', 5000 + i);
   if (m.score.home > m.score.away) upsets++;
 }
 console.log(`\nFrisco (70 OVR) at home vs Jesuit (91 OVR): ${upsets}/${N} upsets`);
@@ -95,7 +95,7 @@ console.log(`Plano (78) vs Coppell (76): home wins ${even}/${N}`);
 {
   const cfg = makeMatchConfig({
     homeTeam: getTeam('highland-park'),
-    awayTeam: getTeam('jesuit-dallas'),
+    awayTeam: getTeam('dallas-jesuit'),
     humanSide: null,
     difficulty: 'varsity',
     gameLength: 'short',

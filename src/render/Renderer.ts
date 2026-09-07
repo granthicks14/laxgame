@@ -8,6 +8,19 @@ import { FieldLayer, venueTheme, type VenueTheme } from './field';
 import { drawBall, drawGoal, drawPlayer, type Jersey } from './sprites';
 import { weatherFor, type Weather } from './weather';
 
+/** Optional presentation override, used by the goal replay. */
+export interface ViewOverride {
+  /** 1 = normal. Higher crops into the buffer, keeping the pixel grid intact. */
+  zoom: number;
+  /** World point to keep centred while zoomed. */
+  focusX: number;
+  focusY: number;
+  /** Camera follow rate; higher is snappier. */
+  followRate: number;
+  /** Broadcast mode: hide the gameplay affordances and trail the ball. */
+  presentation: boolean;
+}
+
 export interface AimHint {
   x: number;
   y: number;
@@ -90,7 +103,7 @@ export class Renderer {
     this.cam.snap(match.ball.x, match.ball.y);
   }
 
-  render(match: Match, dt: number, aim: AimHint | null): void {
+  render(match: Match, dt: number, aim: AimHint | null, view?: ViewOverride | null): void {
     if (this.resize() && this.theme) {
       this.field.build(this.cam.ppy, this.theme, match.setups.home.team, match.setups.away.team, match.rng.seed);
     }
@@ -102,7 +115,11 @@ export class Renderer {
     const focus = match.focus ?? { x: match.ball.x, y: match.ball.y };
     const carrier = match.ball.carrier;
     const lead = carrier ? Math.max(-9, Math.min(9, carrier.vx * 0.55)) : 0;
-    this.cam.follow(focus.x, focus.y, dt, this.cam.rotate ? 0 : lead);
+    this.cam.follow(
+      focus.x, focus.y, dt,
+      view ? 0 : (this.cam.rotate ? 0 : lead),
+      view ? view.followRate : 5.5,
+    );
     this.effects.update(dt);
 
     const ctx = this.bctx;
@@ -123,8 +140,10 @@ export class Renderer {
     drawGoal(ctx, this.cam, 'home');
     drawGoal(ctx, this.cam, 'away');
 
+    const presenting = !!view?.presentation;
+
     // Ball carrier marker so the eye always finds the ball
-    if (carrier) {
+    if (carrier && !presenting) {
       const sx = this.cam.projectX(carrier.x, carrier.y);
       const sy = this.cam.projectY(carrier.x, carrier.y);
       ctx.strokeStyle = carrier.side === match.humanSide ? '#ffe14d' : '#ff6b5a';
@@ -137,7 +156,7 @@ export class Renderer {
     }
 
     // Aim helpers for the human player
-    if (aim && carrier && carrier.side === match.humanSide) {
+    if (aim && carrier && carrier.side === match.humanSide && !presenting) {
       this.drawAimHelpers(match, carrier, aim);
     }
 
@@ -149,7 +168,7 @@ export class Renderer {
     this.drawOrder.sort((a, b) =>
       this.cam.projectY(a.x, a.y) - this.cam.projectY(b.x, b.y));
 
-    const controlled = match.humanSide ? match.controlled[match.humanSide] : null;
+    const controlled = presenting ? null : (match.humanSide ? match.controlled[match.humanSide] : null);
     for (const p of this.drawOrder) {
       drawPlayer(ctx, this.cam, p, {
         jersey: jerseys[p.side],
@@ -160,6 +179,9 @@ export class Renderer {
         dim: false,
       });
     }
+
+    if (presenting) this.drawBallTrail(ctx, match.ball.x, match.ball.y, match.ball.z);
+    else this.trail.length = 0;
 
     if (match.ball.state !== 'carried') {
       drawBall(ctx, this.cam, match.ball.x, match.ball.y, match.ball.z);
@@ -179,25 +201,41 @@ export class Renderer {
     this.effects.drawFlash(ctx, bw, bh);
 
     // Off-screen ball indicator
-    if (!this.cam.visible(match.ball.x, match.ball.y, 0)) {
+    if (!presenting && !this.cam.visible(match.ball.x, match.ball.y, 0)) {
       this.drawOffscreenArrow(ctx, match.ball.x, match.ball.y, bw, bh);
     }
 
     // Upscale to the display canvas with nearest-neighbour for crisp pixels.
+    // A zoomed view crops the buffer instead of scaling the world, so the pixel
+    // grid and the pre-rendered field layer both stay untouched.
     this.ctx.imageSmoothingEnabled = false;
-    this.ctx.drawImage(this.buffer, 0, 0, this.canvas.width, this.canvas.height);
+    const zoom = view && view.zoom > 1.001 ? view.zoom : 1;
+    if (zoom > 1) {
+      const sw = bw / zoom;
+      const sh = bh / zoom;
+      const fx = this.cam.projectX(view!.focusX, view!.focusY);
+      const fy = this.cam.projectY(view!.focusX, view!.focusY);
+      const sx = Math.max(0, Math.min(bw - sw, fx - sw / 2));
+      const sy = Math.max(0, Math.min(bh - sh, fy - sh / 2));
+      this.ctx.drawImage(this.buffer, sx, sy, sw, sh, 0, 0, this.canvas.width, this.canvas.height);
+    } else {
+      this.ctx.drawImage(this.buffer, 0, 0, this.canvas.width, this.canvas.height);
+    }
   }
 
   private drawAimHelpers(match: Match, carrier: MatchPlayer, aim: AimHint): void {
     const ctx = this.bctx;
     const u = this.cam.ppy;
     if (aim.charging) {
-      // Shot line into the cage.
+      // Shot line into the cage. Mirrors Match.doShot exactly, so what you see
+      // is where the ball is aimed.
       const goal = attackingGoal(carrier.side);
       const half = FIELD.goalWidth / 2;
-      const lat = Math.max(-1, Math.min(1, aim.x * 0 + aimLateral(carrier, goal, aim)));
+      const lat = Math.hypot(aim.x, aim.y) > 0.18
+        ? Math.max(-1, Math.min(1, aim.y * 1.35))
+        : 0;
       const tx = goal.x;
-      const ty = goal.y + lat * half * 0.9;
+      const ty = goal.y + lat * half * 0.85;
       const x0 = this.cam.projectX(carrier.x, carrier.y);
       const y0 = this.cam.projectY(carrier.x, carrier.y) - u * 0.8;
       const x1 = this.cam.projectX(tx, ty);
@@ -211,6 +249,10 @@ export class Renderer {
       ctx.lineTo(x1, y1);
       ctx.stroke();
       ctx.setLineDash([]);
+      // A marker on the goal line showing the exact spot being aimed at.
+      const mw = Math.max(2, Math.round(u * 0.3));
+      ctx.fillStyle = aim.charge > 0.75 ? '#ffe14d' : '#ffffff';
+      ctx.fillRect(Math.round(x1 - mw / 2), Math.round(y1 - mw / 2), mw, mw);
       ctx.globalAlpha = 1;
       return;
     }
@@ -223,6 +265,31 @@ export class Renderer {
     ctx.globalAlpha = 0.9;
     const w = Math.max(3, Math.round(u * 0.55));
     ctx.fillRect(Math.round(sx - w / 2), Math.round(sy + u * 0.35), w, 1);
+    ctx.globalAlpha = 1;
+  }
+
+  private trail: number[] = [];
+
+  /** A short fading tail behind the ball, so a replayed shot reads at a glance. */
+  private drawBallTrail(ctx: CanvasRenderingContext2D, x: number, y: number, z: number): void {
+    const last = this.trail.length;
+    if (last === 0 || Math.hypot(this.trail[last - 3] - x, this.trail[last - 2] - y) > 0.25) {
+      this.trail.push(x, y, z);
+      if (this.trail.length > 3 * 14) this.trail.splice(0, 3);
+    }
+    const n = this.trail.length / 3;
+    for (let i = 0; i < n - 1; i++) {
+      const t = (i + 1) / n;
+      const px = this.trail[i * 3];
+      const py = this.trail[i * 3 + 1];
+      const pz = this.trail[i * 3 + 2];
+      ctx.globalAlpha = t * 0.5;
+      ctx.fillStyle = '#ffe9a8';
+      const sx = this.cam.projectX(px, py);
+      const sy = this.cam.projectY(px, py) - pz * this.cam.ppy * 0.55;
+      const sz = Math.max(1, Math.round(this.cam.ppy * 0.18 * t));
+      ctx.fillRect(Math.round(sx - sz / 2), Math.round(sy - sz / 2), sz, sz);
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -248,14 +315,4 @@ export class Renderer {
   destroy(): void {
     this.effects.clear();
   }
-}
-
-function aimLateral(carrier: MatchPlayer, goal: { x: number; y: number }, aim: AimHint): number {
-  const dx = goal.x - carrier.x;
-  const dy = goal.y - carrier.y;
-  const m = Math.hypot(dx, dy) || 1;
-  const nx = dx / m;
-  const ny = dy / m;
-  if (Math.hypot(aim.x, aim.y) < 0.2) return 0;
-  return aim.x * -ny + aim.y * nx;
 }

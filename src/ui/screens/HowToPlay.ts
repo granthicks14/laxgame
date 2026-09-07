@@ -78,7 +78,7 @@ export class HowToPlayScreen implements Screen {
 
 function startTutorial(app: App): void {
   const you = getTeam(quickPrefs.teamId);
-  const them = getTeam(quickPrefs.teamId === 'jesuit-dallas' ? 'highland-park' : 'jesuit-dallas');
+  const them = getTeam(quickPrefs.teamId === 'dallas-jesuit' ? 'highland-park' : 'dallas-jesuit');
   const config = makeMatchConfig({
     homeTeam: you,
     awayTeam: them,

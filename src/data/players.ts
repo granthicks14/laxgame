@@ -3,6 +3,7 @@ import { clamp } from '../core/math';
 import type { Position } from './constants';
 import type { TeamData } from './teams';
 import { FIRST_NAMES, LAST_NAMES } from './names';
+import { officialRoster, type OfficialPlayer, type RosterSource } from './rosters';
 
 export interface PlayerAttrs {
   speed: number;
@@ -55,6 +56,9 @@ export interface PlayerData {
   id: string;
   first: string;
   last: string;
+  /** 'official' means the NAME, NUMBER, POSITION and GRADE come from a public
+   *  roster. Ratings are generated in both cases — see data/rosters.ts. */
+  source: RosterSource;
   number: number;
   pos: Position;
   grade: Grade;
@@ -130,6 +134,11 @@ interface GenOpts {
   /** Depth chart slot: 0 = best on the line, higher = deeper. */
   depth: number;
   grade?: Grade;
+  /** Supplied when the identity comes from a public roster. */
+  first?: string;
+  last?: string;
+  number?: number;
+  source?: RosterSource;
 }
 
 /** Compresses the top of the scale so the best programs produce excellent
@@ -172,9 +181,12 @@ export function generatePlayer(
   const potential = Math.round(clamp(overall + rng.range(2, growthRoom), overall, 99));
 
   let number = 0;
+  if (opts.number !== undefined && !usedNumbers.has(opts.number)) number = opts.number;
   const preferred = pos === 'G' ? [1, 30, 31, 33, 35] : pos === 'D' ? [2, 3, 4, 5, 6, 40, 44] : [];
-  for (const n of rng.shuffle([...preferred])) {
-    if (!usedNumbers.has(n)) { number = n; break; }
+  if (number === 0) {
+    for (const n of rng.shuffle([...preferred])) {
+      if (!usedNumbers.has(n)) { number = n; break; }
+    }
   }
   while (number === 0) {
     const n = rng.int(1, 49);
@@ -184,8 +196,9 @@ export function generatePlayer(
 
   return {
     id: nextId(),
-    first: rng.pick(FIRST_NAMES),
-    last: rng.pick(LAST_NAMES),
+    first: opts.first ?? rng.pick(FIRST_NAMES),
+    last: opts.last ?? rng.pick(LAST_NAMES),
+    source: opts.source ?? 'generated',
     number,
     pos,
     grade,
@@ -209,13 +222,48 @@ export const ROSTER_SHAPE: { pos: Position; count: number }[] = [
 
 export const ROSTER_SIZE = ROSTER_SHAPE.reduce((n, s) => n + s.count, 0);
 
+/** Splits a published "First Last" name without mangling suffixes or initials. */
+function splitName(name: string): { first: string; last: string } {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return { first: parts[0], last: '' };
+  return { first: parts[0], last: parts.slice(1).join(' ') };
+}
+
+/**
+ * Builds a team's roster. If a public roster has been imported for this team,
+ * the real names, numbers, positions and grades are used and only the RATINGS
+ * are generated. Otherwise the whole squad is fictional. Either way the squad
+ * is filled out to ROSTER_SHAPE so the match engine always has a full team.
+ */
 export function generateRoster(team: TeamData, seed: number | string): PlayerData[] {
   const rng = new Rng(`${team.id}:${seed}`);
   const used = new Set<number>();
   const roster: PlayerData[] = [];
+  const official = officialRoster(team.id);
+
+  // Bucket any imported players by position so they fill their own slots first.
+  const pool = new Map<Position, OfficialPlayer[]>();
+  if (official) {
+    for (const p of official.players) {
+      const pos = p.position ?? 'M';
+      const list = pool.get(pos) ?? [];
+      list.push(p);
+      pool.set(pos, list);
+    }
+  }
+
   for (const { pos, count } of ROSTER_SHAPE) {
+    const listed = pool.get(pos) ?? [];
     for (let i = 0; i < count; i++) {
-      roster.push(generatePlayer(rng, team, pos, { depth: i }, used));
+      const real = listed[i];
+      if (real) {
+        const { first, last } = splitName(real.name);
+        roster.push(generatePlayer(rng, team, pos, {
+          depth: i, grade: real.grade, first, last, number: real.number, source: 'official',
+        }, used));
+      } else {
+        roster.push(generatePlayer(rng, team, pos, { depth: i }, used));
+      }
     }
   }
   return sortDepthChart(roster);

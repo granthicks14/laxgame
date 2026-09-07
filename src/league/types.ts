@@ -1,5 +1,5 @@
 import type { PlayerData } from '../data/players';
-import type { DivisionKey, TeamRatings } from '../data/teams';
+import type { ClassKey, TeamRatings } from '../data/teams';
 import type { Tactics } from '../data/tactics';
 import type { DifficultyKey } from '../data/difficulty';
 import type { GameLengthKey } from '../data/constants';
@@ -55,7 +55,7 @@ export interface Career {
   seed: number;
   year: number;
   teamId: string;
-  division: DivisionKey;
+  classKey: ClassKey;
   difficulty: DifficultyKey;
   gameLength: GameLengthKey;
   tactics: Tactics;
@@ -85,4 +85,4 @@ export interface Career {
   finish: string | null;
 }
 
-export const CAREER_VERSION = 3;
+export const CAREER_VERSION = 4;

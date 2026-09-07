@@ -10,6 +10,8 @@ export interface Settings {
   reducedMotion: boolean;
   showHints: boolean;
   seenTutorial: boolean;
+  /** Show a highlight replay after each goal. */
+  goalReplays: boolean;
   /** 'auto' picks touch controls on touch devices. */
   controls: 'auto' | 'touch' | 'keyboard';
 }
@@ -24,6 +26,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reducedMotion: false,
   showHints: true,
   seenTutorial: false,
+  goalReplays: true,
   controls: 'auto',
 };
 

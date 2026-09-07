@@ -140,6 +140,7 @@ export type MatchPhase =
   | 'faceoff'
   | 'live'
   | 'goal'
+  | 'replay'
   | 'quarterbreak'
   | 'restart'
   | 'final';
@@ -175,9 +176,31 @@ export interface MatchConfig {
   suddenVictory?: boolean;
   seed?: number;
   practice?: PracticeConfig;
+  /** Show a highlight replay after each goal. */
+  replays?: boolean;
+}
+
+export type ShotOutcome = 'goal' | 'save' | 'post' | 'wide' | 'blocked' | 'pending';
+
+/** Everything about the last shot, used for on-screen feedback and for tuning. */
+export interface ShotInfo {
+  side: Side;
+  shooter: MatchPlayer;
+  /** 0..1 estimate of how good the look was, before the dice. */
+  quality: number;
+  distance: number;
+  /** 0..1.4 defensive pressure at release. */
+  pressure: number;
+  /** Final accuracy value, 0..100. */
+  accuracy: number;
+  charge: number;
+  /** True when the shooter was moving quickly at release. */
+  onTheRun: boolean;
+  outcome: ShotOutcome;
 }
 
 export interface MatchEvents {
+  shotFeedback: { info: ShotInfo; label: string; tone: 'good' | 'bad' | 'neutral' };
   goal: { side: Side; scorer: MatchPlayer; assist: MatchPlayer | null; distance: number };
   save: { side: Side; goalie: MatchPlayer; power: number };
   post: { x: number; y: number };

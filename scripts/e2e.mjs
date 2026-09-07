@@ -112,11 +112,15 @@ async function desktop(browser) {
       games: c.schedule.length,
       played: c.schedule.filter((g) => g.played).length,
       playoffs: c.schedule.filter((g) => g.playoff).length,
+      seeds: (c.playoffSeeds || []).length,
       ties: Object.values(c.standings).reduce((n, r) => n + r.ties, 0),
     };
   });
   check('every game was played', saved.played === saved.games, `${saved.played}/${saved.games}`);
-  check('a full playoff bracket was generated', saved.playoffs === 7, `${saved.playoffs} games`);
+  // A single-elimination bracket of N seeds is exactly N-1 games.
+  check('a complete playoff bracket was generated',
+    saved.seeds >= 4 && saved.playoffs === saved.seeds - 1,
+    `${saved.seeds} seeds, ${saved.playoffs} games`);
   check('no game ended level', saved.ties === 0);
 
   await ctx.close();

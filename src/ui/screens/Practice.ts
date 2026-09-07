@@ -67,7 +67,7 @@ export class PracticeScreen implements Screen {
 
   constructor(app: App) {
     const you = getTeam(quickPrefs.teamId);
-    const them = getTeam(quickPrefs.opponentId === quickPrefs.teamId ? 'jesuit-dallas' : quickPrefs.opponentId);
+    const them = getTeam(quickPrefs.opponentId === quickPrefs.teamId ? 'dallas-jesuit' : quickPrefs.opponentId);
 
     this.el = screenEl(
       topbar(app, 'Practice', you.abbr),
@@ -110,7 +110,7 @@ export class PracticeScreen implements Screen {
 
 function runDrill(app: App, drill: Drill): void {
   const you = getTeam(quickPrefs.teamId);
-  const them = getTeam(quickPrefs.opponentId === quickPrefs.teamId ? 'jesuit-dallas' : quickPrefs.opponentId);
+  const them = getTeam(quickPrefs.opponentId === quickPrefs.teamId ? 'dallas-jesuit' : quickPrefs.opponentId);
   const practice = drill.build();
   const config = makeMatchConfig({
     homeTeam: you,

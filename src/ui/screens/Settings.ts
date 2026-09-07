@@ -45,6 +45,12 @@ export class SettingsScreen implements Screen {
                 (Object.keys(GAME_LENGTHS) as GameLengthKey[]).map((k) => ({ value: k, label: GAME_LENGTHS[k].label })),
                 s.gameLength,
                 (v) => app.updateSettings({ gameLength: v }), true)),
+            fieldRow('Goal replays', 'Play a short highlight after each goal.',
+              segmented(
+                [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
+                s.goalReplays ? 'on' : 'off',
+                (v) => app.updateSettings({ goalReplays: v === 'on' }),
+              )),
             h('div', { class: 'tiny', text: 'These are defaults for new games. A career keeps the settings it was created with.' })),
 
           panel('Controls',

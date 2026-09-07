@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "balance": "esbuild src/dev/balance.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-balance.mjs --log-level=error && node node_modules/.cache/lsl-balance.mjs",
-    "test:e2e": "node scripts/e2e.mjs"
+    "test:e2e": "node scripts/e2e.mjs",
+    "human": "esbuild src/dev/human.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-human.mjs --log-level=error && node node_modules/.cache/lsl-human.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

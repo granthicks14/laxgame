@@ -12,7 +12,7 @@ import { playSeasonGame } from './seasonPlay';
 import { TeamManageScreen } from './TeamManage';
 import { StandingsScreen, ScheduleScreen } from './SeasonTables';
 import { SeasonSummaryScreen } from './SeasonSummary';
-import { DIVISIONS } from '../../data/teams';
+import { CLASSES } from '../../data/teams';
 
 export class SeasonHubScreen implements Screen {
   el: HTMLElement;
@@ -76,7 +76,7 @@ export class SeasonHubScreen implements Screen {
         teamBadge(team, 'lg'),
         h('div', { class: 'stack', style: 'gap:4px;flex:1 1 auto;min-width:0' },
           h('div', { class: 'display', style: 'font-size:20px', text: team.name }),
-          h('div', { class: 'small', text: `${DIVISIONS[career.division].short} · ${seasonRecordText(career)} · ${ordinal(rank)} of ${of}` }),
+          h('div', { class: 'small', text: `${CLASSES[career.classKey].short} · ${seasonRecordText(career)} · ${ordinal(rank)} of ${of}` }),
           h('div', { class: 'row row--wrap', style: 'gap:6px' },
             h('span', { class: 'pill pill--accent', text: `OVR ${team.overall}` }),
             h('span', { class: 'pill', text: `Prestige ${Math.round(career.prestige)}` }),

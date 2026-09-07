@@ -1,8 +1,8 @@
 import { audio } from '../../audio/Audio';
 import { Match } from '../../match/Match';
 import type { MatchConfig } from '../../match/types';
-import { Renderer, type AimHint } from '../../render/Renderer';
-import { InputManager } from '../../input/Input';
+import { Renderer, type AimHint, type ViewOverride } from '../../render/Renderer';
+import { InputManager, type ButtonId } from '../../input/Input';
 import { h, clear } from '../dom';
 import type { App, Screen } from '../App';
 import { GAME_LENGTHS, type Side } from '../../data/constants';
@@ -55,14 +55,21 @@ export class GameScreen implements Screen {
   private elFoZone!: HTMLElement;
   private elFoMarker!: HTMLElement;
   private elFoLabel!: HTMLElement;
+  private elShotFeed!: HTMLElement;
+  private elReplayFx!: HTMLElement;
+  private elReplaySkip!: HTMLElement;
+  private elReplaySlow!: HTMLElement;
+  private replayShown = false;
+  private shotFeedTimer = 0;
   private elTouch!: HTMLElement;
   private elStick!: HTMLElement;
   private elStickNub!: HTMLElement;
   private elActionBtn!: HTMLElement;
   private overlay: HTMLElement | null = null;
 
-  private stickId: number | null = null;
-  private stickOrigin = { x: 0, y: 0 };
+  private stickShown = false;
+  private stickNubX = 0;
+  private stickNubY = 0;
   private tickerTimer = 0;
   private lastScore = { home: -1, away: -1 };
   private lastClockText = '';
@@ -88,10 +95,9 @@ export class GameScreen implements Screen {
       this.el.appendChild(this.elCoach);
     }
 
-    this.input.attach();
+    this.input.attach(this.el);
     this.input.onPause = () => this.togglePause();
     this.wireEvents();
-    this.wireTouch();
 
     audio.unlock();
     audio.stopMusic();
@@ -127,6 +133,19 @@ export class GameScreen implements Screen {
     this.elGoalSlot = h('div', { class: 'banner__slot' });
     this.elBanner = h('div', { class: 'banner' }, this.elBannerText, this.elGoalSlot);
     this.elTicker = h('div', { class: 'ticker', style: 'display:none' });
+    this.elShotFeed = h('div', { class: 'shotfeed', style: 'display:none' });
+    this.elReplaySlow = h('span', { class: 'replay-tag__slow' });
+    this.elReplayFx = h('div', { class: 'replay-fx' },
+      h('div', { class: 'replay-fx__bar replay-fx__bar--top' }),
+      h('div', { class: 'replay-fx__bar replay-fx__bar--bottom' }),
+      h('div', { class: 'replay-tag' },
+        h('span', { class: 'replay-tag__dot' }),
+        h('span', { text: 'Replay' }),
+        this.elReplaySlow));
+    this.elReplaySkip = h('button', {
+      class: 'replay-skip', text: 'Skip ▸',
+      on: { click: () => this.match.skipReplay() },
+    });
 
     this.elFoZone = h('div', { class: 'fo__zone' });
     this.elFoMarker = h('div', { class: 'fo__marker' });
@@ -180,6 +199,9 @@ export class GameScreen implements Screen {
       this.elBanner,
       this.elTicker,
       this.elFaceoff,
+      this.elShotFeed,
+      this.elReplayFx,
+      this.elReplaySkip,
       this.elTouch,
       hints,
       h('button', {
@@ -189,27 +211,11 @@ export class GameScreen implements Screen {
     );
   }
 
-  private touchButton(id: 'action' | 'shoot' | 'dodge' | 'switch', label: string): HTMLElement {
-    const btn = h('button', {
-      class: `tbtn tbtn--${id}`,
-      text: label,
-      ariaLabel: label,
-    });
-    const down = (e: PointerEvent) => {
-      e.preventDefault();
-      btn.classList.add('is-down');
-      btn.setPointerCapture(e.pointerId);
-      this.input.setTouchButton(id, true);
-    };
-    const up = (e: PointerEvent) => {
-      e.preventDefault();
-      btn.classList.remove('is-down');
-      this.input.setTouchButton(id, false);
-    };
-    btn.addEventListener('pointerdown', down);
-    btn.addEventListener('pointerup', up);
-    btn.addEventListener('pointercancel', up);
-    btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  private touchButton(id: ButtonId, label: string): HTMLElement {
+    const btn = h('button', { class: `tbtn tbtn--${id}`, text: label, ariaLabel: label });
+    // The element reports presses; every bit of held state lives in the input
+    // manager so a lost pointerup cannot leave a button stuck down.
+    this.input.registerButton(id, btn);
     return btn;
   }
 
@@ -244,6 +250,7 @@ export class GameScreen implements Screen {
         fx().burst(x, y, 8, ['#f26a21', '#ffffff'], 7);
       }),
       m.events.on('shot', ({ power }) => audio.play('shot', power)),
+      m.events.on('shotFeedback', ({ label, tone }) => this.showShotFeed(label, tone)),
       m.events.on('pass', () => audio.play('pass')),
       m.events.on('catch', () => audio.play('catch')),
       m.events.on('check', ({ hit, x, y }) => {
@@ -271,47 +278,30 @@ export class GameScreen implements Screen {
 
   /* ---------------------------------------------------------------- touch */
 
-  private wireTouch(): void {
-    const onDown = (e: PointerEvent) => {
-      if (!this.touchMode || this.paused) return;
-      const t = e.target as HTMLElement;
-      if (t.closest('.tbtn, .pause-btn, .overlay')) return;
-      if (this.stickId !== null) return;
-      this.stickId = e.pointerId;
-      this.stickOrigin = { x: e.clientX, y: e.clientY };
-      const rect = this.el.getBoundingClientRect();
-      this.elStick.style.left = `${e.clientX - rect.left}px`;
-      this.elStick.style.top = `${e.clientY - rect.top}px`;
-      this.elStick.classList.add('is-on');
-      this.moveStick(e.clientX, e.clientY);
-      this.el.setPointerCapture(e.pointerId);
-    };
-    const onMove = (e: PointerEvent) => {
-      if (e.pointerId !== this.stickId) return;
-      this.moveStick(e.clientX, e.clientY);
-    };
-    const onUp = (e: PointerEvent) => {
-      if (e.pointerId !== this.stickId) return;
-      this.stickId = null;
-      this.elStick.classList.remove('is-on');
-      this.elStickNub.style.transform = '';
-      this.input.setTouchMove(0, 0, false);
-    };
-    this.el.addEventListener('pointerdown', onDown);
-    this.el.addEventListener('pointermove', onMove);
-    this.el.addEventListener('pointerup', onUp);
-    this.el.addEventListener('pointercancel', onUp);
-    this.el.addEventListener('contextmenu', (e) => e.preventDefault());
-  }
-
-  private moveStick(cx: number, cy: number): void {
-    const max = 52;
-    let dx = cx - this.stickOrigin.x;
-    let dy = cy - this.stickOrigin.y;
-    const m = Math.hypot(dx, dy);
-    if (m > max) { dx = (dx / m) * max; dy = (dy / m) * max; }
-    this.elStickNub.style.transform = `translate(${dx}px, ${dy}px)`;
-    this.input.setTouchMove(dx / max, dy / max, true);
+  /** Mirrors the input manager's stick state onto the DOM. Called every frame so
+   *  the visual can never disagree with what the game is actually reading. */
+  private syncStick(): void {
+    const st = this.input.stick;
+    if (st.active !== this.stickShown) {
+      this.stickShown = st.active;
+      this.elStick.classList.toggle('is-on', st.active);
+    }
+    if (!st.active) {
+      if (this.stickNubX !== 0 || this.stickNubY !== 0) {
+        this.stickNubX = 0;
+        this.stickNubY = 0;
+        this.elStickNub.style.transform = '';
+      }
+      return;
+    }
+    const rect = this.el.getBoundingClientRect();
+    this.elStick.style.left = `${st.originX - rect.left}px`;
+    this.elStick.style.top = `${st.originY - rect.top}px`;
+    if (st.dx !== this.stickNubX || st.dy !== this.stickNubY) {
+      this.stickNubX = st.dx;
+      this.stickNubY = st.dy;
+      this.elStickNub.style.transform = `translate(${st.dx}px, ${st.dy}px)`;
+    }
   }
 
   /* ----------------------------------------------------------------- loop */
@@ -336,6 +326,10 @@ export class GameScreen implements Screen {
       if (steps === 5) this.acc = 0;
     }
 
+    // Final backstop against a stuck pointer: if the page is not visible,
+    // nothing can legitimately still be held.
+    this.input.sanityCheck();
+    this.syncStick();
     this.draw(delta);
     this.updateHud(delta);
   };
@@ -355,6 +349,44 @@ export class GameScreen implements Screen {
     }
   }
 
+  /** Drives the replay overlay and hands the renderer a cinematic camera. */
+  private replayView(): ViewOverride | null {
+    const m = this.match;
+    const on = m.phase === 'replay';
+    if (on !== this.replayShown) {
+      this.replayShown = on;
+      this.elReplayFx.classList.toggle('is-on', on);
+      this.elReplaySkip.classList.toggle('is-on', on);
+      this.elTouch.classList.toggle('is-hidden', on);
+      if (on) this.input.releaseAll();
+    }
+    // Recomputed every frame so pausing during a replay behaves correctly.
+    this.input.suspended = on || this.paused || this.finished;
+    if (!on) return null;
+
+    const slow = m.replaySpeed < 0.9;
+    const slowText = slow ? 'Slow motion' : '';
+    if (this.elReplaySlow.textContent !== slowText) this.elReplaySlow.textContent = slowText;
+
+    // Ease the zoom in over the clip and push in harder for the finish.
+    const t = m.replayDuration > 0 ? m.replayTime / m.replayDuration : 0;
+    const zoom = 1.18 + Math.min(1, t) * 0.24 + (slow ? 0.18 : 0);
+    return {
+      zoom,
+      focusX: m.ball.x,
+      focusY: m.ball.y,
+      followRate: 9,
+      presentation: true,
+    };
+  }
+
+  private showShotFeed(label: string, tone: 'good' | 'bad' | 'neutral'): void {
+    this.elShotFeed.textContent = label;
+    this.elShotFeed.className = `shotfeed${tone === 'neutral' ? '' : ` shotfeed--${tone}`}`;
+    this.elShotFeed.style.display = '';
+    this.shotFeedTimer = 1.7;
+  }
+
   private draw(dt: number): void {
     const m = this.match;
     const carrier = m.ball.carrier;
@@ -366,7 +398,7 @@ export class GameScreen implements Screen {
       const dir = this.renderer.cam.inputToWorld(this.lastAimX, this.lastAimY);
       aim = { x: dir.x, y: dir.y, charging: carrier.windup > 0.02, charge: carrier.windup };
     }
-    this.renderer.render(m, dt, aim);
+    this.renderer.render(m, dt, aim, this.replayView());
   }
 
   private lastAimX = 0;
@@ -435,6 +467,14 @@ export class GameScreen implements Screen {
       this.tickerTimer -= dt;
       if (this.tickerTimer <= 0) this.elTicker.style.display = 'none';
     }
+    if (this.shotFeedTimer > 0) {
+      this.shotFeedTimer -= dt;
+      if (this.shotFeedTimer <= 0) this.elShotFeed.style.display = 'none';
+    }
+    if (this.elGoalCard && m.phase !== 'goal' && m.phase !== 'replay') {
+      clear(this.elGoalSlot);
+      this.elGoalCard = null;
+    }
   }
 
   /** Big moments get the centre banner; everything else goes to the ticker so
@@ -474,9 +514,8 @@ export class GameScreen implements Screen {
       h('div', { class: 'goalcard__meta', text: meta }));
     this.elGoalCard = card;
     this.elGoalSlot.appendChild(card);
-    window.setTimeout(() => {
-      if (this.elGoalCard === card) { clear(this.elGoalSlot); this.elGoalCard = null; }
-    }, 2300);
+    // Cleared by phase, not by a timer, so the scorer stays named through the
+    // celebration and the replay.
   }
 
   private elGoalCard: HTMLElement | null = null;
@@ -520,10 +559,14 @@ export class GameScreen implements Screen {
     this.overlay?.remove();
     this.overlay = null;
     this.last = performance.now();
-    this.input.reset();
+    this.input.suspended = false;
+    this.input.releaseAll();
   }
 
   private openPause(): void {
+    // Drop everything that is held so nothing carries across the pause.
+    this.input.suspended = true;
+    this.input.releaseAll();
     const cfg = this.opts.config;
     const lengthLabel = cfg.practice
       ? cfg.practice.goal
@@ -572,6 +615,9 @@ export class GameScreen implements Screen {
   private finish(): void {
     if (this.finished) return;
     this.finished = true;
+    // Nothing should still be held once the whistle goes.
+    this.input.suspended = true;
+    this.input.releaseAll();
     audio.play('buzzer');
     audio.stopCrowd();
     window.setTimeout(() => {

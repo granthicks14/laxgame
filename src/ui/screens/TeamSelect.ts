@@ -2,15 +2,16 @@ import { h } from '../dom';
 import type { App, Screen } from '../App';
 import { screenEl, topbar, teamBadge, ratingGrid, difficultyPill, panel } from '../components';
 import {
-  TEAMS, DIVISIONS, IDENTITY_LABEL, getTeam, teamsInDivision,
-  type DivisionKey, type TeamData,
+  TEAMS, CLASSES, CLASS_ORDER, IDENTITY_LABEL, getTeam, teamsInClass,
+  type ClassKey, type TeamData,
 } from '../../data/teams';
 import { segmented } from '../components';
+import { rosterSourceFor } from '../../data/rosters';
 
 export interface TeamSelectOptions {
   title: string;
   /** Restrict to one division (used when picking a season opponent). */
-  division?: DivisionKey;
+  classKey?: ClassKey;
   excludeId?: string;
   currentId?: string;
   confirmLabel: string;
@@ -21,27 +22,24 @@ export class TeamSelectScreen implements Screen {
   el: HTMLElement;
 
   constructor(app: App, opts: TeamSelectOptions) {
-    let division: DivisionKey = opts.division ?? (opts.currentId ? getTeam(opts.currentId).division : 'd1');
+    let classKey: ClassKey = opts.classKey ?? (opts.currentId ? getTeam(opts.currentId).classKey : 'a');
     const list = h('div', { class: 'grid-teams' });
 
     const render = () => {
       list.replaceChildren();
-      const teams = teamsInDivision(division).filter((t) => t.id !== opts.excludeId);
+      const teams = teamsInClass(classKey).filter((t) => t.id !== opts.excludeId);
       teams.sort((a, b) => b.overall - a.overall);
       for (const t of teams) list.appendChild(this.card(app, t, opts));
       if (!teams.length) list.appendChild(h('div', { class: 'empty', text: 'No teams available.' }));
     };
 
-    const tabs = opts.division ? null : segmented<DivisionKey>(
-      [
-        { value: 'd1', label: DIVISIONS.d1.short },
-        { value: 'd2', label: DIVISIONS.d2.short },
-      ],
-      division,
-      (v) => { division = v; render(); blurb.textContent = DIVISIONS[v].blurb; },
+    const tabs = opts.classKey ? null : segmented<ClassKey>(
+      CLASS_ORDER.map((k) => ({ value: k, label: CLASSES[k].short.replace('Class ', '') })),
+      classKey,
+      (v) => { classKey = v; render(); blurb.textContent = CLASSES[v].blurb; },
       true,
     );
-    const blurb = h('div', { class: 'small', text: DIVISIONS[division].blurb });
+    const blurb = h('div', { class: 'small', text: CLASSES[classKey].blurb });
 
     render();
 
@@ -96,7 +94,7 @@ export class TeamDetailScreen implements Screen {
               teamBadge(t, 'lg'),
               h('div', { class: 'stack', style: 'gap:6px;flex:1 1 auto;min-width:0' },
                 h('div', { class: 'display', style: 'font-size:22px', text: t.name }),
-                h('div', { class: 'small', text: `${t.mascot} · ${DIVISIONS[t.division].short}` }),
+                h('div', { class: 'small', text: `${t.mascot} · ${CLASSES[t.classKey].short}` }),
                 h('div', { class: 'row row--wrap', style: 'gap:6px' },
                   h('span', { class: 'pill pill--accent', text: IDENTITY_LABEL[t.identity] }),
                   difficultyPill(t)),
@@ -104,7 +102,23 @@ export class TeamDetailScreen implements Screen {
             ),
             h('span', { class: 'stripe', style: `background:${t.secondary}` }),
           ),
-          panel('Scouting report', h('p', { style: 'margin:0', text: t.description })),
+          panel('Scouting report',
+            h('p', { style: 'margin:0', text: t.description }),
+            h('div', { class: 'row row--wrap', style: 'gap:6px;margin-top:4px' },
+              h('span', {
+                class: rosterSourceFor(t.id) === 'official' ? 'pill pill--green' : 'pill',
+                text: rosterSourceFor(t.id) === 'official' ? 'Real roster' : 'Generated roster',
+              }),
+              h('span', {
+                class: t.placement === 'reported' ? 'pill' : 'pill pill--red',
+                text: t.placement === 'reported' ? 'Class confirmed' : 'Class unverified',
+              })),
+            h('div', {
+              class: 'tiny',
+              text: rosterSourceFor(t.id) === 'official'
+                ? 'Names, numbers and positions come from a published roster. Ratings are gameplay values.'
+                : 'No published roster has been imported for this programme, so its players are fictional. Ratings are gameplay values in either case.',
+            })),
           panel('Team ratings', ratingGrid(t)),
           panel('Home field',
             h('div', { class: 'row' },

@@ -32,6 +32,8 @@ export interface MatchSetupOptions {
   homeTactics?: Tactics;
   awayTactics?: Tactics;
   practice?: PracticeConfig;
+  /** Show a highlight replay after each goal. Defaults to on. */
+  replays?: boolean;
 }
 
 export function makeMatchConfig(o: MatchSetupOptions): MatchConfig {
@@ -57,5 +59,6 @@ export function makeMatchConfig(o: MatchSetupOptions): MatchConfig {
     suddenVictory: o.practice ? false : o.suddenVictory ?? true,
     seed,
     practice: o.practice,
+    replays: o.practice ? false : o.replays ?? true,
   };
 }

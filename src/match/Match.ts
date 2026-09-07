@@ -13,9 +13,10 @@ import { FIELD_SLOTS, faceoffWorld } from './formation';
 import { createFaceoff, stepFaceoff, type FaceoffState } from './faceoff';
 import { Commentary } from './commentary';
 import { updateAI, updateGoalie, saveRadius } from './ai';
+import { ReplayBuffer } from './replay';
 import type {
   Ball, InputState, MatchConfig, MatchEvents, MatchPhase, MatchPlayer, ScoreEntry,
-  SlotKey, TeamMatchStats, TeamSetup,
+  ShotInfo, ShotOutcome, SlotKey, TeamMatchStats, TeamSetup,
 } from './types';
 import { emptyTeamStats, neutralInput } from './types';
 
@@ -73,6 +74,17 @@ export class Match {
   /** Separate, larger swing for goaltending. A keeper standing on his head is the
    *  single biggest reason an underdog wins a lacrosse game. */
   readonly goalieForm: Record<Side, number> = { home: 0, away: 0 };
+
+  /** The most recent shot, for on-screen feedback and for balance tooling. */
+  lastShot: ShotInfo | null = null;
+
+  /** Rolling highlight buffer. Fixed size, allocation-free after construction. */
+  readonly replay = new ReplayBuffer(20);
+  /** Playback position within the current clip, in clip-seconds. */
+  replayTime = 0;
+  replayDuration = 0;
+  /** Current playback rate, so the HUD can show the slow-motion beat. */
+  replaySpeed = 1;
 
   /** Practice drill scoring. Unused in a normal game. */
   practice = { reps: 0, success: 0 };
@@ -288,6 +300,9 @@ export class Match {
   // ---------------------------------------------------------------- phases
 
   private resetToFaceoffPositions(): void {
+    // Everything below teleports players, so any footage from before this point
+    // would play back as a jump cut.
+    this.replay.clear();
     for (const side of ['home', 'away'] as Side[]) {
       for (const p of this.teams[side]) {
         const pos = faceoffWorld(side, p.slot);
@@ -403,6 +418,7 @@ export class Match {
       case 'faceoff': this.updateFaceoff(dt, input); break;
       case 'live': this.updateLive(dt, input); break;
       case 'goal': this.updateGoalCelebration(dt); break;
+      case 'replay': this.updateReplay(dt); break;
       case 'quarterbreak': this.updateQuarterBreak(dt); break;
       case 'restart':
         this.phaseTimer -= dt;
@@ -486,21 +502,68 @@ export class Match {
     this.autoSwitch(true);
   }
 
+  /** True when there is enough footage to be worth showing. */
+  private canReplay(): boolean {
+    return (this.cfg.replays ?? true) && !this.isPractice && this.replay.seconds > 1.4;
+  }
+
+  private startReplay(): void {
+    this.phase = 'replay';
+    this.replayDuration = Math.min(this.replay.seconds, 4.5);
+    this.replayTime = 0;
+    this.replaySpeed = 1;
+    this.focus = null;
+  }
+
+  /** Ends the replay early; the next phase runs exactly as if it had finished. */
+  skipReplay(): void {
+    if (this.phase !== 'replay') return;
+    this.finishReplay();
+  }
+
+  private finishReplay(): void {
+    this.replayTime = this.replayDuration;
+    if (this.pendingPracticeResult !== null) {
+      const r = this.pendingPracticeResult;
+      this.pendingPracticeResult = null;
+      this.practiceRep(r);
+      return;
+    }
+    if (this.cfg.suddenVictory && this.overtimePeriod > 0) {
+      this.finishGame();
+      return;
+    }
+    this.beginFaceoff();
+  }
+
+  private updateReplay(dt: number): void {
+    // Real time up to the shot, then slow motion for the finish, which is the
+    // part worth looking at.
+    const remaining = this.replayDuration - this.replayTime;
+    this.replaySpeed = remaining < 1.6 ? 0.38 : 1;
+    this.replayTime += dt * this.replaySpeed;
+
+    const ballView = { ballX: this.ball.x, ballY: this.ball.y, ballZ: this.ball.z, ballCarried: false };
+    this.replay.apply(this.replayTime, this.replayDuration, this.players, ballView);
+    this.ball.x = ballView.ballX;
+    this.ball.y = ballView.ballY;
+    this.ball.z = ballView.ballZ;
+    // Always draw it as a free ball: there is no live carrier to hold it during
+    // playback, and the recorded position is already the stick head.
+    this.ball.state = 'loose';
+    this.ball.carrier = null;
+    this.focus = { x: this.ball.x, y: this.ball.y };
+
+    // Hold on the finish for a beat before the faceoff.
+    if (this.replayTime >= this.replayDuration + 0.55) this.finishReplay();
+  }
+
   private updateGoalCelebration(dt: number): void {
     this.phaseTimer -= dt;
     this.decayPlayers(dt, 0.25);
     if (this.phaseTimer <= 0) {
-      if (this.pendingPracticeResult !== null) {
-        const r = this.pendingPracticeResult;
-        this.pendingPracticeResult = null;
-        this.practiceRep(r);
-        return;
-      }
-      if (this.cfg.suddenVictory && this.overtimePeriod > 0) {
-        this.finishGame();
-        return;
-      }
-      this.beginFaceoff();
+      if (this.canReplay()) { this.startReplay(); return; }
+      this.finishReplay();
     }
   }
 
@@ -585,6 +648,7 @@ export class Match {
     for (const p of this.players) this.integrate(p, dt);
     this.resolveCollisions();
     this.updateBall(dt);
+    this.replay.record(dt, this.ball, this.players);
     if (this.phase !== 'live') return;
     this.checkClearDrill();
     this.autoSwitch(false);
@@ -851,7 +915,9 @@ export class Match {
       if (b.z > 2.5) continue;
       // A keeper on a hot night covers more of the cage, not just holds more of
       // what he reaches. This is the single biggest source of upsets.
-      const reach = saveRadius(g) * (1 + (this.isPractice ? 0 : this.goalieForm[side] * 1.9));
+      const diffReach = this.setups[side].human ? 1 : this.diff.goalieReach;
+      const reach = saveRadius(g) * diffReach
+        * (1 + (this.isPractice ? 0 : this.goalieForm[side] * 1.9));
       const d = pointSegDist(g.x, g.y, prevX, prevY, b.x, b.y);
       if (d > reach) continue;
 
@@ -859,7 +925,7 @@ export class Match {
       const power = clamp(speed / SIM.shotSpeedMax, 0, 1);
       // Even in position, a rocket can beat a keeper's hands.
       const hold = clamp(
-        0.5 + g.data.attrs.goalie / 260 - speed / 180 - (b.z < 0.4 ? 0.09 : 0)
+        0.62 + g.data.attrs.goalie / 260 - speed / 180 - (b.z < 0.4 ? 0.09 : 0)
         + (this.isPractice ? 0 : this.form[side] * 0.005 + this.goalieForm[side]),
         0.2, 0.92,
       );
@@ -923,11 +989,12 @@ export class Match {
         this.scoreGoal(side);
         return;
       }
-      if (Math.abs(yAt - goal.y) <= half + 0.22 && b.z <= GOAL_HEIGHT + 0.2) {
+      if (Math.abs(yAt - goal.y) <= half + 0.16 && b.z <= GOAL_HEIGHT + 0.2) {
         // Pipe.
         b.x = goal.x - dir * 0.3;
         b.vx *= -0.55;
         b.vy += this.rng.range(-3, 3);
+        this.settleShot('post');
         this.events.emit('post', { x: goal.x, y: yAt });
         this.events.emit('shake', { amount: 3 });
         this.say('post', 12);
@@ -970,6 +1037,7 @@ export class Match {
     this.scoring.push(entry);
     this.lastGoal = entry;
 
+    this.settleShot('goal');
     this.events.emit('goal', { side, scorer: shooter!, assist, distance });
     this.events.emit('shake', { amount: 9 });
     const close = Math.abs(this.score.home - this.score.away) <= 1;
@@ -985,6 +1053,7 @@ export class Match {
     this.ball.y = goal.y;
     this.ball.z = 0.4;
     this.focus = { x: goal.x, y: goal.y };
+    // Freeze the buffer where it is: everything after this point is celebration.
     this.phase = 'goal';
     this.phaseTimer = this.isPractice ? 1.2 : SIM.goalCelebration;
     const pr = this.cfg.practice;
@@ -1009,6 +1078,7 @@ export class Match {
     const exitY = clamp(b.y, 0, FIELD.width);
 
     let awardTo: Side;
+    if (wasShot) this.settleShot('wide');
     if ((outLeft || outRight) && wasShot) {
       // Backing up the shot: nearest player to where it left the field gets it.
       awardTo = this.nearestSideTo(exitX, exitY);
@@ -1098,6 +1168,7 @@ export class Match {
       best.stat.causedTurnovers++;
       this.stats[otherSide(best.side)].turnovers++;
       if (b.lastCarrier) b.lastCarrier.stat.turnovers++;
+      if (wasFlight && b.state === 'shot') this.settleShot('blocked');
       this.events.emit('turnover', { side: otherSide(best.side), reason: 'intercepted' });
       this.say('intercept', 8, 'big');
       this.events.emit('shake', { amount: 3 });
@@ -1287,37 +1358,37 @@ export class Match {
     const a = p.data.attrs;
     const d = dist(p.x, p.y, goal.x, goal.y);
 
-    // Aim: lateral input picks the side of the cage.
+    // Aim: the goal mouth always runs along the Y axis, so the across-the-mouth
+    // component of your input maps straight onto where in the cage the shot
+    // goes. Push toward the post you want; no mental rotation required.
     const dir = attackDir(p.side);
-    const toGoal = normalize(goal.x - p.x, goal.y - p.y);
-    // Perpendicular component of the aim vector relative to the shooting axis.
-    let lateral = 0;
-    if (Math.hypot(aimX, aimY) > 0.2) {
-      lateral = clamp(aimX * -toGoal.y + aimY * toGoal.x, -1, 1);
-    }
+    const lateral = Math.hypot(aimX, aimY) > 0.18 ? clamp(aimY * 1.35, -1, 1) : 0;
     const half = FIELD.goalWidth / 2;
-    const aimY2 = goal.y + lateral * half * 0.92;
+    const aimY2 = goal.y + lateral * half * 0.85;
 
     // Accuracy: distance, pressure, running-shot penalty, charge sweet spot.
     const pressure = this.pressureOn(p);
     const running = Math.hypot(p.vx, p.vy) / Math.max(1, this.maxSpeed(p));
     const sweet = 1 - Math.abs(charge - 0.82) * 1.5;
     let acc = a.shotAccuracy * 0.7 + a.shooting * 0.3 + this.homeEdge(p);
-    acc -= pressure * 22;
-    acc -= clamp((d - 9) * 1.5, 0, 26);
-    acc -= running * 9;
+    acc -= pressure * 20;
+    acc -= clamp((d - 9) * 1.6, 0, 26);
+    // Moving is normal in lacrosse; only a genuine sprint costs you.
+    acc -= clamp((running - 0.5) / 0.5, 0, 1) * 10;
     acc += clamp(sweet, -1, 1) * 9;
     acc = clamp(acc, 8, 99);
 
     const power = SIM.shotSpeedMin + (SIM.shotSpeedMax - SIM.shotSpeedMin) * (0.35 + charge * 0.65)
       * (0.72 + a.shotPower / 260);
 
-    const spread = (1 - acc / 100) * 0.52;
+    // Spread falls away sharply with accuracy, so a good look is genuinely on
+    // frame and a forced one sprays. A flat curve made every shot feel random.
+    const spread = ((1 - acc / 100) ** 1.5) * 0.62;
     // Same as passing: the ball leaves the stick head, so that is what has to be
     // pointed at the corner.
     const origin = this.stickPos(p);
     let ang = Math.atan2(aimY2 - origin.y, goal.x + dir * 0.3 - origin.x);
-    ang += this.rng.gauss(0, spread * 0.68);
+    ang += this.rng.gauss(0, spread * 0.62);
 
     // A bounce shot: low-charge shots skip off the turf and are harder to read.
     const bounce = charge < 0.55 && this.rng.bool(0.45);
@@ -1327,6 +1398,18 @@ export class Match {
     this.releaseBall(p, Math.cos(ang) * power, Math.sin(ang) * power, vz, 'shot', null);
     if (bounce) this.ball.z = 0.9;
 
+    this.lastShot = {
+      side: p.side,
+      shooter: p,
+      quality: this.shotQualityOf(p, acc, d, pressure),
+      distance: d,
+      pressure,
+      accuracy: acc,
+      charge,
+      onTheRun: running > 0.55,
+      outcome: 'pending',
+    };
+
     p.stat.shots++;
     this.stats[p.side].shots++;
     this.shotClock = Math.max(this.shotClock, 12);
@@ -1334,6 +1417,56 @@ export class Match {
     p.animPose = 'throw';
     p.poseTimer = 0.25;
     p.flash = 0.25;
+  }
+
+  /** A readable 0..1 summary of how good a look this was. Feedback only. */
+  private shotQualityOf(p: MatchPlayer, acc: number, d: number, pressure: number): number {
+    const goal = attackingGoal(p.side);
+    const dir = attackDir(p.side);
+    const along = (goal.x - p.x) * dir;
+    const lateral = Math.abs(p.y - goal.y);
+    const angle = along < 0.5 ? 0.1 : clamp(1 - lateral / (along * 1.5 + 7), 0.1, 1);
+    const distScore = clamp(1 - (d - 4) / 15, 0.05, 1);
+    return clamp((acc / 100) * 0.5 + distScore * 0.25 + angle * 0.25 - pressure * 0.12, 0, 1);
+  }
+
+  /** Called once the shot resolves, to close out the feedback record. */
+  private settleShot(outcome: ShotOutcome): void {
+    const info = this.lastShot;
+    if (!info || info.outcome !== 'pending') return;
+    info.outcome = outcome;
+    if (info.side !== this.humanSide) return;
+
+    let label: string | null = null;
+    let tone: 'good' | 'bad' | 'neutral' = 'neutral';
+    switch (outcome) {
+      case 'goal':
+        if (info.distance > 12) { label = 'FROM RANGE!'; tone = 'good'; }
+        else if (info.quality > 0.62) { label = 'GREAT SHOT'; tone = 'good'; }
+        break;
+      case 'save':
+        label = info.quality > 0.6 ? 'GOOD LOOK — SAVED' : 'SAVED';
+        tone = 'bad';
+        break;
+      case 'post':
+        label = 'OFF THE PIPE';
+        tone = 'bad';
+        break;
+      case 'blocked':
+        label = 'BLOCKED';
+        tone = 'bad';
+        break;
+      case 'wide':
+        if (info.pressure > 0.75) label = 'HEAVY PRESSURE';
+        else if (info.distance > 13) label = 'TOO FAR OUT';
+        else if (info.onTheRun) label = 'RUSHED IT';
+        else label = 'WIDE';
+        tone = 'bad';
+        break;
+      default:
+        break;
+    }
+    if (label) this.events.emit('shotFeedback', { info, label, tone });
   }
 
   doDodge(p: MatchPlayer, dx: number, dy: number): boolean {
@@ -1438,6 +1571,7 @@ export class Match {
     const shooter = this.ball.lastCarrier;
     if (shooter) shooter.stat.shotsOnGoal++;
     this.stats[otherSide(goalie.side)].shotsOnGoal++;
+    this.settleShot('save');
     this.events.emit('save', { side: goalie.side, goalie, power });
     this.events.emit('shake', { amount: 2.5 });
     if (power > 0.6) this.say('save', 7, 'big');
@@ -1456,9 +1590,8 @@ export class Match {
     if (!p) return;
 
     if (input.switchPressed) {
-      this.cycleControl(side);
+      this.requestSwitch(side);
       p = this.controlled[side]!;
-      this.manualHold = 2.2;
     }
 
     if (p.stun > 0) return;
@@ -1496,42 +1629,146 @@ export class Match {
     }
   }
 
-  private cycleControl(side: Side): void {
-    const pool = this.teams[side].filter((p) => p.slot !== 'G');
-    const cur = this.controlled[side];
-    const b = this.ball;
-    const sorted = pool.slice().sort((x, y) =>
-      dist2(x.x, x.y, b.x, b.y) - dist2(y.x, y.y, b.x, b.y));
-    const idx = cur ? sorted.indexOf(cur) : -1;
-    this.controlled[side] = sorted[(idx + 1) % sorted.length];
+  /* ------------------------------------------------------- player selection
+   * Switching is about who can actually get to the ball first, not who happens
+   * to be nearest in a straight line. Time-to-reach accounts for the player's
+   * speed and which way he is already running, and for a loose ball it aims at
+   * where the ball is going rather than where it is.
+   * ---------------------------------------------------------------------- */
+
+  /** Rough seconds for `p` to reach a point, allowing for current momentum. */
+  timeToReach(p: MatchPlayer, tx: number, ty: number): number {
+    const d = dist(p.x, p.y, tx, ty);
+    const speed = Math.max(1, this.maxSpeed(p) * SIM.sprintMultiplier);
+    let t = d / speed;
+    // Already running that way? He gets there sooner. Running away? Later.
+    const v = Math.hypot(p.vx, p.vy);
+    if (v > 0.5 && d > 0.2) {
+      const toward = ((tx - p.x) * p.vx + (ty - p.y) * p.vy) / (d * v);
+      t -= toward * 0.22;
+    }
+    if (p.stun > 0) t += p.stun;
+    if (p.beaten > 0) t += 0.15;
+    return Math.max(0, t);
   }
 
+  /** Where a chaser should actually run: a couple of fixed-point iterations on
+   *  the ball's own motion, so fast balls are led rather than followed. */
+  private interceptPoint(p: MatchPlayer): { x: number; y: number } {
+    const b = this.ball;
+    if (b.state === 'carried' && b.carrier) return { x: b.carrier.x, y: b.carrier.y };
+    let t = 0;
+    let x = b.x;
+    let y = b.y;
+    for (let i = 0; i < 3; i++) {
+      t = clamp(this.timeToReach(p, x, y), 0, 1.4);
+      const decay = Math.exp(-SIM.ballGroundFriction * t * 0.5);
+      x = b.x + b.vx * t * decay;
+      y = b.y + b.vy * t * decay;
+    }
+    return { x: clamp(x, 0, FIELD.length), y: clamp(y, 0, FIELD.width) };
+  }
+
+  /** Everyone eligible to be handed control: field players who are on their feet. */
+  private controlCandidates(side: Side): MatchPlayer[] {
+    return this.teams[side].filter((p) => p.slot !== 'G' && p.stun <= 0);
+  }
+
+  /** Ranks the squad for control, best first, with each man's score in seconds. */
+  private rankForControl(side: Side): { p: MatchPlayer; score: number }[] {
+    const b = this.ball;
+    const pool = this.controlCandidates(side);
+    if (!pool.length) return [];
+
+    const scored = pool.map((p) => {
+      const spot = this.interceptPoint(p);
+      let score = this.timeToReach(p, spot.x, spot.y);
+
+      if (b.carrier && b.carrier.side !== side) {
+        // Defending: reward the man already goal-side of the carrier, because he
+        // is the one who can actually do something about it.
+        const own = defendingGoal(side);
+        const carrierToGoal = dist(b.carrier.x, b.carrier.y, own.x, own.y);
+        const meToGoal = dist(p.x, p.y, own.x, own.y);
+        if (meToGoal < carrierToGoal) score -= 0.25;
+        if (p.pos === 'D') score -= 0.1;
+      } else if (b.state !== 'carried') {
+        // Loose ball: a defender chasing his own end is better placed than an
+        // attacker sprinting back across the midline.
+        score += Math.abs(p.x - spot.x) > 40 ? 0.4 : 0;
+      }
+      return { p, score };
+    });
+
+    scored.sort((a, c) => a.score - c.score);
+    return scored;
+  }
+
+  /** The Switch button. Always lands on the most useful man, never a cycle. */
+  requestSwitch(side: Side): void {
+    const b = this.ball;
+    const cur = this.controlled[side];
+
+    // With the ball, control belongs to the carrier — a switch should never
+    // hand the ball to the AI.
+    if (b.carrier && b.carrier.side === side) {
+      if (cur !== b.carrier) {
+        this.setControlled(side, b.carrier);
+      } else {
+        this.setBanner('YOU HAVE THE BALL', 'normal', 0.7);
+      }
+      return;
+    }
+
+    const ranked = this.rankForControl(side);
+    if (!ranked.length) return;
+
+    if (ranked[0].p !== cur) {
+      this.setControlled(side, ranked[0].p);
+      return;
+    }
+
+    // Already on the best man. Hand over to the next one only if he is a real
+    // alternative — switching to someone twenty yards further away is worse
+    // than doing nothing.
+    const alt = ranked[1];
+    if (alt && alt.score <= ranked[0].score + 0.55) {
+      this.setControlled(side, alt.p);
+    } else {
+      if (cur) cur.flash = 0.3;
+      this.setBanner('CLOSEST MAN', 'normal', 0.6);
+    }
+  }
+
+  private setControlled(side: Side, p: MatchPlayer): void {
+    if (this.controlled[side] === p) return;
+    this.controlled[side] = p;
+    p.flash = 0.35;
+    this.manualHold = 2.2;
+  }
+
+  /** Automatic switching between plays. `force` ignores the manual hold. */
   autoSwitch(force: boolean): void {
     const side = this.humanSide;
     if (!side) return;
     const b = this.ball;
     const cur = this.controlled[side];
 
-    // Possession always hands you the ball carrier — that is the Retro-simple rule.
+    // Possession always hands you the ball carrier — the Retro-simple rule.
     if (b.carrier && b.carrier.side === side) {
-      if (cur !== b.carrier) this.controlled[side] = b.carrier;
+      if (cur !== b.carrier) {
+        this.controlled[side] = b.carrier;
+        b.carrier.flash = 0.3;
+      }
       return;
     }
     if (!force && this.manualHold > 0 && cur && cur.stun <= 0) return;
 
-    const target = b.carrier && b.carrier.side !== side
-      ? { x: b.carrier.x, y: b.carrier.y }
-      : { x: b.x, y: b.y };
-
-    let best: MatchPlayer | null = null;
-    let bestD = Infinity;
-    for (const p of this.teams[side]) {
-      if (p.slot === 'G') continue;
-      if (p.stun > 0) continue;
-      const d = dist2(p.x, p.y, target.x, target.y);
-      if (d < bestD) { bestD = d; best = p; }
+    const best = this.rankForControl(side)[0]?.p;
+    if (best && best !== cur) {
+      this.controlled[side] = best;
+      best.flash = 0.3;
     }
-    if (best && best !== cur) this.controlled[side] = best;
   }
 
   /** Every player who touched the field, with their line from this game. */
@@ -1547,6 +1784,7 @@ export class Match {
     return out;
   }
 
+  // ---------------------------------------------------------------- summary
   // ---------------------------------------------------------------- summary
 
   clockText(): string {

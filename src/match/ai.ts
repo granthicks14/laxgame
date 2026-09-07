@@ -498,7 +498,7 @@ function pointSeg(px: number, py: number, ax: number, ay: number, bx: number, by
 /** How much of the cage a keeper covers with body and stick, in yards. The goal
  *  mouth is 2 yards wide, so this deliberately never covers the whole thing. */
 export function saveRadius(g: MatchPlayer): number {
-  return 0.22 + g.data.attrs.goalie / 330;
+  return 0.25 + g.data.attrs.goalie / 300;
 }
 
 export function updateGoalie(m: Match, g: MatchPlayer, dt: number): void {

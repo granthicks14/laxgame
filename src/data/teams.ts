@@ -1,43 +1,69 @@
 /* ---------------------------------------------------------------------------
- * LONE STAR LAX — TEAM DATABASE (THSLL North District)
+ * LONE STAR LAX — NORTH DISTRICT LEAGUE DATA
  * ---------------------------------------------------------------------------
- * DATA PROVENANCE — please read before treating any of this as fact:
+ * PROVENANCE. Read this before treating anything here as fact.
  *
- *  - School names and division groupings are a BEST-EFFORT snapshot of the
- *    Texas High School Lacrosse League North District. League membership and
- *    division placement change season to season. Verify against thsll.org and
- *    edit this file to match the current year.
- *  - Mascots are the schools' real mascots to the best of our knowledge.
- *  - COLORS ARE APPROXIMATIONS chosen for on-field readability, not official
- *    brand values. Two teams that share colors in real life are deliberately
- *    separated here so you can tell them apart at a glance during play.
- *  - ALL RATINGS ARE FICTIONAL GAME BALANCE VALUES. They are invented for
- *    gameplay and do not describe any real team's actual strength.
- *  - RIVALRIES ARE GAMEPLAY RIVALRIES. Some reflect well-known matchups;
- *    others exist purely to make the schedule interesting. They are not a
- *    historical claim.
+ * WHAT IS TAKEN FROM THSLL (thsll.org, North District, 2026 season):
+ *   - The class structure: Class A, Class B, Class C East, Class C West and
+ *     Class D. The district also runs a Sixes competition; that is a different
+ *     format (6v6 on a short field) and is deliberately not modelled here,
+ *     because this game simulates the field game.
+ *   - The set of member programs listed below.
  *
- * This file is the single source of truth for the league. Add, remove, or
- * re-rate teams here and the rest of the game (schedules, standings, playoffs,
- * team select, rosters) follows automatically. See docs/EDITING-DATA.md.
+ * WHAT IS BEST-EFFORT AND SHOULD BE VERIFIED:
+ *   - Which class each program sits in. Every team carries a `placement` field:
+ *     'reported' means the class was stated on a THSLL page; 'assumed' means it
+ *     is our placement and needs checking. Fix them and the whole game follows.
+ *   - Mascots and colours. Colours are chosen for on-field readability, not to
+ *     reproduce official branding.
+ *
+ * WHAT IS ENTIRELY FICTIONAL:
+ *   - EVERY RATING. They are gameplay balance values invented for this game and
+ *     describe no real team's actual strength.
+ *   - RIVALRIES. Some reflect well-known matchups; others exist to make the
+ *     schedule interesting. They are not a historical claim.
+ *   - PLAYERS. See rosters.ts — every team ships with `rosterSource:
+ *     'generated'`, meaning fictional players. Real rosters can be dropped in.
+ *
+ * VERIFIED AGAINST: thsll.org, September 2026. Re-check each season.
+ * See docs/EDITING-DATA.md.
  * ------------------------------------------------------------------------- */
 
-export type DivisionKey = 'd1' | 'd2';
+export type ClassKey = 'a' | 'b' | 'c-east' | 'c-west' | 'd';
 
-export const DIVISIONS: Record<DivisionKey, { name: string; short: string; blurb: string }> = {
-  d1: {
-    name: 'North District — Division I',
-    short: 'Division I',
-    blurb: 'The top flight of North Texas high school lacrosse. Deep rosters, real goalies, no nights off.',
+export const CLASS_ORDER: ClassKey[] = ['a', 'b', 'c-east', 'c-west', 'd'];
+
+export const CLASSES: Record<ClassKey, { name: string; short: string; blurb: string }> = {
+  a: {
+    name: 'North District — Class A',
+    short: 'Class A',
+    blurb: 'The top flight. Deep rosters, real goalies, and no nights off.',
   },
-  d2: {
-    name: 'North District — Division II',
-    short: 'Division II',
-    blurb: 'Programs on the rise. Win here and you are knocking on Division I’s door.',
+  b: {
+    name: 'North District — Class B',
+    short: 'Class B',
+    blurb: 'One rung down and just as competitive. The gap to Class A is a recruiting class.',
+  },
+  'c-east': {
+    name: 'North District — Class C East',
+    short: 'Class C East',
+    blurb: 'The eastern half of Class C: Plano, Richardson, Rockwall and their neighbours.',
+  },
+  'c-west': {
+    name: 'North District — Class C West',
+    short: 'Class C West',
+    blurb: 'The western half of Class C, from Grapevine across to Fort Worth and Denton.',
+  },
+  d: {
+    name: 'North District — Class D',
+    short: 'Class D',
+    blurb: 'Smaller and newer programs. Everything to prove and nothing to lose.',
   },
 };
 
-/** What a team is *known* for. Drives AI tendencies and roster generation. */
+/** How confident we are that this team sits in this class. */
+export type Placement = 'reported' | 'assumed';
+
 export type TeamIdentity = 'offense' | 'defense' | 'transition' | 'goalie' | 'faceoff' | 'balanced';
 
 export const IDENTITY_LABEL: Record<TeamIdentity, string> = {
@@ -76,13 +102,14 @@ export interface TeamData extends TeamRatings {
   id: string;
   name: string;
   short: string;
-  /** 3-4 char scoreboard abbreviation. */
+  /** 2-4 char scoreboard abbreviation. */
   abbr: string;
   mascot: string;
-  division: DivisionKey;
+  classKey: ClassKey;
+  placement: Placement;
   primary: string;
   secondary: string;
-  /** Number/text color drawn on the jersey. */
+  /** Number/text colour drawn on the jersey. */
   trim: string;
   identity: TeamIdentity;
   description: string;
@@ -93,19 +120,19 @@ export interface TeamData extends TeamRatings {
 
 /* eslint-disable max-len */
 export const TEAMS: TeamData[] = [
-  // ---------------------------------------------------------------- DIVISION I
+  // ============================================================== CLASS A
   {
     id: 'highland-park', name: 'Highland Park', short: 'Highland Park', abbr: 'HP', mascot: 'Scots',
-    division: 'd1', primary: '#3f6fd0', secondary: '#f5d020', trim: '#ffffff',
+    classKey: 'a', placement: 'reported', primary: '#3f6fd0', secondary: '#f5d020', trim: '#ffffff',
     identity: 'offense',
     description: 'Relentless ball movement and a two-man game that punishes any slide half a step late.',
     homeField: { name: 'Highlander Stadium', venue: 'stadium', time: 'night', crowd: 0.95 },
-    rivals: ['jesuit-dallas', 'esd'],
+    rivals: ['dallas-jesuit', 'esd'],
     overall: 89, offense: 93, defense: 85, goalie: 86, attack: 94, midfield: 89, faceoff: 83, speed: 87, chemistry: 90,
   },
   {
-    id: 'jesuit-dallas', name: 'Jesuit Dallas', short: 'Jesuit', abbr: 'JES', mascot: 'Rangers',
-    division: 'd1', primary: '#0b2f6b', secondary: '#d9a441', trim: '#ffffff',
+    id: 'dallas-jesuit', name: 'Dallas Jesuit', short: 'Jesuit', abbr: 'JES', mascot: 'Rangers',
+    classKey: 'a', placement: 'reported', primary: '#0b2f6b', secondary: '#d9a441', trim: '#ffffff',
     identity: 'balanced',
     description: 'The measuring stick. No obvious weakness, and they will grind you down over four quarters.',
     homeField: { name: 'Postell Stadium', venue: 'stadium', time: 'night', crowd: 1.0 },
@@ -114,203 +141,337 @@ export const TEAMS: TeamData[] = [
   },
   {
     id: 'st-marks', name: "St. Mark's", short: "St. Mark's", abbr: 'STM', mascot: 'Lions',
-    division: 'd1', primary: '#1d4fa8', secondary: '#e8eaf0', trim: '#ffffff',
+    classKey: 'a', placement: 'reported', primary: '#1d4fa8', secondary: '#e8eaf0', trim: '#ffffff',
     identity: 'goalie',
-    description: 'A goalie who steals games and a defense happy to make you shoot from twelve yards out.',
+    description: 'A goalie who steals games and a defence happy to make you shoot from twelve yards out.',
     homeField: { name: 'Hunt Family Stadium', venue: 'stadium', time: 'evening', crowd: 0.8 },
-    rivals: ['jesuit-dallas', 'esd'],
+    rivals: ['dallas-jesuit', 'esd'],
     overall: 84, offense: 79, defense: 88, goalie: 94, attack: 78, midfield: 82, faceoff: 80, speed: 78, chemistry: 87,
   },
   {
+    id: 'esd', name: 'Episcopal School of Dallas', short: 'ESD', abbr: 'ESD', mascot: 'Eagles',
+    classKey: 'a', placement: 'reported', primary: '#b4232f', secondary: '#16307a', trim: '#ffffff',
+    identity: 'offense',
+    description: 'Skilled, patient and dangerous from X. They will hold the ball until you make a mistake.',
+    homeField: { name: 'Jones Family Field', venue: 'complex', time: 'evening', crowd: 0.72 },
+    rivals: ['highland-park', 'st-marks'],
+    overall: 86, offense: 90, defense: 81, goalie: 84, attack: 91, midfield: 85, faceoff: 79, speed: 84, chemistry: 85,
+  },
+  {
     id: 'southlake-carroll', name: 'Southlake Carroll', short: 'Southlake', abbr: 'SLC', mascot: 'Dragons',
-    division: 'd1', primary: '#12965a', secondary: '#f2f2f2', trim: '#ffffff',
+    classKey: 'a', placement: 'reported', primary: '#12965a', secondary: '#f2f2f2', trim: '#ffffff',
     identity: 'transition',
     description: 'Push it every single time. Win a groundball at midfield and they are already at your crease.',
     homeField: { name: 'Dragon Stadium', venue: 'stadium', time: 'night', crowd: 0.98 },
-    rivals: ['marcus', 'byron-nelson'],
-    overall: 86, offense: 87, defense: 82, goalie: 83, attack: 85, midfield: 91, faceoff: 86, speed: 93, chemistry: 84,
-  },
-  {
-    id: 'marcus', name: 'Flower Mound Marcus', short: 'Marcus', abbr: 'MAR', mascot: 'Marauders',
-    division: 'd1', primary: '#7d1128', secondary: '#d5d8dd', trim: '#ffffff',
-    identity: 'defense',
-    description: 'Heavy poles, brutal slides, and zero interest in a track meet. Low-scoring by design.',
-    homeField: { name: 'Marauder Field', venue: 'school', time: 'evening', crowd: 0.72 },
-    rivals: ['southlake-carroll', 'coppell'],
-    overall: 82, offense: 76, defense: 90, goalie: 84, attack: 75, midfield: 80, faceoff: 82, speed: 76, chemistry: 85,
-  },
-  {
-    id: 'esd', name: 'Episcopal School of Dallas', short: 'ESD', abbr: 'ESD', mascot: 'Eagles',
-    division: 'd1', primary: '#b4232f', secondary: '#16307a', trim: '#ffffff',
-    identity: 'offense',
-    description: 'Skilled, patient, and dangerous from X. They will hold the ball until you make a mistake.',
-    homeField: { name: 'Jones Family Field', venue: 'complex', time: 'evening', crowd: 0.7 },
-    rivals: ['highland-park', 'st-marks'],
-    overall: 80, offense: 85, defense: 75, goalie: 78, attack: 88, midfield: 79, faceoff: 74, speed: 80, chemistry: 81,
-  },
-  {
-    id: 'prosper', name: 'Prosper', short: 'Prosper', abbr: 'PRO', mascot: 'Eagles',
-    division: 'd1', primary: '#14204f', secondary: '#c9ced8', trim: '#ffffff',
-    identity: 'faceoff',
-    description: 'A FOGO who refuses to lose a clamp. Possession numbers that make the scoreboard look unfair.',
-    homeField: { name: 'Children’s Health Stadium', venue: 'stadium', time: 'night', crowd: 0.88 },
-    rivals: ['mckinney', 'frisco'],
-    overall: 79, offense: 78, defense: 78, goalie: 76, attack: 76, midfield: 82, faceoff: 94, speed: 79, chemistry: 77,
-  },
-  {
-    id: 'plano', name: 'Plano', short: 'Plano', abbr: 'PLA', mascot: 'Wildcats',
-    division: 'd1', primary: '#c1272d', secondary: '#1a1c22', trim: '#ffffff',
-    identity: 'balanced',
-    description: 'Big, physical middies and a coaching staff that never lets a game get out of hand early.',
-    homeField: { name: 'Clark Stadium', venue: 'stadium', time: 'evening', crowd: 0.76 },
-    rivals: ['coppell', 'mckinney'],
-    overall: 78, offense: 77, defense: 79, goalie: 77, attack: 75, midfield: 81, faceoff: 78, speed: 77, chemistry: 79,
-  },
-  {
-    id: 'coppell', name: 'Coppell', short: 'Coppell', abbr: 'COP', mascot: 'Cowboys',
-    division: 'd1', primary: '#1c1f26', secondary: '#d4262f', trim: '#ffffff',
-    identity: 'defense',
-    description: 'A packed-in defense that dares you to shoot outside. Clearing is where they get in trouble.',
-    homeField: { name: 'Buddy Echols Field', venue: 'stadium', time: 'evening', crowd: 0.74 },
-    rivals: ['plano', 'marcus'],
-    overall: 76, offense: 71, defense: 84, goalie: 80, attack: 70, midfield: 74, faceoff: 75, speed: 72, chemistry: 78,
-  },
-  {
-    id: 'mckinney', name: 'McKinney', short: 'McKinney', abbr: 'MCK', mascot: 'Lions',
-    division: 'd1', primary: '#b3141c', secondary: '#e0b83a', trim: '#ffffff',
-    identity: 'transition',
-    description: 'Young, fast, and streaky. When the transition offense is clicking they can beat anybody.',
-    homeField: { name: 'Ron Poe Stadium', venue: 'stadium', time: 'night', crowd: 0.7 },
-    rivals: ['prosper', 'plano'],
-    overall: 74, offense: 76, defense: 70, goalie: 72, attack: 75, midfield: 79, faceoff: 73, speed: 85, chemistry: 68,
+    rivals: ['keller', 'flower-mound'],
+    overall: 85, offense: 87, defense: 81, goalie: 82, attack: 85, midfield: 90, faceoff: 85, speed: 93, chemistry: 83,
   },
   {
     id: 'rockwall', name: 'Rockwall', short: 'Rockwall', abbr: 'RWL', mascot: 'Yellowjackets',
-    division: 'd1', primary: '#e2701e', secondary: '#16181c', trim: '#ffffff',
+    classKey: 'a', placement: 'reported', primary: '#e2701e', secondary: '#16181c', trim: '#ffffff',
+    identity: 'faceoff',
+    description: 'Owns the X. Possession numbers that make the scoreboard look unfair by the fourth quarter.',
+    homeField: { name: 'Wilkerson-Sanders Stadium', venue: 'stadium', time: 'evening', crowd: 0.78 },
+    rivals: ['mckinney', 'rockwall-heath'],
+    overall: 81, offense: 79, defense: 80, goalie: 78, attack: 78, midfield: 84, faceoff: 93, speed: 80, chemistry: 80,
+  },
+  {
+    id: 'mckinney', name: 'McKinney', short: 'McKinney', abbr: 'MCK', mascot: 'Lions',
+    classKey: 'a', placement: 'reported', primary: '#b3141c', secondary: '#e0b83a', trim: '#ffffff',
+    identity: 'transition',
+    description: 'Young, fast and streaky. When the transition offence is clicking they can beat anybody.',
+    homeField: { name: 'Ron Poe Stadium', venue: 'stadium', time: 'night', crowd: 0.74 },
+    rivals: ['rockwall', 'prosper'],
+    overall: 79, offense: 81, defense: 75, goalie: 76, attack: 80, midfield: 84, faceoff: 77, speed: 88, chemistry: 72,
+  },
+  {
+    id: 'allen', name: 'Allen', short: 'Allen', abbr: 'ALN', mascot: 'Eagles',
+    classKey: 'a', placement: 'reported', primary: '#c8102e', secondary: '#1a1c22', trim: '#ffffff',
+    identity: 'defense',
+    description: 'Enormous poles and a defence that treats every possession like a personal insult.',
+    homeField: { name: 'Eagle Stadium', venue: 'stadium', time: 'night', crowd: 1.0 },
+    rivals: ['plano', 'mckinney'],
+    overall: 83, offense: 77, defense: 91, goalie: 85, attack: 76, midfield: 81, faceoff: 82, speed: 79, chemistry: 84,
+  },
+
+  // ============================================================== CLASS B
+  {
+    id: 'coppell', name: 'Coppell', short: 'Coppell', abbr: 'COP', mascot: 'Cowboys',
+    classKey: 'b', placement: 'reported', primary: '#1c1f26', secondary: '#d4262f', trim: '#ffffff',
+    identity: 'defense',
+    description: 'A packed-in defence that dares you to shoot from outside. Clearing is where they get in trouble.',
+    homeField: { name: 'Buddy Echols Field', venue: 'stadium', time: 'evening', crowd: 0.76 },
+    rivals: ['flower-mound', 'plano'],
+    overall: 79, offense: 74, defense: 86, goalie: 83, attack: 73, midfield: 77, faceoff: 78, speed: 74, chemistry: 81,
+  },
+  {
+    id: 'flower-mound', name: 'Flower Mound', short: 'Flower Mound', abbr: 'FLM', mascot: 'Jaguars',
+    classKey: 'b', placement: 'reported', primary: '#0f3d7a', secondary: '#c9ced8', trim: '#ffffff',
     identity: 'balanced',
-    description: 'Blue-collar program. Wins groundballs, loses close games, and never stops running.',
-    homeField: { name: 'Wilkerson-Sanders Stadium', venue: 'stadium', time: 'evening', crowd: 0.66 },
-    rivals: ['frisco', 'wylie'],
-    overall: 72, offense: 71, defense: 73, goalie: 71, attack: 70, midfield: 74, faceoff: 76, speed: 73, chemistry: 74,
+    description: 'Well drilled and hard to rattle. Nothing spectacular, nothing you can exploit either.',
+    homeField: { name: 'Neal Wilson Stadium', venue: 'stadium', time: 'evening', crowd: 0.72 },
+    rivals: ['coppell', 'lewisville-marcus'],
+    overall: 77, offense: 76, defense: 78, goalie: 77, attack: 75, midfield: 79, faceoff: 76, speed: 77, chemistry: 82,
   },
   {
     id: 'frisco', name: 'Frisco', short: 'Frisco', abbr: 'FRI', mascot: 'Raccoons',
-    division: 'd1', primary: '#cf2027', secondary: '#f4f4f4', trim: '#ffffff',
+    classKey: 'b', placement: 'reported', primary: '#cf2027', secondary: '#f4f4f4', trim: '#ffffff',
     identity: 'goalie',
-    description: 'Undersized everywhere except in the cage. Their goalie is the only reason games stay close.',
-    homeField: { name: 'Memorial Stadium', venue: 'stadium', time: 'day', crowd: 0.6 },
-    rivals: ['prosper', 'rockwall'],
-    overall: 70, offense: 65, defense: 72, goalie: 86, attack: 64, midfield: 68, faceoff: 68, speed: 70, chemistry: 71,
-  },
-
-  // --------------------------------------------------------------- DIVISION II
-  {
-    id: 'grapevine', name: 'Grapevine', short: 'Grapevine', abbr: 'GRP', mascot: 'Mustangs',
-    division: 'd2', primary: '#6d3fa3', secondary: '#f0d24a', trim: '#ffffff',
-    identity: 'offense',
-    description: 'The class of Division II. Enough firepower to hang with the bottom half of D-I.',
-    homeField: { name: 'Mustang-Panther Stadium', venue: 'stadium', time: 'night', crowd: 0.82 },
-    rivals: ['colleyville-heritage', 'byron-nelson'],
-    overall: 76, offense: 82, defense: 71, goalie: 73, attack: 84, midfield: 78, faceoff: 74, speed: 80, chemistry: 79,
+    description: 'Undersized nearly everywhere except in the cage. Their keeper is why games stay close.',
+    homeField: { name: 'Memorial Stadium', venue: 'stadium', time: 'day', crowd: 0.62 },
+    rivals: ['lone-star', 'prosper'],
+    overall: 72, offense: 67, defense: 74, goalie: 88, attack: 66, midfield: 70, faceoff: 70, speed: 72, chemistry: 73,
   },
   {
-    id: 'byron-nelson', name: 'Byron Nelson', short: 'Byron Nelson', abbr: 'BYN', mascot: 'Bobcats',
-    division: 'd2', primary: '#17233f', secondary: '#b3a369', trim: '#ffffff',
+    id: 'keller', name: 'Keller', short: 'Keller', abbr: 'KEL', mascot: 'Indians',
+    classKey: 'b', placement: 'reported', primary: '#1b3f8b', secondary: '#d8dbe0', trim: '#ffffff',
     identity: 'faceoff',
     description: 'Wins the wing battle, wins the groundball, wins the game. Simple and effective.',
-    homeField: { name: 'Bobcat Stadium', venue: 'stadium', time: 'evening', crowd: 0.75 },
-    rivals: ['grapevine', 'southlake-carroll'],
-    overall: 73, offense: 72, defense: 74, goalie: 72, attack: 70, midfield: 78, faceoff: 88, speed: 74, chemistry: 75,
+    homeField: { name: 'Keller ISD Stadium', venue: 'stadium', time: 'evening', crowd: 0.7 },
+    rivals: ['southlake-carroll', 'colleyville-heritage'],
+    overall: 75, offense: 73, defense: 75, goalie: 74, attack: 71, midfield: 79, faceoff: 89, speed: 76, chemistry: 76,
   },
   {
-    id: 'colleyville-heritage', name: 'Colleyville Heritage', short: 'Colleyville', abbr: 'CHP', mascot: 'Panthers',
-    division: 'd2', primary: '#1c2c54', secondary: '#c0c4cc', trim: '#ffffff',
-    identity: 'defense',
-    description: 'Disciplined six-man defense. If you take a bad shot, the clear is going the other way fast.',
-    homeField: { name: 'Mustang-Panther Stadium', venue: 'stadium', time: 'evening', crowd: 0.72 },
-    rivals: ['grapevine', 'fwcd'],
-    overall: 72, offense: 67, defense: 80, goalie: 78, attack: 66, midfield: 70, faceoff: 72, speed: 69, chemistry: 78,
+    id: 'lovejoy', name: 'Lovejoy', short: 'Lovejoy', abbr: 'LOV', mascot: 'Leopards',
+    classKey: 'b', placement: 'reported', primary: '#1d6b3f', secondary: '#efefef', trim: '#ffffff',
+    identity: 'offense',
+    description: 'Two attackmen who can beat anyone one-on-one, and a defence that gives some of it back.',
+    homeField: { name: 'Leopard Stadium', venue: 'stadium', time: 'evening', crowd: 0.68 },
+    rivals: ['mckinney', 'prosper'],
+    overall: 76, offense: 82, defense: 70, goalie: 73, attack: 84, midfield: 78, faceoff: 73, speed: 79, chemistry: 78,
   },
   {
-    id: 'guyer', name: 'Denton Guyer', short: 'Guyer', abbr: 'GUY', mascot: 'Wildcats',
-    division: 'd2', primary: '#123a7a', secondary: '#d92b2b', trim: '#ffffff',
+    id: 'plano', name: 'Plano', short: 'Plano', abbr: 'PLA', mascot: 'Wildcats',
+    classKey: 'b', placement: 'reported', primary: '#c1272d', secondary: '#1a1c22', trim: '#ffffff',
+    identity: 'balanced',
+    description: 'Big, physical middies and a staff that never lets a game get away from them early.',
+    homeField: { name: 'Clark Stadium', venue: 'stadium', time: 'evening', crowd: 0.8 },
+    rivals: ['plano-east', 'plano-west'],
+    overall: 80, offense: 80, defense: 80, goalie: 79, attack: 78, midfield: 84, faceoff: 80, speed: 79, chemistry: 82,
+  },
+  {
+    id: 'prosper', name: 'Prosper', short: 'Prosper', abbr: 'PRO', mascot: 'Eagles',
+    classKey: 'b', placement: 'reported', primary: '#14204f', secondary: '#c9ced8', trim: '#ffffff',
     identity: 'transition',
-    description: 'Athletes first, lacrosse players second — and that is somehow working out for them.',
-    homeField: { name: 'Bronco Field', venue: 'school', time: 'evening', crowd: 0.62 },
-    rivals: ['argyle', 'hebron'],
-    overall: 70, offense: 71, defense: 68, goalie: 69, attack: 69, midfield: 76, faceoff: 70, speed: 84, chemistry: 66,
+    description: 'Fastest team in the class and they know it. Everything is a break waiting to happen.',
+    homeField: { name: "Children's Health Stadium", venue: 'stadium', time: 'night', crowd: 0.86 },
+    rivals: ['mckinney', 'lovejoy'],
+    overall: 78, offense: 79, defense: 74, goalie: 75, attack: 77, midfield: 83, faceoff: 76, speed: 89, chemistry: 74,
   },
   {
-    id: 'argyle', name: 'Argyle', short: 'Argyle', abbr: 'ARG', mascot: 'Eagles',
-    division: 'd2', primary: '#1e8f4c', secondary: '#e8c33c', trim: '#ffffff',
+    id: 'parish-episcopal', name: 'Parish Episcopal', short: 'Parish', abbr: 'PAR', mascot: 'Panthers',
+    classKey: 'b', placement: 'reported', primary: '#123a7a', secondary: '#c8a24a', trim: '#ffffff',
     identity: 'balanced',
     description: 'Small school, tight roster, high chemistry. They have played together since sixth grade.',
-    homeField: { name: 'Eagle Stadium', venue: 'school', time: 'day', crowd: 0.58 },
-    rivals: ['guyer', 'wakeland'],
-    overall: 69, offense: 68, defense: 69, goalie: 70, attack: 67, midfield: 70, faceoff: 71, speed: 68, chemistry: 88,
+    homeField: { name: 'Midway Campus Field', venue: 'complex', time: 'day', crowd: 0.58 },
+    rivals: ['esd', 'greenhill'],
+    overall: 74, offense: 73, defense: 74, goalie: 75, attack: 72, midfield: 75, faceoff: 74, speed: 72, chemistry: 89,
   },
   {
-    id: 'wakeland', name: 'Frisco Wakeland', short: 'Wakeland', abbr: 'WAK', mascot: 'Wolverines',
-    division: 'd2', primary: '#103a63', secondary: '#7ec8e8', trim: '#ffffff',
+    id: 'highland-park-b', name: 'Highland Park B', short: 'Highland Park B', abbr: 'HPB', mascot: 'Scots',
+    classKey: 'b', placement: 'reported', primary: '#4a7fd4', secondary: '#f5d020', trim: '#ffffff',
     identity: 'offense',
-    description: 'Two attackmen who can beat anyone one-on-one, and a defense that gives most of it back.',
-    homeField: { name: 'Memorial Stadium', venue: 'stadium', time: 'night', crowd: 0.64 },
-    rivals: ['liberty', 'argyle'],
-    overall: 68, offense: 75, defense: 61, goalie: 66, attack: 79, midfield: 70, faceoff: 65, speed: 74, chemistry: 67,
+    description: 'The same system as the varsity side, run by players who want the varsity spot.',
+    homeField: { name: 'Highlander Stadium', venue: 'stadium', time: 'evening', crowd: 0.6 },
+    rivals: ['dallas-jesuit-b'],
+    overall: 73, offense: 77, defense: 69, goalie: 71, attack: 78, midfield: 74, faceoff: 71, speed: 76, chemistry: 80,
   },
   {
-    id: 'fwcd', name: 'Fort Worth Country Day', short: 'Country Day', abbr: 'FWCD', mascot: 'Falcons',
-    division: 'd2', primary: '#22a163', secondary: '#f0f0f0', trim: '#ffffff',
-    identity: 'goalie',
-    description: 'A senior goalie stealing one game a week and a roster that never gets tired.',
-    homeField: { name: 'Falcon Field', venue: 'complex', time: 'day', crowd: 0.55 },
-    rivals: ['nolan-catholic', 'colleyville-heritage'],
-    overall: 67, offense: 62, defense: 69, goalie: 84, attack: 61, midfield: 66, faceoff: 66, speed: 67, chemistry: 76,
-  },
-  {
-    id: 'liberty', name: 'Frisco Liberty', short: 'Liberty', abbr: 'LIB', mascot: 'Redhawks',
-    division: 'd2', primary: '#c02128', secondary: '#1a1c22', trim: '#ffffff',
-    identity: 'balanced',
-    description: 'Middle of the table every year. One good recruiting class from being a real problem.',
-    homeField: { name: 'Kuykendall Stadium', venue: 'stadium', time: 'evening', crowd: 0.6 },
-    rivals: ['wakeland', 'lake-highlands'],
-    overall: 66, offense: 66, defense: 65, goalie: 66, attack: 65, midfield: 68, faceoff: 67, speed: 68, chemistry: 70,
-  },
-  {
-    id: 'nolan-catholic', name: 'Nolan Catholic', short: 'Nolan', abbr: 'NOL', mascot: 'Vikings',
-    division: 'd2', primary: '#46187a', secondary: '#dcae2c', trim: '#ffffff',
+    id: 'dallas-jesuit-b', name: 'Dallas Jesuit B', short: 'Jesuit B', abbr: 'JSB', mascot: 'Rangers',
+    classKey: 'b', placement: 'reported', primary: '#16407f', secondary: '#d9a441', trim: '#ffffff',
     identity: 'defense',
-    description: 'Physical, penalty-prone, and impossible to dodge on. Games here get ugly in a hurry.',
-    homeField: { name: 'Viking Field', venue: 'school', time: 'evening', crowd: 0.57 },
-    rivals: ['fwcd', 'hebron'],
-    overall: 65, offense: 60, defense: 75, goalie: 68, attack: 58, midfield: 64, faceoff: 69, speed: 64, chemistry: 69,
+    description: 'Coached exactly like the first team: disciplined, physical and allergic to bad shots.',
+    homeField: { name: 'Postell Stadium', venue: 'stadium', time: 'evening', crowd: 0.62 },
+    rivals: ['highland-park-b'],
+    overall: 74, offense: 70, defense: 79, goalie: 77, attack: 69, midfield: 73, faceoff: 76, speed: 72, chemistry: 82,
+  },
+
+  // ========================================================== CLASS C EAST
+  {
+    id: 'plano-east', name: 'Plano East', short: 'Plano East', abbr: 'PLE', mascot: 'Panthers',
+    classKey: 'c-east', placement: 'reported', primary: '#0e5c3a', secondary: '#e8c33c', trim: '#ffffff',
+    identity: 'balanced',
+    description: 'Middle of the table every year. One good class from being a real problem.',
+    homeField: { name: 'Williams Stadium', venue: 'stadium', time: 'evening', crowd: 0.64 },
+    rivals: ['plano', 'plano-west'],
+    overall: 71, offense: 71, defense: 70, goalie: 71, attack: 70, midfield: 73, faceoff: 71, speed: 73, chemistry: 74,
   },
   {
-    id: 'lake-highlands', name: 'Lake Highlands', short: 'Lake Highlands', abbr: 'LH', mascot: 'Wildcats',
-    division: 'd2', primary: '#2f7dc4', secondary: '#f4f4f4', trim: '#ffffff',
-    identity: 'transition',
-    description: 'Fast break or bust. Beautiful when it works, a turnover machine when it does not.',
-    homeField: { name: 'Wildcat-Ram Stadium', venue: 'stadium', time: 'night', crowd: 0.63 },
-    rivals: ['liberty', 'wylie'],
-    overall: 64, offense: 66, defense: 60, goalie: 63, attack: 64, midfield: 70, faceoff: 63, speed: 82, chemistry: 61,
+    id: 'plano-west', name: 'Plano West', short: 'Plano West', abbr: 'PLW', mascot: 'Wolves',
+    classKey: 'c-east', placement: 'reported', primary: '#1f2a44', secondary: '#9aa4b4', trim: '#ffffff',
+    identity: 'defense',
+    description: 'Slows every game to a crawl and wins the ugly ones. Nobody enjoys playing them.',
+    homeField: { name: 'Clark Stadium', venue: 'stadium', time: 'evening', crowd: 0.66 },
+    rivals: ['plano', 'plano-east'],
+    overall: 72, offense: 66, defense: 79, goalie: 77, attack: 65, midfield: 70, faceoff: 72, speed: 69, chemistry: 77,
   },
   {
     id: 'hebron', name: 'Hebron', short: 'Hebron', abbr: 'HEB', mascot: 'Hawks',
-    division: 'd2', primary: '#14a05a', secondary: '#14161a', trim: '#ffffff',
-    identity: 'balanced',
-    description: 'Rebuilding year three of a rebuild. The freshmen are good. The record is not.',
-    homeField: { name: 'Hawk Stadium', venue: 'school', time: 'day', crowd: 0.5 },
-    rivals: ['guyer', 'nolan-catholic'],
-    overall: 62, offense: 61, defense: 62, goalie: 63, attack: 60, midfield: 63, faceoff: 62, speed: 65, chemistry: 60,
+    classKey: 'c-east', placement: 'assumed', primary: '#14a05a', secondary: '#14161a', trim: '#ffffff',
+    identity: 'transition',
+    description: 'Athletes first, lacrosse players second, and somehow that keeps working out.',
+    homeField: { name: 'Hawk Stadium', venue: 'school', time: 'day', crowd: 0.55 },
+    rivals: ['lewisville-marcus', 'plano-east'],
+    overall: 68, offense: 69, defense: 65, goalie: 67, attack: 68, midfield: 73, faceoff: 68, speed: 84, chemistry: 64,
   },
   {
-    id: 'wylie', name: 'Wylie', short: 'Wylie', abbr: 'WYL', mascot: 'Pirates',
-    division: 'd2', primary: '#17244d', secondary: '#e3b93a', trim: '#ffffff',
+    id: 'bishop-lynch', name: 'Bishop Lynch', short: 'Bishop Lynch', abbr: 'BL', mascot: 'Friars',
+    classKey: 'c-east', placement: 'assumed', primary: '#5a1d2e', secondary: '#d7c37a', trim: '#ffffff',
     identity: 'faceoff',
-    description: 'Bottom of the table, but their faceoff man is the best player on the field most nights.',
-    homeField: { name: 'Pirate Stadium', venue: 'school', time: 'evening', crowd: 0.52 },
-    rivals: ['rockwall', 'lake-highlands'],
-    overall: 60, offense: 57, defense: 60, goalie: 61, attack: 56, midfield: 61, faceoff: 80, speed: 63, chemistry: 62,
+    description: 'Their FOGO is the best player on the field most nights, and they build everything around him.',
+    homeField: { name: 'Friar Field', venue: 'school', time: 'evening', crowd: 0.58 },
+    rivals: ['john-paul-ii', 'plano-east'],
+    overall: 69, offense: 66, defense: 68, goalie: 69, attack: 65, midfield: 70, faceoff: 86, speed: 70, chemistry: 71,
+  },
+  {
+    id: 'richardson', name: 'Richardson', short: 'Richardson', abbr: 'RCH', mascot: 'Eagles',
+    classKey: 'c-east', placement: 'assumed', primary: '#1a4f9c', secondary: '#f0f0f0', trim: '#ffffff',
+    identity: 'balanced',
+    description: 'Blue-collar programme. Wins groundballs, loses close games, never stops running.',
+    homeField: { name: 'Eagle-Mustang Stadium', venue: 'stadium', time: 'evening', crowd: 0.6 },
+    rivals: ['lake-highlands', 'plano-east'],
+    overall: 66, offense: 65, defense: 66, goalie: 66, attack: 64, midfield: 68, faceoff: 67, speed: 70, chemistry: 70,
+  },
+  {
+    id: 'rockwall-heath', name: 'Rockwall-Heath', short: 'Rockwall-Heath', abbr: 'RH', mascot: 'Hawks',
+    classKey: 'c-east', placement: 'assumed', primary: '#0d2c54', secondary: '#c0392b', trim: '#ffffff',
+    identity: 'offense',
+    description: 'Shoots from everywhere and apologises for nothing. High-scoring games in both directions.',
+    homeField: { name: 'Hawk Stadium', venue: 'stadium', time: 'night', crowd: 0.63 },
+    rivals: ['rockwall', 'richardson'],
+    overall: 67, offense: 73, defense: 60, goalie: 64, attack: 75, midfield: 70, faceoff: 65, speed: 74, chemistry: 66,
+  },
+
+  // ========================================================== CLASS C WEST
+  {
+    id: 'grapevine', name: 'Grapevine', short: 'Grapevine', abbr: 'GRP', mascot: 'Mustangs',
+    classKey: 'c-west', placement: 'reported', primary: '#6d3fa3', secondary: '#f0d24a', trim: '#ffffff',
+    identity: 'offense',
+    description: 'The class of Class C West. Enough firepower to hang with the bottom of Class B.',
+    homeField: { name: 'Mustang-Panther Stadium', venue: 'stadium', time: 'night', crowd: 0.8 },
+    rivals: ['colleyville-heritage', 'fwcd'],
+    overall: 74, offense: 80, defense: 69, goalie: 71, attack: 82, midfield: 76, faceoff: 72, speed: 78, chemistry: 77,
+  },
+  {
+    id: 'fwcd', name: 'Fort Worth Country Day', short: 'Country Day', abbr: 'FWCD', mascot: 'Falcons',
+    classKey: 'c-west', placement: 'reported', primary: '#22a163', secondary: '#f0f0f0', trim: '#ffffff',
+    identity: 'goalie',
+    description: 'A senior goalie stealing one game a week and a roster that never seems to tire.',
+    homeField: { name: 'Falcon Field', venue: 'complex', time: 'day', crowd: 0.55 },
+    rivals: ['trinity-valley', 'grapevine'],
+    overall: 70, offense: 65, defense: 71, goalie: 86, attack: 64, midfield: 69, faceoff: 69, speed: 70, chemistry: 78,
+  },
+  {
+    id: 'greenhill', name: 'Greenhill', short: 'Greenhill', abbr: 'GRN', mascot: 'Hornets',
+    classKey: 'c-west', placement: 'reported', primary: '#0f5132', secondary: '#e9c46a', trim: '#ffffff',
+    identity: 'balanced',
+    description: 'Smart, patient and well coached. They will not beat themselves.',
+    homeField: { name: 'Greenhill Athletic Complex', venue: 'complex', time: 'day', crowd: 0.54 },
+    rivals: ['parish-episcopal', 'prestonwood'],
+    overall: 69, offense: 68, defense: 70, goalie: 71, attack: 67, midfield: 70, faceoff: 69, speed: 68, chemistry: 84,
+  },
+  {
+    id: 'prestonwood', name: 'Prestonwood Christian', short: 'Prestonwood', abbr: 'PCA', mascot: 'Lions',
+    classKey: 'c-west', placement: 'reported', primary: '#7a1f2b', secondary: '#d9cba3', trim: '#ffffff',
+    identity: 'defense',
+    description: 'Physical, penalty-prone and impossible to dodge on. Games here get ugly in a hurry.',
+    homeField: { name: 'Lions Stadium', venue: 'school', time: 'evening', crowd: 0.6 },
+    rivals: ['greenhill', 'trinity-valley'],
+    overall: 68, offense: 63, defense: 77, goalie: 71, attack: 61, midfield: 67, faceoff: 71, speed: 66, chemistry: 72,
+  },
+  {
+    id: 'guyer', name: 'Denton Guyer', short: 'Guyer', abbr: 'GUY', mascot: 'Wildcats',
+    classKey: 'c-west', placement: 'reported', primary: '#123a7a', secondary: '#d92b2b', trim: '#ffffff',
+    identity: 'transition',
+    description: 'Runs everything. If the game turns into a track meet they are perfectly happy.',
+    homeField: { name: 'C.H. Collins Complex', venue: 'stadium', time: 'evening', crowd: 0.66 },
+    rivals: ['byron-nelson', 'grapevine'],
+    overall: 70, offense: 71, defense: 67, goalie: 68, attack: 69, midfield: 76, faceoff: 70, speed: 86, chemistry: 67,
+  },
+  {
+    id: 'trinity-valley', name: 'Trinity Valley', short: 'Trinity Valley', abbr: 'TVS', mascot: 'Trojans',
+    classKey: 'c-west', placement: 'reported', primary: '#1b2a5c', secondary: '#c8b273', trim: '#ffffff',
+    identity: 'balanced',
+    description: 'Tiny roster, enormous effort. Depth is the only thing that beats them.',
+    homeField: { name: 'Trojan Field', venue: 'school', time: 'day', crowd: 0.5 },
+    rivals: ['fwcd', 'prestonwood'],
+    overall: 65, offense: 64, defense: 66, goalie: 68, attack: 63, midfield: 66, faceoff: 65, speed: 66, chemistry: 86,
+  },
+
+  // ============================================================== CLASS D
+  {
+    id: 'john-paul-ii', name: 'John Paul II', short: 'John Paul II', abbr: 'JPII', mascot: 'Cardinals',
+    classKey: 'd', placement: 'reported', primary: '#8b1a2b', secondary: '#e8e2d0', trim: '#ffffff',
+    identity: 'offense',
+    description: 'The team to beat in Class D. Two lines that can score and a real goalie behind them.',
+    homeField: { name: 'Cardinal Field', venue: 'school', time: 'evening', crowd: 0.58 },
+    rivals: ['bishop-lynch', 'cumberland'],
+    overall: 66, offense: 71, defense: 61, goalie: 68, attack: 73, midfield: 68, faceoff: 65, speed: 70, chemistry: 74,
+  },
+  {
+    id: 'cumberland', name: 'Cumberland Academy', short: 'Cumberland', abbr: 'CUM', mascot: 'Knights',
+    classKey: 'd', placement: 'reported', primary: '#2f3e6b', secondary: '#b9c2d0', trim: '#ffffff',
+    identity: 'balanced',
+    description: 'Rebuilding year three of a rebuild. The freshmen are good. The record is not.',
+    homeField: { name: 'Knight Field', venue: 'school', time: 'day', crowd: 0.48 },
+    rivals: ['john-paul-ii', 'bridge'],
+    overall: 60, offense: 59, defense: 60, goalie: 62, attack: 58, midfield: 61, faceoff: 60, speed: 63, chemistry: 66,
+  },
+  {
+    id: 'bridge', name: 'Bridge Lacrosse', short: 'Bridge', abbr: 'BRG', mascot: 'Builders',
+    classKey: 'd', placement: 'reported', primary: '#0f6f8c', secondary: '#f2b134', trim: '#ffffff',
+    identity: 'transition',
+    description: 'Fast break or bust. Beautiful when it works, a turnover machine when it does not.',
+    homeField: { name: 'Fair Park Fields', venue: 'complex', time: 'day', crowd: 0.52 },
+    rivals: ['cumberland', 'lake-highlands'],
+    overall: 61, offense: 63, defense: 57, goalie: 60, attack: 62, midfield: 67, faceoff: 60, speed: 82, chemistry: 60,
+  },
+  {
+    id: 'lake-highlands', name: 'Lake Highlands', short: 'Lake Highlands', abbr: 'LH', mascot: 'Wildcats',
+    classKey: 'd', placement: 'assumed', primary: '#2f7dc4', secondary: '#f4f4f4', trim: '#ffffff',
+    identity: 'faceoff',
+    description: 'Bottom half of the table, but nobody in the class can beat them at the X.',
+    homeField: { name: 'Wildcat-Ram Stadium', venue: 'stadium', time: 'night', crowd: 0.6 },
+    rivals: ['richardson', 'bridge'],
+    overall: 62, offense: 59, defense: 61, goalie: 62, attack: 58, midfield: 63, faceoff: 82, speed: 66, chemistry: 64,
+  },
+  {
+    id: 'lewisville-marcus', name: 'Flower Mound Marcus', short: 'Marcus', abbr: 'MAR', mascot: 'Marauders',
+    classKey: 'd', placement: 'assumed', primary: '#7d1128', secondary: '#d5d8dd', trim: '#ffffff',
+    identity: 'defense',
+    description: 'Heavy poles, brutal slides and zero interest in a track meet. Low-scoring by design.',
+    homeField: { name: 'Marauder Field', venue: 'school', time: 'evening', crowd: 0.62 },
+    rivals: ['flower-mound', 'hebron'],
+    overall: 64, offense: 58, defense: 73, goalie: 67, attack: 57, midfield: 62, faceoff: 66, speed: 62, chemistry: 70,
+  },
+  {
+    id: 'lone-star', name: 'Frisco Lone Star', short: 'Lone Star', abbr: 'LS', mascot: 'Rangers',
+    classKey: 'd', placement: 'assumed', primary: '#13223f', secondary: '#c9a227', trim: '#ffffff',
+    identity: 'goalie',
+    description: 'Their keeper keeps them in everything. The rest of the roster is still catching up.',
+    homeField: { name: 'Ford Center Fields', venue: 'complex', time: 'evening', crowd: 0.56 },
+    rivals: ['frisco', 'cumberland'],
+    overall: 62, offense: 57, defense: 63, goalie: 80, attack: 56, midfield: 60, faceoff: 62, speed: 65, chemistry: 68,
+  },
+
+  // A few more Class C West programmes so the class carries a full schedule.
+  {
+    id: 'colleyville-heritage', name: 'Colleyville Heritage', short: 'Colleyville', abbr: 'CHP', mascot: 'Panthers',
+    classKey: 'c-west', placement: 'assumed', primary: '#1c2c54', secondary: '#c0c4cc', trim: '#ffffff',
+    identity: 'defense',
+    description: 'Disciplined six-man defence. Take a bad shot and the clear is going the other way fast.',
+    homeField: { name: 'Mustang-Panther Stadium', venue: 'stadium', time: 'evening', crowd: 0.7 },
+    rivals: ['grapevine', 'keller'],
+    overall: 71, offense: 66, defense: 78, goalie: 76, attack: 65, midfield: 69, faceoff: 71, speed: 68, chemistry: 78,
+  },
+  {
+    id: 'byron-nelson', name: 'Byron Nelson', short: 'Byron Nelson', abbr: 'BYN', mascot: 'Bobcats',
+    classKey: 'c-west', placement: 'assumed', primary: '#17233f', secondary: '#b3a369', trim: '#ffffff',
+    identity: 'faceoff',
+    description: 'Wins the draw, wins the groundball, wins the game. It is not complicated.',
+    homeField: { name: 'Bobcat Stadium', venue: 'stadium', time: 'evening', crowd: 0.72 },
+    rivals: ['guyer', 'southlake-carroll'],
+    overall: 72, offense: 70, defense: 72, goalie: 71, attack: 68, midfield: 76, faceoff: 87, speed: 73, chemistry: 74,
   },
 ];
 /* eslint-enable max-len */
@@ -327,8 +488,8 @@ export function tryGetTeam(id: string | null | undefined): TeamData | null {
   return id ? byId.get(id) ?? null : null;
 }
 
-export function teamsInDivision(div: DivisionKey): TeamData[] {
-  return TEAMS.filter((t) => t.division === div);
+export function teamsInClass(key: ClassKey): TeamData[] {
+  return TEAMS.filter((t) => t.classKey === key);
 }
 
 export function areRivals(a: string, b: string): boolean {
@@ -337,24 +498,42 @@ export function areRivals(a: string, b: string): boolean {
   return !!(ta?.rivals.includes(b) || tb?.rivals.includes(a));
 }
 
-/** Difficulty of *coaching* this team: strong programs are easier. 1 (easiest) .. 5 (hardest) */
+/** Difficulty of *coaching* this team: strong programmes are easier. 1..5 */
 export function coachingDifficulty(t: TeamData): number {
-  const peers = teamsInDivision(t.division);
+  const peers = teamsInClass(t.classKey);
   const best = Math.max(...peers.map((p) => p.overall));
   const worst = Math.min(...peers.map((p) => p.overall));
-  const norm = (t.overall - worst) / Math.max(1, best - worst); // 0 weakest .. 1 strongest
-  // Division II is a harder job at every level: less talent to work with.
-  const divBump = t.division === 'd2' ? 1 : 0;
-  return Math.max(1, Math.min(5, Math.round(5 - norm * 4 + divBump)));
+  const norm = (t.overall - worst) / Math.max(1, best - worst);
+  // Lower classes are a harder job at every level: less talent to work with.
+  const classBump = { a: 0, b: 0.5, 'c-east': 1, 'c-west': 1, d: 1.5 }[t.classKey];
+  return Math.max(1, Math.min(5, Math.round(5 - norm * 4 + classBump)));
 }
 
 export const DIFFICULTY_WORDS = ['', 'Easy', 'Moderate', 'Tough', 'Hard', 'Brutal'] as const;
 
-/** Colors used to draw a team on the field. Home wears its primary shell; the
+/** Colours used to draw a team on the field. Home wears its primary shell; the
  *  visitor wears a light shell accented with its primary so the two never clash. */
 export function jerseyFor(team: TeamData, isHome: boolean) {
   if (isHome) {
     return { body: team.primary, accent: team.secondary, trim: team.trim, helmet: team.secondary };
   }
   return { body: '#eef1f6', accent: team.primary, trim: team.primary, helmet: team.primary };
+}
+
+/** Sanity checks run once at startup: duplicate ids, dangling rivals, thin classes. */
+export function validateLeague(): string[] {
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  for (const t of TEAMS) {
+    if (seen.has(t.id)) problems.push(`duplicate team id: ${t.id}`);
+    seen.add(t.id);
+    for (const r of t.rivals) {
+      if (!byId.has(r)) problems.push(`${t.id} lists unknown rival "${r}"`);
+    }
+  }
+  for (const key of CLASS_ORDER) {
+    const n = teamsInClass(key).length;
+    if (n < 4) problems.push(`class ${key} has only ${n} teams; schedules will be short`);
+  }
+  return problems;
 }

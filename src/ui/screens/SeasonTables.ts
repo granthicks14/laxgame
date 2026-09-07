@@ -4,7 +4,7 @@ import { screenEl, topbar, panelFlush, teamBadge, emptyPanel } from '../componen
 import { loadCareer } from '../../state/saves';
 import { effectiveTeam, opponentOf, roundName, standingsSorted, userIsHome, winPct } from '../../league/career';
 import type { Career, ScheduledGame } from '../../league/types';
-import { DIVISIONS } from '../../data/teams';
+import { CLASSES } from '../../data/teams';
 
 function requireCareer(app: App, mode: 'season' | 'dynasty', title: string): Career | HTMLElement {
   const c = loadCareer(mode);
@@ -44,7 +44,7 @@ export class StandingsScreen implements Screen {
     });
 
     this.el = screenEl(
-      topbar(app, 'Standings', DIVISIONS[career.division].short),
+      topbar(app, 'Standings', CLASSES[career.classKey].short),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
           panelFlush(null,

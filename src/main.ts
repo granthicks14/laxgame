@@ -2,6 +2,7 @@ import './style.css';
 import { App } from './ui/App';
 import { TitleScreen } from './ui/screens/TitleScreen';
 import { h } from './ui/dom';
+import { validateLeague } from './data/teams';
 
 function fatal(message: string, detail?: unknown): void {
   const root = document.getElementById('app');
@@ -21,6 +22,15 @@ function fatal(message: string, detail?: unknown): void {
 }
 
 function boot(): void {
+  // Surface league data problems (duplicate ids, dangling rivals, thin classes)
+  // in the console rather than letting them turn into odd behaviour later.
+  try {
+    const problems = validateLeague();
+    if (problems.length) console.warn('[league] data problems:\n - ' + problems.join('\n - '));
+  } catch (err) {
+    console.warn('[league] validation failed', err);
+  }
+
   const root = document.getElementById('app');
   if (!root) {
     document.body.textContent = 'Missing #app container.';

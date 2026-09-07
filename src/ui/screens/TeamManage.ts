@@ -10,6 +10,7 @@ import {
 import { OFFENSE_STYLES, DEFENSE_STYLES, type DefenseStyle, type OffenseStyle } from '../../data/tactics';
 import { POSITION_LABEL } from '../../data/constants';
 import type { TeamData } from '../../data/teams';
+import { rosterSourceFor } from '../../data/rosters';
 
 export class TeamManageScreen implements Screen {
   el: HTMLElement;
@@ -70,6 +71,12 @@ export class TeamManageScreen implements Screen {
           panel('Strengths and weaknesses', ...profile(team)),
 
           panelFlush('Roster', rosterTable(app, career, mode)),
+          h('div', {
+            class: 'tiny',
+            text: rosterSourceFor(career.teamId) === 'official'
+              ? 'Player names, numbers and positions come from a published roster; all ratings are gameplay values.'
+              : 'No published roster exists for this programme in the game data, so these players are fictional.',
+          }),
           h('div', { class: 'tiny', text: `Training costs ${TRAIN_COST} coaching points. Earn points by playing games — more for wins, rivalry wins and playoff games.` }),
         )),
     );

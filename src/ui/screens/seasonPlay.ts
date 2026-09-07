@@ -10,7 +10,7 @@ import { saveCareer } from '../../state/saves';
 import { generateRoster } from '../../data/players';
 import type { Career, ScheduledGame } from '../../league/types';
 
-export function buildSeasonMatch(career: Career, game: ScheduledGame) {
+export function buildSeasonMatch(career: Career, game: ScheduledGame, replays = true) {
   const oppId = opponentOf(career, game);
   const you = effectiveTeam(career, career.teamId);
   const them = effectiveTeam(career, oppId);
@@ -34,11 +34,12 @@ export function buildSeasonMatch(career: Career, game: ScheduledGame) {
     awayRoster: isHome ? oppRoster : yourRoster,
     homeTactics: isHome ? career.tactics : tacticsFor(them),
     awayTactics: isHome ? tacticsFor(them) : career.tactics,
+    replays,
   });
 }
 
 export function playSeasonGame(app: App, career: Career, game: ScheduledGame): void {
-  const config = buildSeasonMatch(career, game);
+  const config = buildSeasonMatch(career, game, app.settings.goalReplays);
   const isHome = userIsHome(career, game);
 
   app.push((a) => new GameScreen(a, {

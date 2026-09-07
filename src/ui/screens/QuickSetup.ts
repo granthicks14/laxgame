@@ -15,7 +15,7 @@ export class QuickSetupScreen implements Screen {
 
   constructor(app: App) {
     const opp = getTeam(quickPrefs.opponentId === quickPrefs.teamId
-      ? (quickPrefs.teamId === 'jesuit-dallas' ? 'highland-park' : 'jesuit-dallas')
+      ? (quickPrefs.teamId === 'dallas-jesuit' ? 'highland-park' : 'dallas-jesuit')
       : quickPrefs.opponentId);
     quickPrefs.opponentId = opp.id;
 
@@ -44,7 +44,7 @@ export class QuickSetupScreen implements Screen {
               onPick: (id) => {
                 quickPrefs.teamId = id;
                 if (quickPrefs.opponentId === id) {
-                  quickPrefs.opponentId = id === 'jesuit-dallas' ? 'highland-park' : 'jesuit-dallas';
+                  quickPrefs.opponentId = id === 'dallas-jesuit' ? 'highland-park' : 'dallas-jesuit';
                 }
                 saveQuickPrefs();
                 app.pop();
@@ -123,6 +123,7 @@ export function startQuickGame(app: App): void {
     humanSide: quickPrefs.home ? 'home' : 'away',
     difficulty: quickPrefs.difficulty,
     gameLength: quickPrefs.gameLength,
+    replays: app.settings.goalReplays,
   });
 
   app.push((a) => new GameScreen(a, {

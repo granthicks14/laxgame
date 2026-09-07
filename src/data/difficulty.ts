@@ -19,6 +19,8 @@ export interface DifficultyProfile {
   slideTrigger: number;
   /** Multiplier on AI goalie reaction speed. */
   goalieReaction: number;
+  /** Multiplier on how much of the cage an AI goalie covers. */
+  goalieReach: number;
   /** Multiplier on AI check timing precision. */
   checkTiming: number;
   /** Shot-quality threshold the AI needs before it pulls the trigger. Lower means
@@ -35,25 +37,25 @@ export const DIFFICULTIES: Record<DifficultyKey, DifficultyProfile> = {
     key: 'rookie', label: 'Rookie',
     blurb: 'Forgiving. Defenders give you room and the goalie bites on fakes.',
     reaction: 0.42, aimNoise: 0.15, decisionQuality: 0.42, markDistance: 3.4, slideTrigger: 5.5,
-    goalieReaction: 0.72, checkTiming: 0.55, shotGreed: 0.115, faceoffSkill: 0.78, rewardMultiplier: 0.6,
+    goalieReaction: 0.72, goalieReach: 0.86, checkTiming: 0.55, shotGreed: 0.115, faceoffSkill: 0.78, rewardMultiplier: 0.6,
   },
   varsity: {
     key: 'varsity', label: 'Varsity',
     blurb: 'The intended experience. Good defense, punishes lazy passes.',
     reaction: 0.26, aimNoise: 0.095, decisionQuality: 0.62, markDistance: 2.6, slideTrigger: 6.5,
-    goalieReaction: 0.88, checkTiming: 0.75, shotGreed: 0.185, faceoffSkill: 0.94, rewardMultiplier: 1.0,
+    goalieReaction: 0.88, goalieReach: 1.0, checkTiming: 0.75, shotGreed: 0.185, faceoffSkill: 0.94, rewardMultiplier: 1.0,
   },
   allstate: {
     key: 'allstate', label: 'All-State',
     blurb: 'Sharp slides, tight marks, and goalies who read your hands.',
     reaction: 0.16, aimNoise: 0.06, decisionQuality: 0.8, markDistance: 2.0, slideTrigger: 7.5,
-    goalieReaction: 1.0, checkTiming: 0.9, shotGreed: 0.225, faceoffSkill: 1.06, rewardMultiplier: 1.35,
+    goalieReaction: 1.0, goalieReach: 1.08, checkTiming: 0.9, shotGreed: 0.225, faceoffSkill: 1.06, rewardMultiplier: 1.35,
   },
   elite: {
     key: 'elite', label: 'Elite',
     blurb: 'Everything is contested. You will have to earn every single goal.',
     reaction: 0.09, aimNoise: 0.035, decisionQuality: 0.93, markDistance: 1.6, slideTrigger: 8.5,
-    goalieReaction: 1.1, checkTiming: 1.0, shotGreed: 0.25, faceoffSkill: 1.16, rewardMultiplier: 1.8,
+    goalieReaction: 1.1, goalieReach: 1.16, checkTiming: 1.0, shotGreed: 0.25, faceoffSkill: 1.16, rewardMultiplier: 1.8,
   },
 };
 

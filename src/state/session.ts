@@ -14,7 +14,7 @@ const KEY = 'lsl.quick.v1';
 
 const DEFAULTS: QuickPrefs = {
   teamId: 'highland-park',
-  opponentId: 'jesuit-dallas',
+  opponentId: 'dallas-jesuit',
   home: true,
   difficulty: 'varsity',
   gameLength: 'short',
