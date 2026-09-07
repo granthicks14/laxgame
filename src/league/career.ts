@@ -1,0 +1,548 @@
+import { Rng } from '../core/rng';
+import { clamp } from '../core/math';
+import {
+  generateRoster, generatePlayer, sortDepthChart, refreshOverall, emptyStats,
+  ROSTER_SHAPE, type Grade, type PlayerData, type PlayerAttrs, type PlayerStats,
+} from '../data/players';
+import {
+  TEAMS, getTeam, teamsInDivision, areRivals, type TeamData, type TeamRatings,
+} from '../data/teams';
+import { DEFAULT_TACTICS } from '../data/tactics';
+import { DIFFICULTIES, type DifficultyKey } from '../data/difficulty';
+import type { GameLengthKey } from '../data/constants';
+import { buildSchedule, regularSeasonWeeks } from './schedule';
+import { simulateGame } from './simulate';
+import {
+  CAREER_VERSION, type Career, type PlayoffRound, type ScheduledGame,
+  type StandingRow, type WeeklyFocus,
+} from './types';
+
+export const FOCUS_INFO: Record<WeeklyFocus, { label: string; blurb: string }> = {
+  offense: { label: 'Offensive Sets', blurb: 'Shooting and dodging sharpen. Attack develops faster.' },
+  defense: { label: 'Defensive Slides', blurb: 'Marking and checking improve. Poles develop faster.' },
+  faceoffs: { label: 'Faceoff Work', blurb: 'Wing play and clamps improve. More possessions.' },
+  conditioning: { label: 'Conditioning', blurb: 'Stamina and speed across the whole roster.' },
+  chemistry: { label: 'Team Chemistry', blurb: 'Cleaner passing and better off-ball movement.' },
+};
+
+const FOCUS_ATTRS: Record<WeeklyFocus, (keyof PlayerAttrs)[]> = {
+  offense: ['shooting', 'shotAccuracy', 'shotPower', 'dodging'],
+  defense: ['defense', 'checking', 'awareness'],
+  faceoffs: ['faceoff', 'checking', 'acceleration'],
+  conditioning: ['stamina', 'speed', 'acceleration'],
+  chemistry: ['passing', 'awareness'],
+};
+
+/* --------------------------------------------------------------- creation */
+
+export interface NewCareerOptions {
+  mode: 'season' | 'dynasty';
+  teamId: string;
+  difficulty: DifficultyKey;
+  gameLength: GameLengthKey;
+  seed?: number;
+}
+
+export function createCareer(opts: NewCareerOptions): Career {
+  const team = getTeam(opts.teamId);
+  const seed = opts.seed ?? (Date.now() ^ Math.floor(Math.random() * 0xffffff));
+  const career: Career = {
+    version: CAREER_VERSION,
+    mode: opts.mode,
+    seed,
+    year: 1,
+    teamId: team.id,
+    division: team.division,
+    difficulty: opts.difficulty,
+    gameLength: opts.gameLength,
+    tactics: { ...DEFAULT_TACTICS },
+    schedule: buildSchedule(team.division, team.id, seed),
+    standings: emptyStandings(team.division),
+    ratingOverrides: {},
+    roster: generateRoster(team, `${seed}:1`),
+    coachingPoints: 4,
+    focus: null,
+    prestige: clamp(Math.round(team.overall * 0.6 + 20), 20, 92),
+    history: [],
+    alumni: [],
+    championships: 0,
+    careerWins: 0,
+    careerLosses: 0,
+    playoffSeeds: null,
+    eliminated: false,
+    seasonComplete: false,
+    finish: null,
+  };
+  syncUserTeamRatings(career);
+  return career;
+}
+
+function emptyStandings(division: Career['division']): Record<string, StandingRow> {
+  const rows: Record<string, StandingRow> = {};
+  for (const t of teamsInDivision(division)) {
+    rows[t.id] = { teamId: t.id, wins: 0, losses: 0, ties: 0, goalsFor: 0, goalsAgainst: 0 };
+  }
+  return rows;
+}
+
+/* ------------------------------------------------------------- team views */
+
+/** The team as it exists in this career: base data plus any accumulated drift. */
+export function effectiveTeam(career: Career, teamId: string): TeamData {
+  const base = getTeam(teamId);
+  const over = career.ratingOverrides[teamId];
+  return over ? { ...base, ...over } : base;
+}
+
+const RATING_KEYS: (keyof TeamRatings)[] = [
+  'overall', 'offense', 'defense', 'goalie', 'attack', 'midfield', 'faceoff', 'speed', 'chemistry',
+];
+
+/** Derive team ratings from the actual roster so development shows up everywhere. */
+export function ratingsFromRoster(roster: PlayerData[], chemistry: number): TeamRatings {
+  const best = (pos: string, n: number, pick: (p: PlayerData) => number) => {
+    const group = roster.filter((p) => p.pos === pos).sort((a, b) => b.overall - a.overall).slice(0, n);
+    if (!group.length) return 60;
+    return group.reduce((s, p) => s + pick(p), 0) / group.length;
+  };
+  const attack = best('A', 3, (p) => p.overall);
+  const midfield = best('M', 3, (p) => p.overall);
+  const defense = best('D', 3, (p) => p.overall);
+  const goalie = best('G', 1, (p) => p.overall);
+  const fo = Math.max(
+    best('FO', 1, (p) => p.attrs.faceoff),
+    best('M', 1, (p) => p.attrs.faceoff),
+  );
+  const speed = roster.reduce((s, p) => s + p.attrs.speed, 0) / Math.max(1, roster.length);
+  const offense = attack * 0.55 + midfield * 0.45;
+  const def = defense * 0.6 + goalie * 0.4;
+  const overall = offense * 0.42 + def * 0.42 + fo * 0.08 + chemistry * 0.08;
+  return {
+    overall: Math.round(overall),
+    offense: Math.round(offense),
+    defense: Math.round(def),
+    goalie: Math.round(goalie),
+    attack: Math.round(attack),
+    midfield: Math.round(midfield),
+    faceoff: Math.round(fo),
+    speed: Math.round(speed),
+    chemistry: Math.round(chemistry),
+  };
+}
+
+export function syncUserTeamRatings(career: Career): void {
+  const base = getTeam(career.teamId);
+  const prev = career.ratingOverrides[career.teamId];
+  const chem = prev?.chemistry ?? base.chemistry;
+  const derived = ratingsFromRoster(career.roster, chem);
+  career.ratingOverrides[career.teamId] = derived;
+}
+
+export function userTeam(career: Career): TeamData {
+  return effectiveTeam(career, career.teamId);
+}
+
+/* ----------------------------------------------------------- schedule flow */
+
+export function nextUserGame(career: Career): ScheduledGame | null {
+  return career.schedule.find((g) => g.featured && !g.played) ?? null;
+}
+
+export function currentWeek(career: Career): number {
+  const g = nextUserGame(career);
+  if (g) return g.week;
+  const last = career.schedule[career.schedule.length - 1];
+  return last ? last.week : 1;
+}
+
+export function opponentOf(career: Career, game: ScheduledGame): string {
+  return game.homeId === career.teamId ? game.awayId : game.homeId;
+}
+
+export function userIsHome(career: Career, game: ScheduledGame): boolean {
+  return game.homeId === career.teamId;
+}
+
+function applyResult(career: Career, g: ScheduledGame, homeScore: number, awayScore: number): void {
+  g.played = true;
+  g.homeScore = homeScore;
+  g.awayScore = awayScore;
+  if (g.playoff) return; // playoff games do not count in the standings table
+  const h = career.standings[g.homeId];
+  const a = career.standings[g.awayId];
+  if (!h || !a) return;
+  h.goalsFor += homeScore; h.goalsAgainst += awayScore;
+  a.goalsFor += awayScore; a.goalsAgainst += homeScore;
+  if (homeScore > awayScore) { h.wins++; a.losses++; }
+  else if (awayScore > homeScore) { a.wins++; h.losses++; }
+  else { h.ties++; a.ties++; }
+}
+
+/** Play out every non-featured game up to and including `week`. */
+export function simulateThroughWeek(career: Career, week: number): void {
+  for (const g of career.schedule) {
+    if (g.played || g.week > week || g.featured) continue;
+    const home = effectiveTeam(career, g.homeId);
+    const away = effectiveTeam(career, g.awayId);
+    const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}`);
+    applyResult(career, g, r.homeScore, r.awayScore);
+  }
+}
+
+/** Record the player's own game result and roll the league forward. */
+export function recordUserResult(career: Career, g: ScheduledGame, homeScore: number, awayScore: number): void {
+  applyResult(career, g, homeScore, awayScore);
+  const won = userIsHome(career, g) ? homeScore > awayScore : awayScore > homeScore;
+  if (won) { career.careerWins++; } else { career.careerLosses++; }
+
+  const diff = DIFFICULTIES[career.difficulty];
+  let cp = 2 + (won ? 2 : 0) + (g.rivalry && won ? 1 : 0) + (g.playoff ? 2 : 0);
+  cp = Math.max(1, Math.round(cp * diff.rewardMultiplier));
+  career.coachingPoints += cp;
+  career.prestige = clamp(career.prestige + (won ? 0.8 : -0.6) + (g.playoff && won ? 1.5 : 0), 5, 100);
+
+  simulateThroughWeek(career, g.week);
+  career.focus = null;
+  advancePhase(career);
+}
+
+/** Simulate the player's own game instead of playing it. */
+export function simulateUserGame(career: Career, g: ScheduledGame): void {
+  const home = effectiveTeam(career, g.homeId);
+  const away = effectiveTeam(career, g.awayId);
+  const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}:sim`);
+  recordUserResult(career, g, r.homeScore, r.awayScore);
+}
+
+/* ----------------------------------------------------------------- playoffs */
+
+export function standingsSorted(career: Career): StandingRow[] {
+  return Object.values(career.standings).slice().sort((a, b) => {
+    const pa = winPct(a);
+    const pb = winPct(b);
+    if (pb !== pa) return pb - pa;
+    const da = a.goalsFor - a.goalsAgainst;
+    const db = b.goalsFor - b.goalsAgainst;
+    if (db !== da) return db - da;
+    return b.goalsFor - a.goalsFor;
+  });
+}
+
+export const winPct = (r: StandingRow): number => {
+  const g = r.wins + r.losses + r.ties;
+  return g === 0 ? 0 : (r.wins + r.ties * 0.5) / g;
+};
+
+const ROUND_NAME: Record<PlayoffRound, string> = {
+  QF: 'Quarterfinal',
+  SF: 'Semifinal',
+  F: 'District Championship',
+};
+export const roundName = (r: PlayoffRound): string => ROUND_NAME[r];
+
+/** Called whenever the league might need to move to its next stage. */
+export function advancePhase(career: Career): void {
+  if (career.seasonComplete) return;
+  const regWeeks = regularSeasonWeeks(career.schedule);
+  const anyRegularLeft = career.schedule.some((g) => !g.played && !g.playoff);
+  if (anyRegularLeft) return;
+
+  if (!career.playoffSeeds) {
+    career.playoffSeeds = standingsSorted(career).slice(0, 8).map((r) => r.teamId);
+    createRound(career, 'QF', career.playoffSeeds, regWeeks + 1);
+    resolveNonFeatured(career);
+    return;
+  }
+
+  const pending = career.schedule.filter((g) => g.playoff && !g.played);
+  if (pending.length > 0) return;
+
+  const lastRound = lastPlayoffRound(career);
+  if (lastRound === 'QF') {
+    const winners = roundWinners(career, 'QF');
+    createRound(career, 'SF', winners, regWeeks + 2);
+    resolveNonFeatured(career);
+  } else if (lastRound === 'SF') {
+    const winners = roundWinners(career, 'SF');
+    createRound(career, 'F', winners, regWeeks + 3);
+    resolveNonFeatured(career);
+  } else if (lastRound === 'F') {
+    finishSeason(career);
+  }
+}
+
+function lastPlayoffRound(career: Career): PlayoffRound | null {
+  let last: PlayoffRound | null = null;
+  for (const g of career.schedule) if (g.playoff) last = g.playoff;
+  return last;
+}
+
+function roundWinners(career: Career, round: PlayoffRound): string[] {
+  const seeds = career.playoffSeeds ?? [];
+  const games = career.schedule.filter((g) => g.playoff === round);
+  const winners = games.map((g) => (g.homeScore > g.awayScore ? g.homeId : g.awayId));
+  // Keep bracket order by original seed.
+  return winners.sort((a, b) => seeds.indexOf(a) - seeds.indexOf(b));
+}
+
+function createRound(career: Career, round: PlayoffRound, teams: string[], week: number): void {
+  const pairs: [string, string][] = [];
+  const list = [...teams];
+  while (list.length >= 2) {
+    const top = list.shift()!;
+    const bottom = list.pop()!;
+    pairs.push([top, bottom]);
+  }
+  for (const [homeId, awayId] of pairs) {
+    career.schedule.push({
+      id: `${round}-${homeId}-${awayId}`,
+      week,
+      homeId,
+      awayId,
+      played: false,
+      homeScore: 0,
+      awayScore: 0,
+      rivalry: areRivals(homeId, awayId),
+      playoff: round,
+      featured: homeId === career.teamId || awayId === career.teamId,
+    });
+  }
+  if (!pairs.some(([h, a]) => h === career.teamId || a === career.teamId)) {
+    career.eliminated = true;
+  }
+}
+
+/** Sim every playoff game the player is not in; if they are out, sim the lot. */
+function resolveNonFeatured(career: Career): void {
+  let guard = 0;
+  while (guard++ < 8) {
+    const pending = career.schedule.filter((g) => g.playoff && !g.played);
+    if (!pending.length) break;
+    let simmedAny = false;
+    for (const g of pending) {
+      if (g.featured && !career.eliminated) continue;
+      const home = effectiveTeam(career, g.homeId);
+      const away = effectiveTeam(career, g.awayId);
+      const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}`);
+      applyResult(career, g, r.homeScore, r.awayScore);
+      simmedAny = true;
+    }
+    const stillPending = career.schedule.some((g) => g.playoff && !g.played);
+    if (stillPending) break;
+    if (!simmedAny) break;
+    advancePhase(career);
+    break;
+  }
+}
+
+function finishSeason(career: Career): void {
+  const final = career.schedule.filter((g) => g.playoff === 'F').pop();
+  let champion: string | null = null;
+  if (final && final.played) {
+    champion = final.homeScore > final.awayScore ? final.homeId : final.awayId;
+  }
+  const won = champion === career.teamId;
+  const row = career.standings[career.teamId];
+  let finish: string;
+  if (won) finish = 'DISTRICT CHAMPIONS';
+  else if (career.schedule.some((g) => g.playoff === 'F' && g.featured)) finish = 'Lost the championship game';
+  else if (career.schedule.some((g) => g.playoff === 'SF' && g.featured)) finish = 'Lost in the semifinals';
+  else if (career.schedule.some((g) => g.playoff === 'QF' && g.featured)) finish = 'Lost in the quarterfinals';
+  else finish = 'Missed the playoffs';
+
+  career.finish = finish;
+  career.seasonComplete = true;
+  if (won) {
+    career.championships++;
+    career.prestige = clamp(career.prestige + 8, 5, 100);
+  }
+  career.history.push({
+    year: career.year,
+    wins: row?.wins ?? 0,
+    losses: row?.losses ?? 0,
+    finish,
+    champion: won,
+  });
+}
+
+export function champion(career: Career): string | null {
+  const final = career.schedule.filter((g) => g.playoff === 'F').pop();
+  if (!final || !final.played) return null;
+  return final.homeScore > final.awayScore ? final.homeId : final.awayId;
+}
+
+/* -------------------------------------------------------------- progression */
+
+/** Merge one game's box score into season and career totals, and bank XP. */
+export function applyGameStats(
+  career: Career, stats: Map<string, PlayerStats>, won: boolean,
+): void {
+  for (const p of career.roster) {
+    const s = stats.get(p.id);
+    if (!s) continue;
+    p.season = addStatsInto(p.season, s);
+    p.career = addStatsInto(p.career, s);
+    if (s.gamesPlayed === 0) { p.season.gamesPlayed++; p.career.gamesPlayed++; }
+    const perf = s.goals * 3 + s.assists * 2.2 + s.groundBalls * 0.9
+      + s.causedTurnovers * 2 + s.saves * 0.7 - s.turnovers * 0.6;
+    p.xp += clamp(4 + perf, 1, 30) * (won ? 1.15 : 1);
+  }
+  syncUserTeamRatings(career);
+}
+
+function addStatsInto(target: PlayerStats, src: PlayerStats): PlayerStats {
+  const out = { ...target };
+  for (const k of Object.keys(src) as (keyof PlayerStats)[]) out[k] += src[k];
+  return out;
+}
+
+export const TRAIN_COST = 5;
+
+/** Spend coaching points to train one attribute. Returns false if it cannot be done. */
+export function trainPlayer(career: Career, playerId: string, attr: keyof PlayerAttrs): boolean {
+  if (career.coachingPoints < TRAIN_COST) return false;
+  const p = career.roster.find((x) => x.id === playerId);
+  if (!p) return false;
+  if (p.attrs[attr] >= 99) return false;
+  if (p.overall >= p.potential + 4) return false;
+  career.coachingPoints -= TRAIN_COST;
+  p.attrs[attr] = clamp(p.attrs[attr] + 2, 1, 99);
+  refreshOverall(p);
+  syncUserTeamRatings(career);
+  return true;
+}
+
+/** A copy of the roster with this week's focus applied, for use in the next match. */
+export function rosterForMatch(career: Career): PlayerData[] {
+  if (!career.focus) return career.roster;
+  const keys = FOCUS_ATTRS[career.focus];
+  return career.roster.map((p) => {
+    const attrs = { ...p.attrs };
+    for (const k of keys) attrs[k] = clamp(attrs[k] + 3, 1, 99);
+    const copy: PlayerData = { ...p, attrs };
+    refreshOverall(copy);
+    return copy;
+  });
+}
+
+/* ---------------------------------------------------------------- offseason */
+
+export interface OffseasonReport {
+  graduated: { name: string; pos: string; overall: number }[];
+  improved: { name: string; pos: string; from: number; to: number }[];
+  arrived: { name: string; pos: string; overall: number; grade: Grade }[];
+}
+
+export function runOffseason(career: Career): OffseasonReport {
+  const rng = new Rng(`${career.seed}:off:${career.year}`);
+  const team = getTeam(career.teamId);
+  const report: OffseasonReport = { graduated: [], improved: [], arrived: [] };
+
+  // 1. Seniors leave.
+  const staying: PlayerData[] = [];
+  for (const p of career.roster) {
+    if (p.grade >= 12) {
+      report.graduated.push({ name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall });
+      career.alumni.push({
+        name: `${p.first} ${p.last}`,
+        pos: p.pos,
+        overall: p.overall,
+        gradYear: career.year,
+        goals: p.career.goals,
+        assists: p.career.assists,
+        saves: p.career.saves,
+      });
+    } else {
+      staying.push(p);
+    }
+  }
+
+  // 2. Everyone else grows a year older and better.
+  const focusHistory = career.focus ? FOCUS_ATTRS[career.focus] : [];
+  for (const p of staying) {
+    const before = p.overall;
+    p.grade = (p.grade + 1) as Grade;
+    const room = Math.max(0, p.potential - p.overall);
+    const growth = clamp(p.xp / 55 + room * 0.22 + rng.range(-0.4, 1.2), 0, 7);
+    const keys = (Object.keys(p.attrs) as (keyof PlayerAttrs)[])
+      .filter((k) => p.attrs[k] < 99);
+    const picks = rng.shuffle([...focusHistory.filter((k) => keys.includes(k)), ...keys]).slice(0, 4);
+    let left = growth * 2.4;
+    for (const k of picks) {
+      if (left <= 0) break;
+      const add = Math.min(left, rng.range(0.5, 2.6));
+      p.attrs[k] = clamp(Math.round(p.attrs[k] + add), 1, 99);
+      left -= add;
+    }
+    p.xp = 0;
+    p.season = emptyStats();
+    refreshOverall(p);
+    if (p.overall > before) {
+      report.improved.push({ name: `${p.first} ${p.last}`, pos: p.pos, from: before, to: p.overall });
+    }
+  }
+
+  // 3. Recruit to refill the roster. Prestige raises the ceiling of who shows up.
+  const used = new Set(staying.map((p) => p.number));
+  const prestigeBoost = (career.prestige - 60) * 0.22;
+  for (const { pos, count } of ROSTER_SHAPE) {
+    const have = staying.filter((p) => p.pos === pos).length;
+    for (let i = have; i < count; i++) {
+      const shell: TeamData = {
+        ...team,
+        attack: clamp(team.attack + prestigeBoost, 35, 99),
+        midfield: clamp(team.midfield + prestigeBoost, 35, 99),
+        defense: clamp(team.defense + prestigeBoost, 35, 99),
+        goalie: clamp(team.goalie + prestigeBoost, 35, 99),
+        faceoff: clamp(team.faceoff + prestigeBoost, 35, 99),
+      };
+      const grade: Grade = rng.bool(0.7) ? 9 : 10;
+      const p = generatePlayer(rng, shell, pos, { depth: i, grade }, used);
+      staying.push(p);
+      report.arrived.push({ name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall, grade });
+    }
+  }
+
+  career.roster = sortDepthChart(staying);
+
+  // 4. The rest of the league drifts, regressing gently toward its baseline.
+  for (const t of TEAMS) {
+    if (t.id === career.teamId) continue;
+    const cur = career.ratingOverrides[t.id] ?? {};
+    const next: Partial<TeamRatings> = {};
+    for (const k of RATING_KEYS) {
+      const base = t[k];
+      const now = cur[k] ?? base;
+      const drift = rng.gauss(0, 2.4) + (base - now) * 0.35;
+      next[k] = Math.round(clamp(now + drift, base - 9, base + 9));
+    }
+    career.ratingOverrides[t.id] = next;
+  }
+
+  // 5. New season.
+  career.year++;
+  career.schedule = buildSchedule(career.division, career.teamId, career.seed + career.year * 7919);
+  career.standings = emptyStandings(career.division);
+  career.playoffSeeds = null;
+  career.eliminated = false;
+  career.seasonComplete = false;
+  career.finish = null;
+  career.coachingPoints += 5;
+  career.focus = null;
+  syncUserTeamRatings(career);
+  return report;
+}
+
+/* ------------------------------------------------------------------ misc */
+
+export function seasonRecordText(career: Career): string {
+  const r = career.standings[career.teamId];
+  if (!r) return '0-0';
+  return `${r.wins}-${r.losses}`;
+}
+
+export function teamRecordText(career: Career, teamId: string): string {
+  const r = career.standings[teamId];
+  if (!r) return '0-0';
+  return `${r.wins}-${r.losses}`;
+}

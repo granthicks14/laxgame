@@ -1,0 +1,18 @@
+{
+  "name": "lone-star-lax",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Lone Star Lax - a retro arcade lacrosse game set in the THSLL North District.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "balance": "esbuild src/dev/balance.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-balance.mjs --log-level=error && node node_modules/.cache/lsl-balance.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}

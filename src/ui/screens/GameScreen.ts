@@ -1,0 +1,570 @@
+import { audio } from '../../audio/Audio';
+import { Match } from '../../match/Match';
+import type { MatchConfig } from '../../match/types';
+import { Renderer, type AimHint } from '../../render/Renderer';
+import { InputManager } from '../../input/Input';
+import { h, clear } from '../dom';
+import type { App, Screen } from '../App';
+import { GAME_LENGTHS, type Side } from '../../data/constants';
+import { areRivals } from '../../data/teams';
+import { Tutorial } from './tutorial';
+import { pauseIcon } from '../icons';
+
+export interface GameScreenOptions {
+  config: MatchConfig;
+  /** Optional guided walkthrough overlaid on a real match. */
+  tutorial?: boolean;
+  /** Called once when the game reaches its final whistle. */
+  onComplete: (match: Match) => void;
+  /** Called if the player quits early. */
+  onQuit: () => void;
+  subtitle?: string;
+}
+
+const FIXED_DT = 1 / 60;
+
+export class GameScreen implements Screen {
+  el: HTMLElement;
+  private app: App;
+  private opts: GameScreenOptions;
+  private match: Match;
+  private renderer: Renderer;
+  private input = new InputManager();
+  private raf = 0;
+  private last = 0;
+  private acc = 0;
+  private running = true;
+  private paused = false;
+  private finished = false;
+  private unsubscribes: (() => void)[] = [];
+
+  // HUD refs
+  private canvas!: HTMLCanvasElement;
+  private elHomeScore!: HTMLElement;
+  private elAwayScore!: HTMLElement;
+  private elClock!: HTMLElement;
+  private elQuarter!: HTMLElement;
+  private elShotClock!: HTMLElement;
+  private elBanner!: HTMLElement;
+  private elTicker!: HTMLElement;
+  private elFaceoff!: HTMLElement;
+  private elFoZone!: HTMLElement;
+  private elFoMarker!: HTMLElement;
+  private elFoLabel!: HTMLElement;
+  private elTouch!: HTMLElement;
+  private elStick!: HTMLElement;
+  private elStickNub!: HTMLElement;
+  private elActionBtn!: HTMLElement;
+  private overlay: HTMLElement | null = null;
+
+  private stickId: number | null = null;
+  private stickOrigin = { x: 0, y: 0 };
+  private tickerTimer = 0;
+  private lastScore = { home: -1, away: -1 };
+  private lastClockText = '';
+  private touchMode: boolean;
+  private tutorial: Tutorial | null = null;
+  private elCoach: HTMLElement | null = null;
+
+  constructor(app: App, opts: GameScreenOptions) {
+    this.app = app;
+    this.opts = opts;
+    this.match = new Match(opts.config);
+    this.touchMode = app.settings.controls === 'touch'
+      || (app.settings.controls === 'auto' && isTouchDevice());
+
+    this.el = this.build();
+    this.renderer = new Renderer(this.canvas);
+    this.renderer.resize();
+    this.renderer.prepare(this.match);
+
+    if (opts.tutorial) {
+      this.tutorial = new Tutorial(this.match, this.touchMode);
+      this.elCoach = h('div', { class: 'ticker', style: 'bottom:auto;top:calc(var(--safe-t) + 68px);border-color:var(--accent);color:var(--text)' });
+      this.el.appendChild(this.elCoach);
+    }
+
+    this.input.attach();
+    this.input.onPause = () => this.togglePause();
+    this.wireEvents();
+    this.wireTouch();
+
+    audio.unlock();
+    audio.stopMusic();
+    audio.setCrowd(0.35 + (opts.config.home.team.homeField.crowd * 0.5));
+
+    // Debug hook: lets the live match be inspected from the console (and by the
+    // automated play tests). Read-only convenience, no gameplay depends on it.
+    (window as unknown as { loneStarLax?: unknown }).loneStarLax = {
+      match: this.match, renderer: this.renderer, input: this.input,
+    };
+
+    this.last = performance.now();
+    this.raf = requestAnimationFrame(this.frame);
+    this.showIntro();
+  }
+
+  /* ------------------------------------------------------------------ DOM */
+
+  private build(): HTMLElement {
+    const cfg = this.opts.config;
+    const home = cfg.home.team;
+    const away = cfg.away.team;
+    const practice = cfg.practice;
+
+    this.canvas = h('canvas', { class: 'game__canvas' });
+
+    this.elHomeScore = h('div', { class: 'score__num num', text: '0' });
+    this.elAwayScore = h('div', { class: 'score__num num', text: '0' });
+    this.elClock = h('div', { class: 'score__clock num', text: this.match.clockText() });
+    this.elQuarter = h('div', { class: 'score__q', text: practice ? 'DRILL' : 'Q1' });
+    this.elShotClock = h('div', { class: 'shotclock num', text: '50' });
+    this.elBanner = h('div', { class: 'banner' });
+    this.elTicker = h('div', { class: 'ticker', style: 'display:none' });
+
+    this.elFoZone = h('div', { class: 'fo__zone' });
+    this.elFoMarker = h('div', { class: 'fo__marker' });
+    this.elFoLabel = h('div', { class: 'fo__label', text: 'SET' });
+    this.elFaceoff = h('div', { class: 'fo', style: 'display:none' },
+      this.elFoLabel,
+      h('div', { class: 'fo__bar' }, this.elFoZone, this.elFoMarker),
+      h('div', {
+        class: 'fo__hint',
+        text: this.touchMode ? 'TAP CLAMP INSIDE THE GREEN' : 'PRESS SPACE INSIDE THE GREEN',
+      }),
+    );
+
+    const scoreboard = h('div', { class: 'hud' },
+      h('div', { class: 'score' },
+        h('div', { class: 'score__side' },
+          h('div', { class: 'score__chip', style: `background:${home.primary}` }),
+          h('div', { class: 'score__abbr', text: home.abbr }),
+          this.elHomeScore),
+        h('div', { class: 'score__mid' }, this.elClock, this.elQuarter),
+        h('div', { class: 'score__side score__side--away' },
+          h('div', { class: 'score__chip', style: `background:${away.primary}` }),
+          h('div', { class: 'score__abbr', text: away.abbr }),
+          this.elAwayScore),
+      ),
+    );
+
+    this.elStickNub = h('div', { class: 'stick__nub' });
+    this.elStick = h('div', { class: 'stick' }, this.elStickNub);
+    this.elActionBtn = this.touchButton('action', 'Pass');
+    this.elTouch = h('div', { class: `touch${this.touchMode ? '' : ' is-off'}` },
+      this.elStick,
+      h('div', { class: 'tbtns' },
+        this.touchButton('switch', 'Switch'),
+        this.touchButton('shoot', 'Shoot'),
+        this.elActionBtn,
+        this.touchButton('dodge', 'Dodge'),
+      ),
+    );
+
+    const hints = this.app.settings.showHints && !this.touchMode
+      ? h('div', { class: 'hint-strip' },
+        key('WASD', 'Move'), key('SHIFT', 'Sprint'), key('SPACE', 'Pass / Check'),
+        key('F', 'Shoot (hold)'), key('E', 'Dodge'), key('TAB', 'Switch'))
+      : null;
+
+    return h('div', { class: 'game' },
+      this.canvas,
+      scoreboard,
+      practice ? null : this.elShotClock,
+      this.elBanner,
+      this.elTicker,
+      this.elFaceoff,
+      this.elTouch,
+      hints,
+      h('button', {
+        class: 'pause-btn', ariaLabel: 'Pause',
+        on: { click: () => this.togglePause() },
+      }, pauseIcon(14)),
+    );
+  }
+
+  private touchButton(id: 'action' | 'shoot' | 'dodge' | 'switch', label: string): HTMLElement {
+    const btn = h('button', {
+      class: `tbtn tbtn--${id}`,
+      text: label,
+      ariaLabel: label,
+    });
+    const down = (e: PointerEvent) => {
+      e.preventDefault();
+      btn.classList.add('is-down');
+      btn.setPointerCapture(e.pointerId);
+      this.input.setTouchButton(id, true);
+    };
+    const up = (e: PointerEvent) => {
+      e.preventDefault();
+      btn.classList.remove('is-down');
+      this.input.setTouchButton(id, false);
+    };
+    btn.addEventListener('pointerdown', down);
+    btn.addEventListener('pointerup', up);
+    btn.addEventListener('pointercancel', up);
+    btn.addEventListener('contextmenu', (e) => e.preventDefault());
+    return btn;
+  }
+
+  /* --------------------------------------------------------------- events */
+
+  private wireEvents(): void {
+    const m = this.match;
+    const fx = () => this.renderer.effects;
+    const teamColors = (side: Side) => {
+      const t = this.opts.config[side].team;
+      return [t.primary, t.secondary, '#ffffff'];
+    };
+
+    this.unsubscribes.push(
+      m.events.on('goal', ({ side, distance }) => {
+        audio.play('goal');
+        const goalPos = m.focus ?? { x: m.ball.x, y: m.ball.y };
+        fx().confetti(goalPos.x, goalPos.y, 46, teamColors(side));
+        fx().burst(goalPos.x, goalPos.y, 26, teamColors(side), 9);
+        fx().screenFlash('#ffffff', 0.45);
+        this.renderer.cam.addShake(9);
+        this.bumpScore(side);
+        void distance;
+      }),
+      m.events.on('save', ({ goalie, power }) => {
+        audio.play('save', power);
+        fx().burst(goalie.x, goalie.y, 10, ['#ffffff', '#cfe0d2'], 6);
+        this.renderer.cam.addShake(2.5);
+      }),
+      m.events.on('post', ({ x, y }) => {
+        audio.play('post');
+        fx().burst(x, y, 8, ['#f26a21', '#ffffff'], 7);
+      }),
+      m.events.on('shot', ({ power }) => audio.play('shot', power)),
+      m.events.on('pass', () => audio.play('pass')),
+      m.events.on('catch', () => audio.play('catch')),
+      m.events.on('check', ({ hit, x, y }) => {
+        if (hit) {
+          audio.play('check');
+          fx().burst(x, y, 14, ['#ffffff', '#ffe14d'], 7);
+        }
+      }),
+      m.events.on('whistle', () => audio.play('whistle')),
+      m.events.on('shake', ({ amount }) => this.renderer.cam.addShake(amount)),
+      m.events.on('commentary', ({ text, tone }) => this.showBanner(text, tone)),
+      m.events.on('quarterEnd', () => audio.play('buzzer')),
+      m.events.on('turnover', () => { /* handled by commentary */ }),
+      m.events.on('gameEnd', () => this.finish()),
+    );
+  }
+
+  private bumpScore(side: Side): void {
+    const el = side === 'home' ? this.elHomeScore : this.elAwayScore;
+    el.classList.remove('is-bump');
+    void el.offsetWidth;
+    el.classList.add('is-bump');
+  }
+
+  /* ---------------------------------------------------------------- touch */
+
+  private wireTouch(): void {
+    const onDown = (e: PointerEvent) => {
+      if (!this.touchMode || this.paused) return;
+      const t = e.target as HTMLElement;
+      if (t.closest('.tbtn, .pause-btn, .overlay')) return;
+      if (this.stickId !== null) return;
+      this.stickId = e.pointerId;
+      this.stickOrigin = { x: e.clientX, y: e.clientY };
+      const rect = this.el.getBoundingClientRect();
+      this.elStick.style.left = `${e.clientX - rect.left}px`;
+      this.elStick.style.top = `${e.clientY - rect.top}px`;
+      this.elStick.classList.add('is-on');
+      this.moveStick(e.clientX, e.clientY);
+      this.el.setPointerCapture(e.pointerId);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerId !== this.stickId) return;
+      this.moveStick(e.clientX, e.clientY);
+    };
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerId !== this.stickId) return;
+      this.stickId = null;
+      this.elStick.classList.remove('is-on');
+      this.elStickNub.style.transform = '';
+      this.input.setTouchMove(0, 0, false);
+    };
+    this.el.addEventListener('pointerdown', onDown);
+    this.el.addEventListener('pointermove', onMove);
+    this.el.addEventListener('pointerup', onUp);
+    this.el.addEventListener('pointercancel', onUp);
+    this.el.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  private moveStick(cx: number, cy: number): void {
+    const max = 52;
+    let dx = cx - this.stickOrigin.x;
+    let dy = cy - this.stickOrigin.y;
+    const m = Math.hypot(dx, dy);
+    if (m > max) { dx = (dx / m) * max; dy = (dy / m) * max; }
+    this.elStickNub.style.transform = `translate(${dx}px, ${dy}px)`;
+    this.input.setTouchMove(dx / max, dy / max, true);
+  }
+
+  /* ----------------------------------------------------------------- loop */
+
+  private frame = (now: number): void => {
+    if (!this.running) return;
+    this.raf = requestAnimationFrame(this.frame);
+
+    let delta = (now - this.last) / 1000;
+    this.last = now;
+    if (!Number.isFinite(delta) || delta < 0) delta = 0;
+    delta = Math.min(delta, 0.25);
+
+    if (!this.paused && !this.finished) {
+      this.acc += delta;
+      let steps = 0;
+      while (this.acc >= FIXED_DT && steps < 5) {
+        this.step(FIXED_DT);
+        this.acc -= FIXED_DT;
+        steps++;
+      }
+      if (steps === 5) this.acc = 0;
+    }
+
+    this.draw(delta);
+    this.updateHud(delta);
+  };
+
+  private step(dt: number): void {
+    const raw = this.input.consume();
+    const world = this.renderer.cam.inputToWorld(raw.moveX, raw.moveY);
+    const state = { ...raw, moveX: world.x, moveY: world.y };
+    this.match.update(dt, state);
+    if (this.tutorial) {
+      this.tutorial.update(dt, state, this.match);
+      if (this.elCoach) {
+        const text = this.tutorial.prompt;
+        const full = text ? `${this.tutorial.progress}  ·  ${text}` : '';
+        if (this.elCoach.textContent !== full) this.elCoach.textContent = full;
+      }
+    }
+  }
+
+  private draw(dt: number): void {
+    const m = this.match;
+    const carrier = m.ball.carrier;
+    const human = m.humanSide;
+    let aim: AimHint | null = null;
+    if (carrier && human && carrier.side === human) {
+      const raw = this.input.peekMove();
+      if (Math.hypot(raw.x, raw.y) > 0.12) { this.lastAimX = raw.x; this.lastAimY = raw.y; }
+      const dir = this.renderer.cam.inputToWorld(this.lastAimX, this.lastAimY);
+      aim = { x: dir.x, y: dir.y, charging: carrier.windup > 0.02, charge: carrier.windup };
+    }
+    this.renderer.render(m, dt, aim);
+  }
+
+  private lastAimX = 0;
+  private lastAimY = 0;
+
+  private updateHud(dt: number): void {
+    const m = this.match;
+
+    if (m.score.home !== this.lastScore.home) {
+      this.lastScore.home = m.score.home;
+      this.elHomeScore.textContent = String(m.score.home);
+    }
+    if (m.score.away !== this.lastScore.away) {
+      this.lastScore.away = m.score.away;
+      this.elAwayScore.textContent = String(m.score.away);
+    }
+
+    const practice = this.opts.config.practice;
+    if (practice) {
+      const total = practice.reps ?? m.practice.reps;
+      this.elClock.textContent = practice.seconds ? m.clockText() : `${m.practice.success}/${total}`;
+      this.elQuarter.textContent = practice.seconds ? 'DRILL' : 'REPS';
+    } else {
+      const ct = m.clockText();
+      if (ct !== this.lastClockText) {
+        this.lastClockText = ct;
+        this.elClock.textContent = ct;
+      }
+      this.elQuarter.textContent = m.quarterText();
+      const sc = Math.max(0, Math.ceil(m.shotClock));
+      this.elShotClock.textContent = String(sc);
+      this.elShotClock.classList.toggle('is-low', sc <= 10 && m.phase === 'live');
+      this.elShotClock.style.display = m.phase === 'live' && m.ball.carrier ? '' : 'none';
+    }
+
+    // Contextual action button label.
+    if (this.touchMode) {
+      const human = m.humanSide;
+      const ctrl = human ? m.controlled[human] : null;
+      const hasBall = !!ctrl && m.ball.carrier === ctrl;
+      const label = m.phase === 'faceoff' ? 'Clamp' : hasBall ? 'Pass' : 'Check';
+      if (this.elActionBtn.textContent !== label) this.elActionBtn.textContent = label;
+    }
+
+    // Faceoff meter
+    const fo = m.faceoff;
+    if (fo && m.phase === 'faceoff' && !fo.auto) {
+      this.elFaceoff.style.display = '';
+      this.elFoLabel.textContent = fo.message;
+      const showBar = fo.stage === 'sweep' || fo.stage === 'result';
+      this.elFoZone.style.left = `${fo.zoneStart * 100}%`;
+      this.elFoZone.style.width = `${(fo.zoneEnd - fo.zoneStart) * 100}%`;
+      this.elFoZone.style.opacity = showBar ? '1' : '0.25';
+      this.elFoMarker.style.left = `${Math.min(100, fo.marker * 100)}%`;
+      this.elFoMarker.style.opacity = showBar ? '1' : '0';
+    } else if (this.elFaceoff.style.display !== 'none') {
+      this.elFaceoff.style.display = 'none';
+    }
+
+    // Banner from the sim (offsides, out of bounds, quarter breaks)
+    if (m.banner && this.elBanner.dataset.text !== m.banner.text) {
+      this.showBanner(m.banner.text, m.banner.tone);
+    }
+
+    if (this.tickerTimer > 0) {
+      this.tickerTimer -= dt;
+      if (this.tickerTimer <= 0) this.elTicker.style.display = 'none';
+    }
+  }
+
+  /** Big moments get the centre banner; everything else goes to the ticker so
+   *  the field is never buried under text. */
+  private showBanner(text: string, tone: 'big' | 'normal'): void {
+    if (tone === 'big') {
+      this.elBanner.dataset.text = text;
+      clear(this.elBanner);
+      this.elBanner.appendChild(h('div', { class: 'banner__text banner__text--big', text }));
+      window.setTimeout(() => {
+        if (this.elBanner.dataset.text === text) clear(this.elBanner);
+      }, 1200);
+    }
+    this.elTicker.textContent = text;
+    this.elTicker.style.display = '';
+    this.tickerTimer = tone === 'big' ? 2.2 : 1.6;
+  }
+
+  private showIntro(): void {
+    const cfg = this.opts.config;
+    const rivalry = cfg.rivalry ?? areRivals(cfg.home.team.id, cfg.away.team.id);
+    const label = cfg.contextLabel
+      ?? (rivalry ? 'RIVALRY GAME' : cfg.practice ? cfg.practice.title : 'FACEOFF');
+    this.showBanner(label, rivalry || cfg.contextLabel ? 'big' : 'normal');
+  }
+
+  /* ---------------------------------------------------------------- pause */
+
+  private togglePause(): void {
+    if (this.finished) return;
+    this.paused = !this.paused;
+    if (this.paused) this.openPause();
+    else this.closePause();
+  }
+
+  private closePause(): void {
+    this.overlay?.remove();
+    this.overlay = null;
+    this.last = performance.now();
+    this.input.reset();
+  }
+
+  private openPause(): void {
+    const cfg = this.opts.config;
+    const lengthLabel = cfg.practice
+      ? cfg.practice.goal
+      : `${GAME_LENGTHS[lengthKeyFor(cfg.quarterSeconds)].label} game`;
+
+    this.overlay = h('div', { class: 'overlay' },
+      h('div', { class: 'overlay__card panel' },
+        h('div', { class: 'panel__head', text: 'Paused' }),
+        h('div', { class: 'panel__body stack' },
+          h('div', { class: 'small', text: `${cfg.away.team.name} at ${cfg.home.team.name} · ${lengthLabel}` }),
+          h('div', { class: 'divider' }),
+          h('div', { class: 'eyebrow', text: 'Controls' }),
+          this.touchMode
+            ? h('div', { class: 'small' },
+              h('div', { text: 'Drag anywhere on the left to move. Push to the edge to sprint.' }),
+              h('div', { text: 'PASS doubles as CHECK on defence and CLAMP at the faceoff.' }),
+              h('div', { text: 'Hold SHOOT to charge, release to fire.' }))
+            : h('div', { class: 'small' },
+              h('div', { text: 'WASD / Arrows — move · SHIFT — sprint' }),
+              h('div', { text: 'SPACE — pass, check, and clamp the faceoff' }),
+              h('div', { text: 'F — hold to charge a shot, release to fire' }),
+              h('div', { text: 'E — dodge · TAB — switch player · ESC — pause' })),
+          h('div', { class: 'divider' }),
+          h('button', {
+            class: 'btn btn--primary btn--block', text: 'Resume',
+            on: { click: () => this.togglePause() },
+          }),
+          h('button', {
+            class: 'btn btn--block', text: 'Quit game',
+            on: {
+              click: () => {
+                this.running = false;
+                this.opts.onQuit();
+              },
+            },
+          }),
+        ),
+      ),
+    );
+    this.el.appendChild(this.overlay);
+  }
+
+  /* ---------------------------------------------------------------- finish */
+
+  private finish(): void {
+    if (this.finished) return;
+    this.finished = true;
+    audio.play('buzzer');
+    audio.stopCrowd();
+    window.setTimeout(() => {
+      if (!this.running) return;
+      this.opts.onComplete(this.match);
+    }, 900);
+  }
+
+  /** The screen is measured only once it is in the document. */
+  resume(): void {
+    if (this.renderer.resize()) this.renderer.prepare(this.match);
+  }
+
+  destroy(): void {
+    this.running = false;
+    cancelAnimationFrame(this.raf);
+    for (const off of this.unsubscribes) off();
+    this.unsubscribes.length = 0;
+    this.match.events.clear();
+    this.input.detach();
+    this.renderer.destroy();
+    audio.stopCrowd();
+    if (this.app.settings.musicVolume > 0) audio.startMusic();
+    const w = window as unknown as { loneStarLax?: unknown };
+    if (w.loneStarLax && (w.loneStarLax as { match?: unknown }).match === this.match) {
+      delete w.loneStarLax;
+    }
+  }
+}
+
+function key(k: string, label: string): HTMLElement {
+  return h('div', { class: 'key' }, h('b', { text: k }), ` ${label}`);
+}
+
+function isTouchDevice(): boolean {
+  return (
+    ('ontouchstart' in window) ||
+    (navigator.maxTouchPoints ?? 0) > 0
+  );
+}
+
+function lengthKeyFor(quarterSeconds: number): keyof typeof GAME_LENGTHS {
+  let best: keyof typeof GAME_LENGTHS = 'short';
+  let bestDiff = Infinity;
+  for (const k of Object.keys(GAME_LENGTHS) as (keyof typeof GAME_LENGTHS)[]) {
+    const d = Math.abs(GAME_LENGTHS[k].quarterSeconds - quarterSeconds);
+    if (d < bestDiff) { bestDiff = d; best = k; }
+  }
+  return best;
+}

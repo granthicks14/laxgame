@@ -1,0 +1,203 @@
+import { h } from '../dom';
+import type { App, Screen } from '../App';
+import { screenEl, topbar, panel, panelFlush, ratingBar, segmented, teamBadge, emptyState } from '../components';
+import { loadCareer, saveCareer } from '../../state/saves';
+import { TRAIN_COST, trainPlayer, userTeam } from '../../league/career';
+import type { Career } from '../../league/types';
+import {
+  ATTR_LABEL, GRADE_LABEL, sortDepthChart, type PlayerAttrs, type PlayerData,
+} from '../../data/players';
+import { OFFENSE_STYLES, DEFENSE_STYLES, type DefenseStyle, type OffenseStyle } from '../../data/tactics';
+import { POSITION_LABEL } from '../../data/constants';
+
+export class TeamManageScreen implements Screen {
+  el: HTMLElement;
+
+  constructor(app: App, mode: 'season' | 'dynasty') {
+    const career = loadCareer(mode);
+    if (!career) {
+      this.el = screenEl(topbar(app, 'Team'), h('div', { class: 'scroll' }, emptyState('No save found.')));
+      return;
+    }
+    const team = userTeam(career);
+
+    const offBlurb = h('div', { class: 'small', text: OFFENSE_STYLES[career.tactics.offense].blurb });
+    const defBlurb = h('div', { class: 'small', text: DEFENSE_STYLES[career.tactics.defense].blurb });
+
+    this.el = screenEl(
+      topbar(app, 'Team', `${career.coachingPoints} CP`),
+      h('div', { class: 'scroll' },
+        h('div', { class: 'wrapper stack' },
+          h('div', { class: 'panel' },
+            h('span', { class: 'stripe', style: `background:${team.primary}` }),
+            h('div', { class: 'panel__body row', style: 'gap:12px' },
+              teamBadge(team, 'lg'),
+              h('div', { class: 'stack', style: 'gap:6px;flex:1 1 auto;min-width:0' },
+                h('div', { class: 'display', style: 'font-size:19px', text: team.name }),
+                ratingBar('Overall', team.overall),
+                ratingBar('Offense', team.offense, '#ff9d4d'),
+                ratingBar('Defense', team.defense, '#4a9be8'),
+                ratingBar('Goalie', team.goalie, '#3fbd77')))),
+
+          panel('Offensive style',
+            segmented<OffenseStyle>(
+              (Object.keys(OFFENSE_STYLES) as OffenseStyle[]).map((k) => ({ value: k, label: OFFENSE_STYLES[k].label })),
+              career.tactics.offense,
+              (v) => {
+                career.tactics.offense = v;
+                saveCareer(career);
+                offBlurb.textContent = OFFENSE_STYLES[v].blurb;
+              }, true),
+            offBlurb),
+
+          panel('Defensive style',
+            segmented<DefenseStyle>(
+              (Object.keys(DEFENSE_STYLES) as DefenseStyle[]).map((k) => ({ value: k, label: DEFENSE_STYLES[k].label })),
+              career.tactics.defense,
+              (v) => {
+                career.tactics.defense = v;
+                saveCareer(career);
+                defBlurb.textContent = DEFENSE_STYLES[v].blurb;
+              }, true),
+            defBlurb),
+
+          panelFlush('Roster', rosterTable(app, career, mode)),
+          h('div', { class: 'tiny', text: `Training costs ${TRAIN_COST} coaching points. Earn points by playing games — more for wins, rivalry wins and playoff games.` }),
+        )),
+    );
+  }
+}
+
+function rosterTable(app: App, career: Career, mode: 'season' | 'dynasty'): HTMLElement {
+  const roster = sortDepthChart(career.roster);
+  const rows = roster.map((p) => {
+    const starter = isStarter(roster, p);
+    return h('tr', {
+      class: starter ? 'is-you' : '',
+      on: { click: () => app.push((a) => new PlayerScreen(a, mode, p.id)) },
+    },
+      h('td', { class: 'name' },
+        h('div', { style: 'display:flex;align-items:center;gap:8px' },
+          h('span', { class: 'num', style: 'color:var(--muted);width:22px', text: `#${p.number}` }),
+          h('span', { text: `${p.first} ${p.last}` }))),
+      h('td', { text: p.pos }),
+      h('td', { text: GRADE_LABEL[p.grade] }),
+      h('td', { text: String(p.overall) }),
+      h('td', { text: String(p.season.goals) }),
+      h('td', { text: String(p.season.assists) }),
+      h('td', { text: String(p.season.groundBalls) }),
+      h('td', { text: p.pos === 'G' ? String(p.season.saves) : '—' }),
+    );
+  });
+  return h('div', { class: 'table-wrap' },
+    h('table', { class: 'table table--compact' },
+      h('thead', null, h('tr', null,
+        h('th', { text: 'Player' }), h('th', { text: 'Pos' }), h('th', { text: 'Yr' }),
+        h('th', { text: 'OVR' }), h('th', { text: 'G' }), h('th', { text: 'A' }),
+        h('th', { text: 'GB' }), h('th', { text: 'SV' }))),
+      h('tbody', null, ...rows)));
+}
+
+function isStarter(roster: PlayerData[], p: PlayerData): boolean {
+  const counts: Record<string, number> = { G: 1, D: 3, M: 3, A: 3, FO: 1 };
+  const group = roster.filter((x) => x.pos === p.pos);
+  return group.indexOf(p) < (counts[p.pos] ?? 0);
+}
+
+const TRAINABLE: (keyof PlayerAttrs)[] = [
+  'speed', 'acceleration', 'stamina', 'passing', 'shooting', 'shotPower', 'shotAccuracy',
+  'dodging', 'defense', 'checking', 'faceoff', 'goalie', 'awareness',
+];
+
+export class PlayerScreen implements Screen {
+  el: HTMLElement;
+
+  constructor(app: App, mode: 'season' | 'dynasty', playerId: string) {
+    const career = loadCareer(mode);
+    const p = career?.roster.find((x) => x.id === playerId);
+    if (!career || !p) {
+      this.el = screenEl(topbar(app, 'Player'), h('div', { class: 'scroll' }, emptyState('Player not found.')));
+      return;
+    }
+
+    const cpLabel = h('span', { class: 'pill pill--green', text: `${career.coachingPoints} CP` });
+    const attrsBox = h('div', { class: 'stack', style: 'gap:6px' });
+    const maxed = () => p.overall >= p.potential + 4;
+
+    const renderAttrs = () => {
+      attrsBox.replaceChildren();
+      const relevant = TRAINABLE.filter((k) => (p.pos === 'G' ? k !== 'faceoff' : k !== 'goalie'));
+      for (const k of relevant) {
+        const canTrain = career.coachingPoints >= TRAIN_COST && p.attrs[k] < 99 && !maxed();
+        attrsBox.appendChild(h('div', { class: 'row', style: 'gap:8px' },
+          h('div', { style: 'flex:1 1 auto' }, ratingBar(ATTR_LABEL[k], p.attrs[k])),
+          h('button', {
+            class: 'btn btn--sm',
+            text: '+2',
+            disabled: !canTrain,
+            title: canTrain ? `Spend ${TRAIN_COST} CP` : 'Not enough coaching points, or this player is at his ceiling',
+            on: {
+              click: () => {
+                if (trainPlayer(career, p.id, k)) {
+                  saveCareer(career);
+                  cpLabel.textContent = `${career.coachingPoints} CP`;
+                  ovr.textContent = String(p.overall);
+                  renderAttrs();
+                  app.toast(`${p.last} +2 ${ATTR_LABEL[k]}`);
+                } else {
+                  app.toast('Cannot train that right now');
+                }
+              },
+            },
+          })));
+      }
+    };
+    const ovr = h('div', { class: 'display', style: 'font-size:30px', text: String(p.overall) });
+    renderAttrs();
+
+    const s = p.season;
+    this.el = screenEl(
+      topbar(app, `${p.first} ${p.last}`, `#${p.number}`),
+      h('div', { class: 'scroll' },
+        h('div', { class: 'wrapper stack' },
+          panel(null,
+            h('div', { class: 'row', style: 'gap:14px' },
+              h('div', { class: 'stack', style: 'gap:0;align-items:center' },
+                h('div', { class: 'eyebrow', text: 'OVR' }), ovr),
+              h('div', { class: 'stack', style: 'gap:4px;flex:1 1 auto' },
+                h('div', { class: 'row row--wrap', style: 'gap:6px' },
+                  h('span', { class: 'pill pill--accent', text: POSITION_LABEL[p.pos] }),
+                  h('span', { class: 'pill', text: gradeWord(p.grade) }),
+                  cpLabel),
+                h('div', { class: 'small', text: potentialText(p) })))),
+
+          panel('Season stats',
+            h('div', { class: 'row row--wrap', style: 'gap:14px' },
+              stat('G', s.goals), stat('A', s.assists), stat('SH', s.shots),
+              stat('GB', s.groundBalls), stat('CT', s.causedTurnovers),
+              p.pos === 'G' ? stat('SV', s.saves) : null,
+              p.pos === 'G' ? stat('GA', s.goalsAgainst) : null,
+              stat('TO', s.turnovers))),
+
+          panel('Attributes', attrsBox),
+        )),
+    );
+  }
+}
+
+function stat(label: string, value: number): HTMLElement {
+  return h('div', { class: 'stack', style: 'gap:0;align-items:center;min-width:44px' },
+    h('div', { class: 'display num', style: 'font-size:22px', text: String(value) }),
+    h('div', { class: 'eyebrow', text: label }));
+}
+
+const gradeWord = (g: number): string =>
+  ({ 9: 'Freshman', 10: 'Sophomore', 11: 'Junior', 12: 'Senior' } as Record<number, string>)[g] ?? 'Player';
+
+function potentialText(p: PlayerData): string {
+  const room = p.potential - p.overall;
+  if (room <= 1) return 'At his ceiling — what you see is what you get.';
+  if (room <= 5) return 'Some room left to grow.';
+  if (room <= 10) return 'Real upside if he gets reps.';
+  return 'Raw, but the ceiling is high.';
+}
