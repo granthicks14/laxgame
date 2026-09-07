@@ -10,7 +10,7 @@ const KEYS: [string, string][] = [
   ['W A S D / Arrows', 'Move the player you control'],
   ['SHIFT', 'Sprint (burns stamina)'],
   ['SPACE', 'Pass with the ball · Check without it · Clamp at the faceoff'],
-  ['F (hold)', 'Charge a shot, release to fire. Your movement direction picks the corner'],
+  ['F (hold)', 'Charge a shot, release to fire. Push toward the side of the cage you want'],
   ['E', 'Dodge — a short burst that beats your defender'],
   ['TAB', 'Switch to another defender'],
   ['ESC / P', 'Pause'],
@@ -19,7 +19,7 @@ const KEYS: [string, string][] = [
 const TOUCH: [string, string][] = [
   ['Left half drag', 'Move. Push to the outer edge to sprint'],
   ['PASS', 'Pass with the ball, check without it, clamp at the faceoff'],
-  ['SHOOT', 'Hold to charge, release to fire'],
+  ['SHOOT', 'Hold to charge; steer toward a post to pick your corner, then release'],
   ['DODGE', 'Burst past your man'],
   ['SWITCH', 'Take control of a different defender'],
 ];
@@ -29,7 +29,7 @@ const SHOTS: [string, string][] = [
   ['Bounce shot', 'Low-charge shots skip off the turf. Harder for a keeper to read.'],
   ['Full wind-up', 'Hold to about four fifths for the sweet spot — max power without losing the corner.'],
   ['On the run', 'Shooting at speed costs accuracy. Plant your feet if you have the room.'],
-  ['Picking a corner', 'Your movement direction at the moment of release chooses the side of the cage. Shoot away from where the keeper is standing.'],
+  ['Picking a corner', 'Steer toward the post you want as you release. A dotted line and a marker on the goal line show exactly where the shot is aimed — put it away from the keeper.'],
 ];
 
 const RULES: [string, string][] = [
@@ -38,6 +38,7 @@ const RULES: [string, string][] = [
   ['The crease', 'Nobody but the keeper stands in the circle. Shots have to come from outside it.'],
   ['Shot clock', 'Fifty seconds to get a shot off. Let it run out and you lose the ball.'],
   ['Backing up shots', 'A missed shot that goes over the end line belongs to whoever is closest to it.'],
+  ['Switching', 'SWITCH hands you whoever can reach the ball first, not the next man in a list. It will never take the ball off your own carrier.'],
 ];
 
 export class HowToPlayScreen implements Screen {

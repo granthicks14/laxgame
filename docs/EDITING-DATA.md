@@ -14,7 +14,11 @@ generated rosters all follow automatically.
 
 ## Teams — `src/data/teams.ts`
 
-The `TEAMS` array is the single source of truth. One entry per program:
+The `TEAMS` array is the single source of truth. `validateLeague()` runs at
+startup and warns in the console about duplicate ids, rivals that point at
+nothing, and classes too thin to schedule.
+
+One entry per programme:
 
 ```ts
 {
@@ -23,7 +27,8 @@ The `TEAMS` array is the single source of truth. One entry per program:
   short: 'Highland Park',     // list/table name
   abbr: 'HP',                 // 2-4 chars, drawn on the scoreboard and badge
   mascot: 'Scots',
-  division: 'd1',             // 'd1' | 'd2' — see DIVISIONS
+  classKey: 'a',              // 'a' | 'b' | 'c-east' | 'c-west' | 'd'
+  placement: 'reported',      // 'reported' = THSLL said so; 'assumed' = our guess
   primary: '#3f6fd0',         // jersey shell
   secondary: '#f5d020',       // helmet + shoulder band
   trim: '#ffffff',
@@ -36,9 +41,14 @@ The `TEAMS` array is the single source of truth. One entry per program:
 }
 ```
 
-**Adding a team:** append an entry with a unique `id` and put it in a division.
-Schedules are generated from division membership, so a division works with any
-number of teams (odd counts get byes).
+**Adding a team:** append an entry with a unique `id` and put it in a class.
+Schedules are generated from class membership, so a class works with any number
+of teams (odd counts get byes). Small classes automatically play a double round
+robin so the season is not five games long.
+
+**`placement` matters.** Set it to `'reported'` only when you have actually seen
+the class stated on a THSLL page. It is surfaced in the Teams screen as "Class
+confirmed" or "Class unverified", so a wrong value misleads the player.
 
 **Ratings** run 50–99 and are gameplay values only. They feed two systems:
 
@@ -65,18 +75,54 @@ point when you win one.
 
 ---
 
-## Divisions and playoffs
+## Classes and playoffs
 
-`DIVISIONS` in `teams.ts` names the divisions. The bracket size lives in
-`src/league/career.ts`:
+`CLASSES` and `CLASS_ORDER` in `teams.ts` name the classes. THSLL also runs a
+Sixes competition; it is a different format and is deliberately not modelled.
+
+The playoff field scales with the class in `src/league/career.ts`:
 
 ```ts
-career.playoffSeeds = standingsSorted(career).slice(0, 8).map((r) => r.teamId);
+export function playoffFieldSize(teamCount: number): number {
+  if (teamCount >= 12) return 8;
+  if (teamCount >= 6) return 4;
+  return 2;
+}
 ```
 
-Change `8` to resize the field. `createRound` pairs top against bottom, and
-`advancePhase` walks QF → SF → F, so a 4-team bracket simply starts at the
-semifinals once you also trim the round list.
+`advancePhase` derives the round names from the field size, so an 8-team field
+plays QF → SF → F and a 4-team field plays SF → F with no other changes.
+
+## Rosters — `src/data/rosters.ts`
+
+Two kinds of roster, never mixed:
+
+- **`official`** — names, numbers, positions and grades from a published source.
+  Ratings are *always* generated: no public source publishes ratings, and
+  inventing them and calling them official would be a lie.
+- **`generated`** — the whole player is fictional. This is the fallback and what
+  every team ships with today, because thsll.org is unreachable from this
+  project's build environment.
+
+To import a real roster, add one entry to `OFFICIAL_ROSTERS`:
+
+```ts
+'highland-park': {
+  teamId: 'highland-park',
+  source: 'https://thsll.org/team?id=4',
+  retrieved: '2026-09-07',
+  season: 2026,
+  players: [
+    { name: 'A. Player', number: 7, position: 'A', grade: 12 },
+  ],
+},
+```
+
+That is the whole change. `generateRoster` picks it up automatically, fills any
+positions the source does not cover with generated players so the squad is
+always legal, marks each player's `source`, and the UI switches from "Generated
+roster" to "Real roster" on its own. Record the season you took it from — rosters
+turn over every year.
 
 ---
 
@@ -140,5 +186,12 @@ npm run balance
 
 It plays full games headlessly at every difficulty and reports goals, shots,
 shots on goal, save percentage, ground balls, turnovers and upset rates. Healthy
-targets: **7–12 goals per game combined, 45–55% save rate, 20–30 turnovers,
-no ties.**
+targets: **8–10 goals per game combined, a 60–65% save rate, 20–30 turnovers,
+and no ties.**
+
+`npm run human` measures the same engine from a player's seat, and
+`npm run ai-audit` catches AI regressions (standing still, hugging the sideline,
+sticking on the crease, ignoring loose balls). If you retune scoring, also
+re-check `src/league/simulate.ts` — the season simulator is calibrated to
+produce the same scorelines as a played game, and drifting apart makes the
+standings describe a different sport from the one you played.

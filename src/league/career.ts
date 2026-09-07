@@ -9,7 +9,7 @@ import {
 } from '../data/teams';
 import { DEFAULT_TACTICS } from '../data/tactics';
 import { DIFFICULTIES, type DifficultyKey } from '../data/difficulty';
-import type { GameLengthKey } from '../data/constants';
+import { GAME_LENGTHS, type GameLengthKey } from '../data/constants';
 import { buildSchedule, regularSeasonWeeks } from './schedule';
 import { simulateGame } from './simulate';
 import {
@@ -178,13 +178,20 @@ function applyResult(career: Career, g: ScheduledGame, homeScore: number, awaySc
   else { h.ties++; a.ties++; }
 }
 
+/** Simulated games are scaled to the career's game length so a simmed result
+ *  looks like one you could have played. */
+function lengthScale(career: Career): number {
+  return GAME_LENGTHS[career.gameLength].quarterSeconds / GAME_LENGTHS.short.quarterSeconds;
+}
+
 /** Play out every non-featured game up to and including `week`. */
 export function simulateThroughWeek(career: Career, week: number): void {
+  const scale = lengthScale(career);
   for (const g of career.schedule) {
     if (g.played || g.week > week || g.featured) continue;
     const home = effectiveTeam(career, g.homeId);
     const away = effectiveTeam(career, g.awayId);
-    const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}`);
+    const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}`, scale);
     applyResult(career, g, r.homeScore, r.awayScore);
   }
 }
@@ -210,7 +217,7 @@ export function recordUserResult(career: Career, g: ScheduledGame, homeScore: nu
 export function simulateUserGame(career: Career, g: ScheduledGame): void {
   const home = effectiveTeam(career, g.homeId);
   const away = effectiveTeam(career, g.awayId);
-  const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}:sim`);
+  const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}:sim`, lengthScale(career));
   recordUserResult(career, g, r.homeScore, r.awayScore);
 }
 
@@ -331,7 +338,7 @@ function resolveNonFeatured(career: Career): void {
       if (g.featured && !career.eliminated) continue;
       const home = effectiveTeam(career, g.homeId);
       const away = effectiveTeam(career, g.awayId);
-      const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}`);
+      const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}`, lengthScale(career));
       applyResult(career, g, r.homeScore, r.awayScore);
       simmedAny = true;
     }

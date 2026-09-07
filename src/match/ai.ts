@@ -113,15 +113,45 @@ function likelyWinner(m: Match, x: number, y: number): Side {
 
 /* ---------------------------------------------------------------- offense */
 
+/** Keeps an AI target outside the crease so nobody grinds against the clamp. */
+function clearOfCrease(x: number, y: number, gx: number, gy: number): { x: number; y: number } {
+  const d = Math.hypot(x - gx, y - gy);
+  const min = FIELD.creaseRadius + 1.3;
+  if (d >= min || d < 1e-4) return { x, y };
+  return { x: gx + ((x - gx) / d) * min, y: gy + ((y - gy) / d) * min };
+}
+
+/**
+ * Where an off-ball attacker wants to be. The whole set shades toward the ball
+ * and every player carries a slow personal drift, because a lacrosse offence
+ * that stands still on its spots looks — and plays — like a training cone.
+ */
 function offenseSlot(m: Match, p: MatchPlayer, spacingMul = 1): { x: number; y: number } {
   const t = m.tacticsOf(p.side).off;
   const base = slotWorld(p.side, p.slot, true);
   const goal = attackingGoal(p.side);
   const dir = attackDir(p.side);
   const spacing = t.spacing * spacingMul;
-  const x = goal.x - dir * ((goal.x - base.x) * dir) * spacing;
-  const y = FIELD.centerY + (base.y - FIELD.centerY) * spacing;
-  return { x, y };
+  let x = goal.x - dir * ((goal.x - base.x) * dir) * spacing;
+  let y = FIELD.centerY + (base.y - FIELD.centerY) * spacing;
+
+  // Shade the set ball-side, the way a real offence rotates.
+  const carrier = m.ball.carrier;
+  if (carrier && carrier.side === p.side) {
+    y += (carrier.y - goal.y) * 0.22;
+    x += (carrier.x - x) * 0.05;
+  }
+
+  // A slow personal drift so nobody is ever completely static.
+  const phase = p.index * 1.7;
+  y += Math.sin(m.elapsed * 0.55 + phase) * 1.4;
+  x += Math.cos(m.elapsed * 0.43 + phase) * 1.1;
+
+  const safe = clearOfCrease(x, y, goal.x, goal.y);
+  return {
+    x: clamp(safe.x, 2, FIELD.length - 2),
+    y: clamp(safe.y, 2.5, FIELD.width - 2.5),
+  };
 }
 
 function offenseAI(m: Match, p: MatchPlayer, dt: number): void {
@@ -136,9 +166,14 @@ function offenseAI(m: Match, p: MatchPlayer, dt: number): void {
     const own = defendingGoal(p.side);
     const carrierBack = Math.abs(carrier.x - own.x) < 40;
     const slot = slotWorld(p.side, p.slot, true);
-    const ty = carrierBack ? clamp(carrier.y + (p.slot === 'D1' ? -14 : p.slot === 'D3' ? 14 : 0), 4, FIELD.width - 4) : slot.y;
-    const tx = carrierBack ? clamp(carrier.x + dir * 9, 3, FIELD.length - 3) : slot.x;
-    seek(m, p, tx, ty, carrierBack, 1.4);
+    const phase = p.index * 1.9;
+    const ty = carrierBack
+      ? clamp(carrier.y + (p.slot === 'D1' ? -14 : p.slot === 'D3' ? 14 : 0), 4, FIELD.width - 4)
+      : slot.y + Math.sin(m.elapsed * 0.45 + phase) * 1.5;
+    const tx = carrierBack
+      ? clamp(carrier.x + dir * 9, 3, FIELD.length - 3)
+      : slot.x + Math.cos(m.elapsed * 0.38 + phase) * 1.2;
+    seek(m, p, tx, ty, carrierBack, 0.6);
     return;
   }
 
@@ -183,7 +218,7 @@ function offenseAI(m: Match, p: MatchPlayer, dt: number): void {
   const evade = nearest && dist(p.x, p.y, nearest.x, nearest.y) < 2.4
     ? { x: (p.x - nearest.x) * 0.4, y: (p.y - nearest.y) * 0.4 }
     : { x: 0, y: 0 };
-  seek(m, p, slot.x + away.x * 1.2 + evade.x, slot.y + away.y * 1.2 + evade.y, false, 1.1);
+  seek(m, p, slot.x + away.x * 1.2 + evade.x, slot.y + away.y * 1.2 + evade.y, false, 0.5);
 }
 
 function nearestOpponent(m: Match, p: MatchPlayer): MatchPlayer | null {
@@ -393,7 +428,14 @@ function markFor(m: Match, p: MatchPlayer): MatchPlayer | null {
 
 function defenseSlot(m: Match, p: MatchPlayer): void {
   const slot = slotWorld(p.side, p.slot, false);
-  seek(m, p, slot.x, slot.y, false, 1.4);
+  // Same slow drift as the offensive set: holding a zone is not standing still.
+  const phase = p.index * 2.3;
+  seek(
+    m, p,
+    slot.x + Math.cos(m.elapsed * 0.4 + phase) * 1.3,
+    slot.y + Math.sin(m.elapsed * 0.5 + phase) * 1.6,
+    false, 0.5,
+  );
 }
 
 function defenseAI(m: Match, p: MatchPlayer, dt: number): void {
@@ -429,9 +471,12 @@ function defenseAI(m: Match, p: MatchPlayer, dt: number): void {
   // --- on-ball defender: body up and look for a check.
   if (onBall) {
     const toGoal = normalize(own.x - carrier.x, own.y - carrier.y);
-    const tx = carrier.x + toGoal.x * markDist * 0.85;
-    const ty = carrier.y + toGoal.y * markDist * 0.85;
-    seek(m, p, tx, ty, myToCarrier > 3, 0.25);
+    const raw = clearOfCrease(
+      carrier.x + toGoal.x * markDist * 0.85,
+      carrier.y + toGoal.y * markDist * 0.85,
+      own.x, own.y,
+    );
+    seek(m, p, raw.x, raw.y, myToCarrier > 3, 0.25);
 
     if (myToCarrier < SIM.checkRange * 0.95 && p.checkCd <= 0) {
       // Attempts per second, not per frame — a defender throws a check roughly
@@ -481,7 +526,8 @@ function defenseAI(m: Match, p: MatchPlayer, dt: number): void {
     ty = ty * 0.55 + mid.y * 0.45;
   }
 
-  seek(m, p, tx, ty, dist(p.x, p.y, tx, ty) > 5, 0.7);
+  const safe = clearOfCrease(tx, ty, own.x, own.y);
+  seek(m, p, safe.x, safe.y, dist(p.x, p.y, safe.x, safe.y) > 5, 0.4);
 }
 
 function pointSeg(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {

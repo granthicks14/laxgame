@@ -49,13 +49,13 @@ export const DIFFICULTIES: Record<DifficultyKey, DifficultyProfile> = {
     key: 'allstate', label: 'All-State',
     blurb: 'Sharp slides, tight marks, and goalies who read your hands.',
     reaction: 0.16, aimNoise: 0.06, decisionQuality: 0.8, markDistance: 2.0, slideTrigger: 7.5,
-    goalieReaction: 1.0, goalieReach: 1.08, checkTiming: 0.9, shotGreed: 0.225, faceoffSkill: 1.06, rewardMultiplier: 1.35,
+    goalieReaction: 1.0, goalieReach: 1.03, checkTiming: 0.9, shotGreed: 0.225, faceoffSkill: 1.06, rewardMultiplier: 1.35,
   },
   elite: {
     key: 'elite', label: 'Elite',
     blurb: 'Everything is contested. You will have to earn every single goal.',
     reaction: 0.09, aimNoise: 0.035, decisionQuality: 0.93, markDistance: 1.6, slideTrigger: 8.5,
-    goalieReaction: 1.1, goalieReach: 1.16, checkTiming: 1.0, shotGreed: 0.25, faceoffSkill: 1.16, rewardMultiplier: 1.8,
+    goalieReaction: 1.1, goalieReach: 1.09, checkTiming: 1.0, shotGreed: 0.25, faceoffSkill: 1.16, rewardMultiplier: 1.8,
   },
 };
 

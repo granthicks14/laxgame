@@ -1,6 +1,8 @@
-import { load, save, removeRaw } from '../core/storage';
+import { load, save, removeRaw, readRaw, writeRaw } from '../core/storage';
 import { CAREER_VERSION, type Career } from '../league/types';
 import { tryGetTeam } from '../data/teams';
+
+const RETIRED_KEY = 'lsl.retiredSave';
 
 const key = (mode: 'season' | 'dynasty'): string => `lsl.career.${mode}.v${CAREER_VERSION}`;
 
@@ -28,6 +30,33 @@ export function loadCareer(mode: 'season' | 'dynasty'): Career | null {
     return null;
   }
   return raw;
+}
+
+/**
+ * Saves from older league structures cannot be migrated — team ids and the
+ * class system both changed — but they should not vanish without explanation.
+ * Called once at startup; the menu shows the notice and clears it.
+ */
+export function retireOldSaves(): void {
+  const found: string[] = [];
+  for (const mode of ['season', 'dynasty'] as const) {
+    for (let v = 1; v < CAREER_VERSION; v++) {
+      const oldKey = `lsl.career.${mode}.v${v}`;
+      if (readRaw(oldKey) !== null) {
+        removeRaw(oldKey);
+        if (!found.includes(mode)) found.push(mode);
+      }
+    }
+  }
+  if (found.length) writeRaw(RETIRED_KEY, found.join(','));
+}
+
+/** Returns and clears the "your old save was retired" notice, if there is one. */
+export function takeRetiredNotice(): string[] | null {
+  const raw = readRaw(RETIRED_KEY);
+  if (!raw) return null;
+  removeRaw(RETIRED_KEY);
+  return raw.split(',').filter(Boolean);
 }
 
 export function saveCareer(career: Career): boolean {

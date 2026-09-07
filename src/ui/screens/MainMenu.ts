@@ -8,7 +8,7 @@ import { PracticeScreen } from './Practice';
 import { SettingsScreen } from './Settings';
 import { StatsScreen } from './Stats';
 import { HowToPlayScreen } from './HowToPlay';
-import { loadCareer } from '../../state/saves';
+import { loadCareer, takeRetiredNotice } from '../../state/saves';
 import { getTeam } from '../../data/teams';
 import { seasonRecordText } from '../../league/career';
 
@@ -92,12 +92,26 @@ export class MainMenuScreen implements Screen {
       },
     ];
 
+    const retired = takeRetiredNotice();
+
     this.el = screenEl(
       h('div', { class: 'topbar' },
         h('div', { class: 'topbar__title display', text: 'Lone Star Lax' }),
         h('div', { class: 'topbar__sub', text: 'North District' })),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
+          retired
+            ? h('div', { class: 'panel', style: 'border-color:var(--accent)' },
+              h('div', { class: 'panel__head', text: 'Your old save could not be carried over' }),
+              h('div', { class: 'panel__body stack' },
+                h('div', {
+                  class: 'small',
+                  text: 'The league now uses the THSLL North District\'s real class structure '
+                    + '(Class A through Class D) instead of the old two-division split. Team ids '
+                    + `changed with it, so the saved ${retired.join(' and ')} from the previous `
+                    + 'version could not be converted. Everything else — settings and records — is intact.',
+                })))
+            : null,
           ...items.map((it) => h('button', {
             class: `menu-btn${it.muted ? ' menu-btn--muted' : ''}`,
             on: { click: () => it.go(app) },

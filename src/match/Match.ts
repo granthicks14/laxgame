@@ -758,7 +758,20 @@ export class Match {
     const moving = Math.hypot(p.vx, p.vy) > 1.2;
     this.tickStamina(p, dt, intent.sprint && moving && p.dodgeTimer <= 0);
 
-    const a = this.accelOf(p) * dt;
+    // Cutting back against your own momentum is sharper than accelerating from
+    // a standstill. Without this, changing direction feels like driving a bus.
+    let accel = this.accelOf(p);
+    const curSpeed = Math.hypot(p.vx, p.vy);
+    if (curSpeed > 1 && (targetVx !== 0 || targetVy !== 0)) {
+      const tm = Math.hypot(targetVx, targetVy) || 1;
+      const dot = (p.vx * targetVx + p.vy * targetVy) / (curSpeed * tm);
+      if (dot < 0.6) accel *= 1 + (0.6 - dot) * 1.15;
+    } else if (targetVx === 0 && targetVy === 0) {
+      // Stopping should also be quick — a released stick means stop now.
+      accel *= 1.5;
+    }
+
+    const a = accel * dt;
     p.vx += clamp(targetVx - p.vx, -a, a);
     p.vy += clamp(targetVy - p.vy, -a, a);
 
@@ -925,7 +938,7 @@ export class Match {
       const power = clamp(speed / SIM.shotSpeedMax, 0, 1);
       // Even in position, a rocket can beat a keeper's hands.
       const hold = clamp(
-        0.62 + g.data.attrs.goalie / 260 - speed / 180 - (b.z < 0.4 ? 0.09 : 0)
+        0.58 + g.data.attrs.goalie / 260 - speed / 180 - (b.z < 0.4 ? 0.09 : 0)
         + (this.isPractice ? 0 : this.form[side] * 0.005 + this.goalieForm[side]),
         0.2, 0.92,
       );
@@ -1372,7 +1385,7 @@ export class Match {
     const sweet = 1 - Math.abs(charge - 0.82) * 1.5;
     let acc = a.shotAccuracy * 0.7 + a.shooting * 0.3 + this.homeEdge(p);
     acc -= pressure * 20;
-    acc -= clamp((d - 9) * 1.6, 0, 26);
+    acc -= clamp((d - 8) * 2.4, 0, 30);
     // Moving is normal in lacrosse; only a genuine sprint costs you.
     acc -= clamp((running - 0.5) / 0.5, 0, 1) * 10;
     acc += clamp(sweet, -1, 1) * 9;

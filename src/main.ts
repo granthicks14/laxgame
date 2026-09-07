@@ -3,6 +3,7 @@ import { App } from './ui/App';
 import { TitleScreen } from './ui/screens/TitleScreen';
 import { h } from './ui/dom';
 import { validateLeague } from './data/teams';
+import { retireOldSaves } from './state/saves';
 
 function fatal(message: string, detail?: unknown): void {
   const root = document.getElementById('app');
@@ -24,6 +25,14 @@ function fatal(message: string, detail?: unknown): void {
 function boot(): void {
   // Surface league data problems (duplicate ids, dangling rivals, thin classes)
   // in the console rather than letting them turn into odd behaviour later.
+  // Old-format saves cannot be migrated across the league restructure; retire
+  // them explicitly so the menu can say what happened.
+  try {
+    retireOldSaves();
+  } catch (err) {
+    console.warn('[saves] could not retire old saves', err);
+  }
+
   try {
     const problems = validateLeague();
     if (problems.length) console.warn('[league] data problems:\n - ' + problems.join('\n - '));

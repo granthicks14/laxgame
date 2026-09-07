@@ -58,9 +58,10 @@ services, and it fits comfortably in Vercel's free Hobby tier.
 **Play Now** — any two North District teams, home or away, four difficulty
 levels, three game lengths.
 
-**Season** — a full round-robin district schedule, live standings, and an
-eight-team playoff bracket ending in the district championship. Play every game
-or simulate the ones you don't want.
+**Season** — a full district schedule, live standings, and a playoff bracket
+ending in the class championship. Small classes play everyone home and away;
+the playoff field is roughly the top half, so qualifying means something. Play
+every game or simulate the ones you don't want.
 
 **Dynasty** — the same season, run back year after year. Players develop and
 graduate, recruits arrive, your program's reputation decides how good they are,
@@ -68,6 +69,10 @@ and the rest of the league drifts around you.
 
 **Practice** — five drills: Shooting Gallery, Faceoff Reps, Clearing & Passing,
 Defensive Stand, and open Free Play.
+
+**Goal replays** — every goal plays a short broadcast-style highlight: letterbox,
+ball trail, slow motion for the finish, a camera that pushes in on the cage, and
+the scorer and assist on screen. Skippable, and switchable off in Settings.
 
 **How to Play** — an interactive walkthrough that teaches movement, passing,
 dodging, shooting and checking during a live scrimmage.
@@ -81,9 +86,9 @@ dodging, shooting and checking during a live scrimmage.
 | `W A S D` / arrows | Move |
 | `Shift` | Sprint (burns stamina) |
 | `Space` | Pass with the ball · Check without it · Clamp at the faceoff |
-| `F` (hold) | Charge a shot; release to fire. Your movement direction picks the corner |
+| `F` (hold) | Charge a shot; release to fire. Push toward the post you want |
 | `E` | Dodge |
-| `Tab` | Switch defender |
+| `Tab` | Switch to whoever can reach the ball first |
 | `Esc` / `P` | Pause |
 
 **Touch:** drag anywhere on the field to move (push to the edge to sprint), with
@@ -99,8 +104,14 @@ The match is a real simulation, not a dice roll:
 - **Ball physics.** The ball is a separate entity with its own velocity, arc and
   bounce. Passes lead the receiver, can be intercepted in flight, and go loose
   if nobody catches them.
-- **Shooting.** Charge time sets power, and accuracy falls off with distance,
-  defensive pressure and running speed. Low-charge shots skip off the turf.
+- **Shooting.** Charge time sets power. Accuracy falls off sharply with
+  distance, defensive pressure and sprinting — a good look is genuinely on
+  frame, a forced one sprays. Steering across the goal mouth picks your corner,
+  and an aim line shows exactly where the shot is going. Low-charge shots skip
+  off the turf.
+- **Switching.** The switch button ranks your squad by time-to-reach — distance,
+  top speed and which way each man is already running — against where the ball
+  is going to be. It never takes the ball off your own carrier.
 - **Goalies.** A keeper positions on the arc, has a genuine reaction delay, and
   covers part — never all — of the cage. Picking a corner beats him; forcing him
   to move first beats him more often. League-wide save rate lands near 50%.
@@ -142,15 +153,15 @@ npm run test:e2e
 ```
 src/
   core/      seeded RNG, math, safe localStorage, event emitter
-  data/      teams, players, ratings, difficulty, tactics, field constants
-  match/     the simulation: Match, ai, faceoff, formation, commentary
+  data/      teams, rosters, players, ratings, difficulty, tactics, constants
+  match/     the simulation: Match, ai, faceoff, formation, commentary, replay
   render/    canvas renderer, camera, pixel sprites, field layer, particles
   input/     unified keyboard + touch input
   audio/     Web Audio synthesis (no sound files)
   league/    schedules, standings, playoffs, simulation, career progression
   ui/        DOM screens and the design system
-  dev/       headless balance harness
-scripts/     browser end-to-end suite
+  dev/       headless balance, human-proxy and AI audit harnesses
+scripts/     browser end-to-end and feature-audit suites
 ```
 
 Gameplay renders to a low-resolution pixel buffer that is upscaled with
@@ -161,15 +172,29 @@ responsive at any size.
 
 ## Data and attribution
 
-School names and division groupings follow the **THSLL North District** as a
-best-effort snapshot — league membership changes season to season, so verify
-against [thsll.org](https://thsll.org) and edit
-[`src/data/teams.ts`](src/data/teams.ts) to match the current year.
+The league is modelled on the **THSLL North District** and its real class
+structure: Class A, Class B, Class C East, Class C West and Class D. The
+district also runs a Sixes competition; that is a different format and is
+deliberately not modelled, because this game simulates the field game.
+
+What is taken from THSLL is the class structure and the set of member
+programmes. **Which class each programme sits in is best-effort** — every team
+carries a `placement` field recording whether the class was reported by THSLL or
+is our assumption, and the Teams screen shows it. Verify against
+[thsll.org](https://thsll.org) and edit
+[`src/data/teams.ts`](src/data/teams.ts); nothing else needs touching.
 
 Everything else is invented for gameplay: **all ratings are fictional balance
-values**, every player is generated and does not represent any real athlete, and
-team colours are approximations chosen for on-field readability rather than
-official branding. Rivalries are gameplay rivalries, not historical claims.
+values**, team colours are chosen for on-field readability rather than official
+branding, and rivalries are gameplay rivalries rather than historical claims.
+
+**Rosters.** The game distinguishes two kinds of roster. `official` means the
+names, numbers, positions and grades came from a published roster — ratings are
+*always* generated, because no public source publishes them. `generated` means
+the whole player is fictional. **Every team currently ships `generated`**, and
+says so in the Teams and Team screens: thsll.org is unreachable from this
+project's build environment, so no roster has been verified. Importing one is a
+data-only change to [`src/data/rosters.ts`](src/data/rosters.ts).
 
 See [docs/EDITING-DATA.md](docs/EDITING-DATA.md) to change teams, ratings,
 rosters or difficulty.
