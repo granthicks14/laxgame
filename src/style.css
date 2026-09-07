@@ -133,6 +133,12 @@ button { cursor: pointer; }
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--accent);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .scroll {
@@ -342,6 +348,7 @@ button { cursor: pointer; }
 .table td.name { font-family: var(--body); }
 .table tr.is-you td { background: rgba(255, 197, 61, 0.09); }
 .table tr.is-you td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.table tr.is-cut td { border-bottom: 2px dashed var(--muted); }
 .table tbody tr:hover td { background: rgba(255, 255, 255, 0.03); }
 .table--compact td, .table--compact th { padding: 5px 6px; font-size: 12px; }
 
@@ -364,8 +371,26 @@ button { cursor: pointer; }
 }
 .seg__opt:last-child { border-right: none; }
 .seg__opt.is-on { background: var(--accent); color: var(--accent-ink); }
-.seg--block { display: flex; width: 100%; }
-.seg--block .seg__opt { flex: 1 1 0; }
+/* Block segmented controls hold anywhere from two to five options, some with
+   long labels ("Attack the cage"). A wrapping grid keeps every option reachable
+   at phone width instead of pushing the last one off-screen. The 2px gap over a
+   line-coloured background draws the dividers, so rows separate cleanly too. */
+.seg--block {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  width: 100%;
+  background: var(--line);
+}
+.seg--block .seg__opt {
+  flex: 1 1 var(--seg-min, 68px);
+  border-right: none;
+  background: var(--panel);
+  min-width: 0;
+  padding: 8px 6px;
+  overflow-wrap: break-word;
+}
+.seg--block .seg__opt.is-on { background: var(--accent); color: var(--accent-ink); }
 
 .field-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
 .field-row:last-child { border-bottom: none; }
@@ -890,6 +915,7 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
 
 @media (max-width: 560px) {
   .topbar__title { font-size: 17px; }
+  .seg__opt { font-size: 12px; letter-spacing: 0.06em; }
   .menu-btn__label { font-size: 19px; }
   .grid-teams { grid-template-columns: 1fr; }
   .tbtns { grid-template-columns: repeat(2, 70px); grid-template-rows: repeat(2, 70px); gap: 9px; }

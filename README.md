@@ -196,6 +196,11 @@ says so in the Teams and Team screens: thsll.org is unreachable from this
 project's build environment, so no roster has been verified. Importing one is a
 data-only change to [`src/data/rosters.ts`](src/data/rosters.ts).
 
+The game plays the **2026** season (`TARGET_SEASON`). Every import carries the
+season it was taken from, and one from any other season is ignored rather than
+used — league sites publish the following season's pages early, and a 2027 squad
+is not this game's league.
+
 See [docs/EDITING-DATA.md](docs/EDITING-DATA.md) to change teams, ratings,
 rosters or difficulty.
 

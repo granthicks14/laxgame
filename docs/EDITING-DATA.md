@@ -121,8 +121,14 @@ To import a real roster, add one entry to `OFFICIAL_ROSTERS`:
 That is the whole change. `generateRoster` picks it up automatically, fills any
 positions the source does not cover with generated players so the squad is
 always legal, marks each player's `source`, and the UI switches from "Generated
-roster" to "Real roster" on its own. Record the season you took it from — rosters
-turn over every year.
+roster" to "Real roster" on its own.
+
+**The `season` field is enforced, not decoration.** This build plays
+`TARGET_SEASON` (2026). League sites publish next season's team pages early, so
+an entry with any other season — a 2027 page pasted in by mistake — is ignored
+and the team stays on generated players. Startup logs the skipped import through
+`validateLeague()`. To move the game to a later season, bump `TARGET_SEASON`
+and re-import; do not relabel old data.
 
 ---
 

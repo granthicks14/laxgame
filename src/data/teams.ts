@@ -3,7 +3,12 @@
  * ---------------------------------------------------------------------------
  * PROVENANCE. Read this before treating anything here as fact.
  *
- * WHAT IS TAKEN FROM THSLL (thsll.org, North District, 2026 season):
+ * HOW THIS WAS SOURCED: thsll.org could not be reached from the environment
+ * this game was built in, so nothing here was read off the league site
+ * directly. The structure and membership below come from public search results
+ * describing the 2026 North District. Treat it as good but unconfirmed.
+ *
+ * WHAT COMES FROM THOSE SOURCES (North District, 2026 season):
  *   - The class structure: Class A, Class B, Class C East, Class C West and
  *     Class D. The district also runs a Sixes competition; that is a different
  *     format (6v6 on a short field) and is deliberately not modelled here,
@@ -25,9 +30,11 @@
  *   - PLAYERS. See rosters.ts — every team ships with `rosterSource:
  *     'generated'`, meaning fictional players. Real rosters can be dropped in.
  *
- * VERIFIED AGAINST: thsll.org, September 2026. Re-check each season.
- * See docs/EDITING-DATA.md.
+ * LAST REVIEWED: September 2026, from public search results — NOT verified
+ * against thsll.org itself. Re-check each season. See docs/EDITING-DATA.md.
  * ------------------------------------------------------------------------- */
+
+import { OFFICIAL_ROSTERS, rosterImportProblems } from './rosters';
 
 export type ClassKey = 'a' | 'b' | 'c-east' | 'c-west' | 'd';
 
@@ -535,5 +542,9 @@ export function validateLeague(): string[] {
     const n = teamsInClass(key).length;
     if (n < 4) problems.push(`class ${key} has only ${n} teams; schedules will be short`);
   }
+  for (const id of Object.keys(OFFICIAL_ROSTERS)) {
+    if (!byId.has(id)) problems.push(`roster import for unknown team "${id}"`);
+  }
+  problems.push(...rosterImportProblems());
   return problems;
 }

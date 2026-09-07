@@ -77,6 +77,14 @@ export function segmented<T extends string>(
   options: SegOption<T>[], current: T, onChange: (v: T) => void, block = false,
 ): HTMLElement {
   const el = h('div', { class: block ? 'seg seg--block' : 'seg' });
+  if (block) {
+    // Block segments wrap as flex rows sized from the longest label, so short
+    // tabs ("C East") stay on one line while wordy options ("Attack the Cage")
+    // drop to two per row on a phone instead of overflowing. Items on the final
+    // row grow to fill it, so a wrapped control never leaves a hollow cell.
+    const longest = options.reduce((n, o) => Math.max(n, o.label.length), 0);
+    el.style.setProperty('--seg-min', `${Math.min(170, Math.max(64, longest * 8 + 18))}px`);
+  }
   for (const opt of options) {
     const b = h('button', {
       class: `seg__opt${opt.value === current ? ' is-on' : ''}`,

@@ -67,7 +67,7 @@ export class MainMenuScreen implements Screen {
         desc: 'Scout every program in the North District.',
         muted: true,
         go: (a) => a.push((b) => new TeamSelectScreen(b, {
-          title: 'North District',
+          title: 'Teams',
           confirmLabel: 'Back to the list',
           onPick: () => b.pop(),
         })),

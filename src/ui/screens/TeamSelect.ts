@@ -111,7 +111,7 @@ export class TeamDetailScreen implements Screen {
               }),
               h('span', {
                 class: t.placement === 'reported' ? 'pill' : 'pill pill--red',
-                text: t.placement === 'reported' ? 'Class confirmed' : 'Class unverified',
+                text: t.placement === 'reported' ? 'Class reported' : 'Class assumed',
               })),
             h('div', {
               class: 'tiny',

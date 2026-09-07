@@ -9,7 +9,9 @@
  *   node scripts/input-stress.mjs
  */
 import { chromium, devices } from 'playwright';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+import { chromiumPath } from './chromium.mjs';
+
+const b = await chromium.launch({ executablePath: chromiumPath() });
 const ctx = await b.newContext({ ...devices['iPhone 13'] });
 const p = await ctx.newPage();
 const errs = [];
@@ -39,6 +41,13 @@ await p.evaluate(() => {
     window.dispatchEvent(ev);
     void remaining;
   };
+  // Velocity of one specific player. Control can legitimately switch to a
+  // team-mate who is already running, so a stuck-input check has to follow the
+  // player it was actually driving.
+  window.__vel = (uid) => {
+    const p = window.loneStarLax.match.players.find((q) => q.uid === uid);
+    return p ? Math.hypot(p.vx, p.vy) : -1;
+  };
   window.__st = () => {
     const g = window.loneStarLax;
     const i = g.input;
@@ -46,7 +55,8 @@ await p.evaluate(() => {
     const pl = m.controlled[m.humanSide];
     return {
       active: i.stick.active, x: +i.stick.x.toFixed(3), y: +i.stick.y.toFixed(3),
-      move: i.peekMove(), vel: pl ? Math.hypot(pl.vx, pl.vy) : -1,
+      move: i.peekMove(), vel: pl ? Math.hypot(pl.vx, pl.vy) : -1, phase: m.phase,
+      uid: pl ? pl.uid : null,
     };
   };
 });
@@ -58,6 +68,54 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
 };
 
+/** Waits for live play. Between a goal and the next faceoff the simulation walks
+ *  players back into position, so any velocity sampled then says nothing about
+ *  whether input is stuck. Returns false if play never resumed in time. */
+async function waitLive(budgetMs = 20000) {
+  const until = Date.now() + budgetMs;
+  while (Date.now() < until) {
+    if ((await st()).phase === 'live') return true;
+    await p.waitForTimeout(250);
+  }
+  return false;
+}
+
+/** Runs `body` during live play, retrying when the window was spoiled — a goal,
+ *  a whistle, or control legitimately switching to a team-mate mid-check (`body`
+ *  returns null to say so). Returns null when no clean window came up, which
+ *  fails the calling check rather than quietly passing it. */
+async function whileLive(body, attempts = 8) {
+  for (let i = 0; i < attempts; i++) {
+    if (!await waitLive()) continue;
+    const out = await body();
+    if (out !== null && (await st()).phase === 'live') return out;
+  }
+  return null;
+}
+
+/** Watches the player we were driving for `settleMs` after their input was
+ *  released, sampling until control legitimately moves on. A player who is
+ *  merely shoved by a nearby body drifts and dips near zero; one whose input is
+ *  stuck holds close to the speed they were driven at. Returns null when the
+ *  window was too short to judge (control switched immediately, or the player
+ *  came off the field). */
+async function releaseProfile(uid, settleMs) {
+  const driving = await p.evaluate((u) => window.__vel(u), uid);
+  if (driving < 0) return null;
+  const samples = [];
+  const step = 150;
+  for (let t = 0; t < settleMs; t += step) {
+    await p.waitForTimeout(step);
+    if ((await st()).uid !== uid) break;
+    const v = await p.evaluate((u) => window.__vel(u), uid);
+    if (v < 0) break;
+    samples.push(v);
+  }
+  if (samples.length < 3) return null;
+  const low = Math.min(...samples);
+  return { driving, after: samples[samples.length - 1], low, stopped: low < Math.max(0.6, driving * 0.35) };
+}
+
 // --- 1. normal drag then release
 await p.evaluate(() => { window.__pt('pointerdown', 5, 90, 420); window.__pt('pointermove', 5, 150, 380); });
 await p.waitForTimeout(300);
@@ -67,9 +125,17 @@ await p.evaluate(() => window.__pt('pointerup', 5, 150, 380));
 await p.waitForTimeout(400);
 s = await st();
 check('release stops movement', !s.active && s.move.x === 0 && s.move.y === 0);
-await p.waitForTimeout(900);
-s = await st();
-check('player velocity decays after release', s.vel < 0.6, `v=${s.vel.toFixed(2)}`);
+const decay = await whileLive(async () => {
+  await p.evaluate(() => { window.__pt('pointerdown', 5, 90, 420); window.__pt('pointermove', 5, 150, 380); });
+  await p.waitForTimeout(300);
+  const uid = (await st()).uid;
+  const before = await p.evaluate((u) => window.__vel(u), uid);
+  await p.evaluate(() => window.__pt('pointerup', 5, 150, 380));
+  const prof = await releaseProfile(uid, 900);
+  return prof && before > 0 ? prof : null;
+});
+check('player velocity decays after release', decay !== null && decay.stopped,
+  decay === null ? 'play never settled' : `${decay.driving.toFixed(2)} -> ${decay.low.toFixed(2)}`);
 
 // --- 2. rapid direction changes
 await p.evaluate(async () => {
@@ -96,9 +162,15 @@ await p.evaluate(() => window.__touchEnd());   // only touchend fires, no pointe
 await p.waitForTimeout(300);
 s = await st();
 check('touchend with no fingers left releases the stick', !s.active && s.move.x === 0);
-await p.waitForTimeout(900);
-s = await st();
-check('player is not stuck running', s.vel < 0.6, `v=${s.vel.toFixed(2)}`);
+const lost = await whileLive(async () => {
+  await p.evaluate(() => { window.__pt('pointerdown', 7, 90, 420); window.__pt('pointermove', 7, 160, 420); });
+  await p.waitForTimeout(250);
+  const uid = (await st()).uid;
+  await p.evaluate(() => window.__touchEnd());
+  return releaseProfile(uid, 900);
+});
+check('player is not stuck running', lost !== null && lost.stopped,
+  lost === null ? 'play never settled' : `${lost.driving.toFixed(2)} -> ${lost.low.toFixed(2)}`);
 
 // --- 4. a NEW touch must work after a lost release
 await p.evaluate(() => { window.__pt('pointerdown', 8, 90, 420); window.__pt('pointermove', 8, 40, 420); });
@@ -125,37 +197,49 @@ await p.evaluate(() => {
   document.dispatchEvent(new Event('visibilitychange'));
 });
 
-// --- 6. multitouch: stick + buttons, released out of order
-await p.evaluate(() => { window.__pt('pointerdown', 10, 90, 420); window.__pt('pointermove', 10, 150, 420); });
-await p.locator('.tbtn--shoot').dispatchEvent('pointerdown', { pointerId: 11, pointerType: 'touch', clientX: 300, clientY: 560, bubbles: true });
-await p.waitForTimeout(200);
-let held = await p.evaluate(() => window.loneStarLax.input.shootDown);
-check('shoot button holds while the stick is active', held === true);
-await p.evaluate(() => window.__pt('pointerup', 10, 150, 420));  // lift the stick finger first
-await p.waitForTimeout(200);
-s = await st();
-held = await p.evaluate(() => window.loneStarLax.input.shootDown);
-check('lifting the stick does not release the button', !s.active && held === true);
-await p.evaluate(() => window.__pt('pointerup', 11, 300, 560));
-await p.waitForTimeout(200);
-held = await p.evaluate(() => window.loneStarLax.input.shootDown);
-check('lifting the button releases it', held === false);
-
-// --- 7. sustained play: 20s of continuous random dragging, then release
-await p.evaluate(async () => {
-  window.__pt('pointerdown', 12, 90, 420);
-  const t0 = Date.now();
-  while (Date.now() - t0 < 12000) {
-    const a = Math.random() * Math.PI * 2;
-    window.__pt('pointermove', 12, 90 + Math.cos(a) * 60, 420 + Math.sin(a) * 60);
-    await new Promise(r => setTimeout(r, 45));
-  }
-  window.__pt('pointerup', 12, 90, 420);
+// --- 6. multitouch: stick + buttons, released out of order.
+// A goal or a whistle mid-attempt legitimately drops everything that is held
+// (the replay and pause paths both call releaseAll), so the attempt is retried
+// if the match left live play rather than weakening the assertion.
+const mt = await whileLive(async () => {
+  await p.evaluate(() => { window.__pt('pointerdown', 10, 90, 420); window.__pt('pointermove', 10, 150, 420); });
+  await p.locator('.tbtn--shoot').dispatchEvent('pointerdown', { pointerId: 11, pointerType: 'touch', clientX: 300, clientY: 560, bubbles: true });
+  await p.waitForTimeout(200);
+  const bothHeld = await p.evaluate(() => window.loneStarLax.input.shootDown);
+  await p.evaluate(() => window.__pt('pointerup', 10, 150, 420));  // lift the stick finger first
+  await p.waitForTimeout(200);
+  const afterStick = await st();
+  const stillHeld = await p.evaluate(() => window.loneStarLax.input.shootDown);
+  await p.evaluate(() => window.__pt('pointerup', 11, 300, 560));
+  await p.waitForTimeout(200);
+  const afterButton = await p.evaluate(() => window.loneStarLax.input.shootDown);
+  return { bothHeld, afterStick, stillHeld, afterButton };
 });
-await p.waitForTimeout(1200);
-s = await st();
-check('after 12s of dragging, release still stops the player', !s.active && s.move.x === 0 && s.vel < 0.6,
-  `v=${s.vel.toFixed(2)}`);
+check('shoot button holds while the stick is active', mt !== null && mt.bothHeld === true);
+check('lifting the stick does not release the button', mt !== null && !mt.afterStick.active && mt.stillHeld === true);
+check('lifting the button releases it', mt !== null && mt.afterButton === false);
+
+// --- 7. sustained play: 12s of continuous random dragging, then release
+const sustained = await whileLive(async () => {
+  await p.evaluate(async () => {
+    window.__pt('pointerdown', 12, 90, 420);
+    const t0 = Date.now();
+    while (Date.now() - t0 < 12000) {
+      const a = Math.random() * Math.PI * 2;
+      window.__pt('pointermove', 12, 90 + Math.cos(a) * 60, 420 + Math.sin(a) * 60);
+      await new Promise(r => setTimeout(r, 45));
+    }
+    window.__pt('pointerup', 12, 90, 420);
+  });
+  const before = await st();
+  const prof = await releaseProfile(before.uid, 1000);
+  if (prof === null) return null;
+  return { ...(await st()), prof };
+}, 3);
+check('after 12s of dragging, release still stops the player',
+  sustained !== null && !sustained.active && sustained.move.x === 0 && sustained.prof.stopped,
+  sustained ? `${sustained.prof.driving.toFixed(2)} -> ${sustained.prof.low.toFixed(2)}` : 'play never settled');
+s = sustained ?? s;
 
 console.log(`\n${results.filter(Boolean).length}/${results.length} passed`);
 console.log('ERRORS:', JSON.stringify(errs.slice(0, 5)));

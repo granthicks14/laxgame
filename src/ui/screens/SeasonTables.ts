@@ -2,9 +2,9 @@ import { h } from '../dom';
 import type { App, Screen } from '../App';
 import { screenEl, topbar, panelFlush, teamBadge, emptyPanel } from '../components';
 import { loadCareer } from '../../state/saves';
-import { effectiveTeam, opponentOf, roundName, standingsSorted, userIsHome, winPct } from '../../league/career';
+import { effectiveTeam, opponentOf, playoffFieldSize, roundName, standingsSorted, userIsHome, winPct } from '../../league/career';
 import type { Career, ScheduledGame } from '../../league/types';
-import { CLASSES } from '../../data/teams';
+import { CLASSES, teamsInClass } from '../../data/teams';
 
 function requireCareer(app: App, mode: 'season' | 'dynasty', title: string): Career | HTMLElement {
   const c = loadCareer(mode);
@@ -26,10 +26,12 @@ export class StandingsScreen implements Screen {
     const res = requireCareer(app, mode, 'Standings');
     if (res instanceof HTMLElement) { this.el = res; return; }
     const career = res;
+    const field = playoffFieldSize(teamsInClass(career.classKey).length);
     const rows = standingsSorted(career).map((r, i) => {
       const t = effectiveTeam(career, r.teamId);
       const diff = r.goalsFor - r.goalsAgainst;
-      return h('tr', { class: r.teamId === career.teamId ? 'is-you' : '' },
+      const cls = [r.teamId === career.teamId ? 'is-you' : '', i + 1 === field ? 'is-cut' : ''].filter(Boolean).join(' ');
+      return h('tr', { class: cls },
         h('td', { class: 'name' }, h('span', { class: 'row', style: 'gap:8px' },
           h('span', { class: 'num', style: 'color:var(--muted);width:16px', text: String(i + 1) }),
           teamBadge(t, 'sm'),
@@ -53,7 +55,9 @@ export class StandingsScreen implements Screen {
                 h('th', { text: 'Team' }), h('th', { text: 'W' }), h('th', { text: 'L' }),
                 h('th', { text: 'PCT' }), h('th', { text: 'GF' }), h('th', { text: 'GA' }), h('th', { text: 'DIFF' }))),
               h('tbody', null, ...rows))),
-          h('div', { class: 'tiny', text: 'Top eight teams reach the district playoffs.' }),
+          h('div', { class: 'tiny', text: field >= 4
+            ? `Top ${field} teams reach the ${CLASSES[career.classKey].short} playoffs — the line under ${field}${field === 1 ? 'st' : 'th'} is the cut.`
+            : 'The top two teams meet in the district championship.' }),
         )),
     );
   }

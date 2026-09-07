@@ -61,15 +61,36 @@ export interface OfficialRoster {
  */
 export const OFFICIAL_ROSTERS: Record<string, OfficialRoster> = {};
 
+/**
+ * The season this build plays. League sites publish next season's team pages
+ * well before the season starts, so an import is only used when it is the 2026
+ * roster — a 2027 page dropped in by mistake is ignored rather than silently
+ * becoming the squad. `rosterImportProblems()` reports anything skipped.
+ */
+export const TARGET_SEASON = 2026;
+
 export function officialRoster(teamId: string): OfficialRoster | null {
-  return OFFICIAL_ROSTERS[teamId] ?? null;
+  const r = OFFICIAL_ROSTERS[teamId];
+  if (!r || r.season !== TARGET_SEASON || r.players.length === 0) return null;
+  return r;
 }
 
 export function rosterSourceFor(teamId: string): RosterSource {
-  return OFFICIAL_ROSTERS[teamId] ? 'official' : 'generated';
+  return officialRoster(teamId) ? 'official' : 'generated';
+}
+
+/** Imports that exist but are not being used, with the reason why. */
+export function rosterImportProblems(): string[] {
+  const out: string[] = [];
+  for (const [id, r] of Object.entries(OFFICIAL_ROSTERS)) {
+    if (r.teamId !== id) out.push(`${id}: entry declares teamId "${r.teamId}"`);
+    if (r.season !== TARGET_SEASON) out.push(`${id}: season ${r.season} roster ignored (this build plays ${TARGET_SEASON})`);
+    if (r.players.length === 0) out.push(`${id}: import has no players`);
+  }
+  return out;
 }
 
 /** How many teams currently ship real roster data. Shown in the Teams screen. */
 export function officialRosterCount(): number {
-  return Object.keys(OFFICIAL_ROSTERS).length;
+  return Object.keys(OFFICIAL_ROSTERS).filter((id) => officialRoster(id) !== null).length;
 }

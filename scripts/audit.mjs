@@ -6,9 +6,10 @@
  *   node scripts/audit.mjs
  */
 import { chromium } from 'playwright';
+import { chromiumPath } from './chromium.mjs';
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
-const EXEC = process.env.CHROMIUM_PATH || undefined;
+const EXEC = chromiumPath();
 
 const errors = [];
 const dead = [];

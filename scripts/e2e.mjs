@@ -11,9 +11,10 @@
  * Set BASE_URL to test a deployed build instead of the local preview.
  */
 import { chromium, devices } from 'playwright';
+import { chromiumPath } from './chromium.mjs';
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
-const EXEC = process.env.CHROMIUM_PATH || undefined;
+const EXEC = chromiumPath();
 
 const problems = [];
 const results = [];
