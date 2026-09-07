@@ -128,3 +128,30 @@ export function statBar(
 export function emptyState(text: string): HTMLElement {
   return h('div', { class: 'empty', text });
 }
+
+export interface EmptyAction {
+  label: string;
+  primary?: boolean;
+  onClick: () => void;
+}
+
+/** A blank screen is a dead end. Every empty state says what is missing, why,
+ *  and gives the player the button that fixes it. */
+export function emptyPanel(
+  title: string, body: string, actions: EmptyAction[] = [],
+): HTMLElement {
+  return h('div', { class: 'panel empty-panel' },
+    h('div', { class: 'panel__body stack center' },
+      h('div', { class: 'empty-panel__mark' }),
+      h('div', { class: 'display', style: 'font-size:20px', text: title }),
+      h('div', { class: 'small', style: 'max-width:44ch;margin:0 auto', text: body }),
+      actions.length
+        ? h('div', { class: 'stack', style: 'margin-top:6px;width:min(300px,100%);align-self:center' },
+          ...actions.map((a) => h('button', {
+            class: `btn btn--block${a.primary ? ' btn--primary' : ''}`,
+            text: a.label,
+            on: { click: a.onClick },
+          })))
+        : null),
+  );
+}

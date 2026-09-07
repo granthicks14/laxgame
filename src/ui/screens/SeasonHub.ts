@@ -1,6 +1,7 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
-import { screenEl, topbar, panel, panelFlush, teamBadge, segmented } from '../components';
+import { screenEl, topbar, panel, panelFlush, teamBadge, segmented, emptyPanel } from '../components';
+import { CareerEntryScreen } from './CareerEntry';
 import { loadCareer, saveCareer } from '../../state/saves';
 import {
   FOCUS_INFO, effectiveTeam, nextUserGame, opponentOf, roundName, seasonRecordText,
@@ -21,7 +22,15 @@ export class SeasonHubScreen implements Screen {
     if (!career) {
       this.el = screenEl(
         topbar(app, mode === 'dynasty' ? 'Dynasty' : 'Season'),
-        h('div', { class: 'scroll' }, h('div', { class: 'empty', text: 'No save found. Start a new career from the menu.' })),
+        h('div', { class: 'scroll' }, h('div', { class: 'wrapper' }, emptyPanel(
+          'No save in this mode',
+          'That career is not on this device — it may have been deleted, or saved in a different browser.',
+          [{
+            label: `Start a new ${mode}`,
+            primary: true,
+            onClick: () => app.replace((a) => new CareerEntryScreen(a, mode)),
+          }],
+        ))),
       );
       return;
     }

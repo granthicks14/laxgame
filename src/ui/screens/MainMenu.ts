@@ -27,12 +27,20 @@ export class MainMenuScreen implements Screen {
     const season = loadCareer('season');
     const dynasty = loadCareer('dynasty');
 
+    const firstTime = !app.settings.seenTutorial;
+
     const items: Item[] = [
       {
         label: 'Play Now',
         desc: 'Pick two North District teams and drop the ball.',
         go: (a) => a.push((b) => new QuickSetupScreen(b)),
       },
+      ...(firstTime ? [{
+        label: 'How to Play',
+        desc: 'Two minutes on the field: movement, passing, dodging, shooting, defence.',
+        note: 'START HERE',
+        go: (a: App) => a.push((b) => new HowToPlayScreen(b)),
+      } as Item] : []),
       {
         label: 'Season',
         desc: season
@@ -70,12 +78,12 @@ export class MainMenuScreen implements Screen {
         muted: true,
         go: (a) => a.push((b) => new StatsScreen(b)),
       },
-      {
+      ...(firstTime ? [] : [{
         label: 'How to Play',
         desc: 'Controls and a two-minute walkthrough on the field.',
         muted: true,
-        go: (a) => a.push((b) => new HowToPlayScreen(b)),
-      },
+        go: (a: App) => a.push((b) => new HowToPlayScreen(b)),
+      } as Item]),
       {
         label: 'Settings',
         desc: 'Difficulty, game length, audio and accessibility.',
@@ -95,8 +103,8 @@ export class MainMenuScreen implements Screen {
             on: { click: () => it.go(app) },
           },
             h('span', { class: 'bar' }),
-            h('span', { class: 'menu-btn__label' },
-              it.label,
+            h('span', { class: 'menu-btn__text' },
+              h('span', { class: 'menu-btn__label', text: it.label }),
               h('span', { class: 'menu-btn__desc', text: it.desc })),
             it.note ? h('span', { class: 'menu-btn__note', text: it.note }) : h('span'),
           )),

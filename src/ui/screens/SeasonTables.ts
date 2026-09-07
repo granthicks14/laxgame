@@ -1,6 +1,6 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
-import { screenEl, topbar, panelFlush, teamBadge, emptyState } from '../components';
+import { screenEl, topbar, panelFlush, teamBadge, emptyPanel } from '../components';
 import { loadCareer } from '../../state/saves';
 import { effectiveTeam, opponentOf, roundName, standingsSorted, userIsHome, winPct } from '../../league/career';
 import type { Career, ScheduledGame } from '../../league/types';
@@ -9,7 +9,14 @@ import { DIVISIONS } from '../../data/teams';
 function requireCareer(app: App, mode: 'season' | 'dynasty', title: string): Career | HTMLElement {
   const c = loadCareer(mode);
   if (c) return c;
-  return screenEl(topbar(app, title), h('div', { class: 'scroll' }, emptyState('No save found.')));
+  return screenEl(
+    topbar(app, title),
+    h('div', { class: 'scroll' }, h('div', { class: 'wrapper' }, emptyPanel(
+      'Nothing to show yet',
+      `There is no ${mode} save on this device, so there is no schedule or table to display.`,
+      [{ label: 'Back', primary: true, onClick: () => app.pop() }],
+    ))),
+  );
 }
 
 export class StandingsScreen implements Screen {

@@ -21,11 +21,25 @@ npm run build      # typecheck + production bundle into dist/
 npm run preview    # serve the production build
 ```
 
-`dist/` is a plain static site. It deploys to Vercel, Netlify, GitHub Pages or
-any static host with no configuration — the build uses relative asset paths, so
-it also works from a subdirectory or straight off the filesystem.
+`dist/` is a plain static site with no server component. The build uses relative
+asset paths, so it also works from a subdirectory or straight off the filesystem.
 
 Requires Node 18+.
+
+### Deploying to Vercel
+
+`vercel.json` is already set up — import the repository at
+[vercel.com/new](https://vercel.com/new) and it builds with no further
+configuration (framework `vite`, `npm run build`, output `dist`). Or from the
+command line:
+
+```bash
+npx vercel        # preview deployment
+npx vercel --prod # production
+```
+
+The whole game is static, so it runs on Vercel's free Hobby tier with no
+functions, no environment variables and no external services.
 
 ---
 

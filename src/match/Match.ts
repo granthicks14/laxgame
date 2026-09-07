@@ -90,14 +90,14 @@ export class Match {
     this.ball = {
       x: FIELD.centerX, y: FIELD.centerY, z: 0, vx: 0, vy: 0, vz: 0,
       state: 'loose', carrier: null, lastCarrier: null, assistCandidate: null,
-      assistTimer: 0, intendedTarget: null, lastSide: null, age: 0,
+      assistTimer: 0, intendedTarget: null, lastSide: null, age: 0, onGoalCounted: false,
     };
 
     for (const side of ['home', 'away'] as Side[]) {
       const chem = this.setups[side].team.chemistry;
-      const swing = 4.1 + Math.max(0, 82 - chem) / 6;
+      const swing = 5.0 + Math.max(0, 82 - chem) / 5.5;
       this.form[side] = clamp(this.rng.gauss(0, swing), -9, 9);
-      this.goalieForm[side] = clamp(this.rng.gauss(0, 0.062), -0.14, 0.14);
+      this.goalieForm[side] = clamp(this.rng.gauss(0, 0.095), -0.2, 0.2);
     }
 
     this.buildTeams();
@@ -125,9 +125,13 @@ export class Match {
     this.phase = 'restart';
     this.phaseTimer = 0.5;
     this.restartSide = side;
+    // Start reps in the offensive half so a drill is about the skill it names,
+    // not about clearing the ball eighty yards first.
+    const goal = attackingGoal(side);
+    const dir = attackDir(side);
     this.restartAt = {
-      x: FIELD.centerX - attackDir(side) * 6,
-      y: FIELD.centerY + this.rng.range(-14, 14),
+      x: goal.x - dir * 19,
+      y: FIELD.centerY + this.rng.range(-11, 11),
     };
     this.ball.state = 'loose';
     this.ball.carrier = null;
@@ -578,9 +582,11 @@ export class Match {
     if (this.manualHold > 0) this.manualHold -= dt;
   }
 
+  /** Dead-ball phases: timers still tick and players get their breath back. */
   private decayPlayers(dt: number, motionScale = 0): void {
     for (const p of this.players) {
       this.tickTimers(p, dt);
+      this.tickStamina(p, dt, false);
       p.vx *= motionScale > 0 ? 0.9 : 0;
       p.vy *= motionScale > 0 ? 0.9 : 0;
       p.x += p.vx * dt * motionScale;
@@ -600,8 +606,12 @@ export class Match {
       p.poseTimer -= dt;
       if (p.poseTimer <= 0 && p.animPose !== 'down') p.animPose = 'idle';
     }
-    // Stamina
-    const sprinting = Math.hypot(p.vx, p.vy) > this.maxSpeed(p) * 0.94;
+  }
+
+  /** Stamina is spent by sprinting specifically, not merely by running, so the
+   *  sprint button is a real decision. Called from integrate(), where the
+   *  player's actual intent for this frame is known. */
+  private tickStamina(p: MatchPlayer, dt: number, sprinting: boolean): void {
     if (sprinting) p.stamina -= SIM.sprintStaminaDrain * dt * (1 - p.data.attrs.stamina / 260);
     else p.stamina += SIM.staminaRegen * dt * (0.6 + p.data.attrs.stamina / 200);
     p.stamina = clamp(p.stamina, 0, 100);
@@ -658,6 +668,9 @@ export class Match {
         targetVy = n.y * speed;
       }
     }
+
+    const moving = Math.hypot(p.vx, p.vy) > 1.2;
+    this.tickStamina(p, dt, intent.sprint && moving && p.dodgeTimer <= 0);
 
     const a = this.accelOf(p) * dt;
     p.vx += clamp(targetVx - p.vx, -a, a);
@@ -814,8 +827,11 @@ export class Match {
       const own = defendingGoal(side);
       if (Math.abs(b.x - own.x) > 5) continue;
       if (b.z > 2.5) continue;
+      // A keeper on a hot night covers more of the cage, not just holds more of
+      // what he reaches. This is the single biggest source of upsets.
+      const reach = saveRadius(g) * (1 + (this.isPractice ? 0 : this.goalieForm[side] * 1.9));
       const d = pointSegDist(g.x, g.y, prevX, prevY, b.x, b.y);
-      if (d > saveRadius(g)) continue;
+      if (d > reach) continue;
 
       const speed = Math.hypot(b.vx, b.vy);
       const power = clamp(speed / SIM.shotSpeedMax, 0, 1);
@@ -826,6 +842,7 @@ export class Match {
         0.2, 0.92,
       );
 
+      b.onGoalCounted = true;
       if (this.rng.next() < hold) {
         this.registerSave(g, power);
         if (this.rng.bool(0.55)) {
@@ -908,8 +925,11 @@ export class Match {
     this.stats[side].goals++;
     if (shooter) {
       shooter.stat.goals++;
-      shooter.stat.shotsOnGoal++;
-      this.stats[side].shotsOnGoal++;
+      if (!this.ball.onGoalCounted) {
+        shooter.stat.shotsOnGoal++;
+        this.stats[side].shotsOnGoal++;
+        this.ball.onGoalCounted = true;
+      }
     }
     if (assist) assist.stat.assists++;
     const keeper = this.goalieOf(otherSide(side));
@@ -1002,9 +1022,13 @@ export class Match {
       if (p.stun > 0 || p.pickupLock > 0) continue;
       const d = dist(p.x, p.y, b.x, b.y);
       const isTarget = b.intendedTarget === p;
+      // A shot is faster and lower than a pass: it can be blocked, but standing
+      // in the lane is not enough to take one out of the air.
+      const isShot = b.state === 'shot';
       const reach = b.state === 'loose'
         ? SIM.catchRadius + (p.slot === 'G' ? 0.5 : 0)
-        : isTarget ? SIM.catchRadius + 0.55 : SIM.interceptRadius;
+        : isTarget ? SIM.catchRadius + 0.55
+          : isShot ? SIM.interceptRadius * 0.8 : SIM.interceptRadius;
       if (d > reach) continue;
       if (b.z > 2.1) continue;
 
@@ -1023,6 +1047,7 @@ export class Match {
         // the flight path the more likely you are to read it.
         const ownership = b.lastCarrier && b.lastCarrier.side === p.side ? 0.35 : 1;
         rate = (0.45 + a.awareness / 90 + a.defense / 150) * ownership;
+        if (isShot) rate *= 0.22;
         if (b.age < 0.12) rate *= 0.2;
         if (p.slot === 'G') rate *= 2.4;
       }
@@ -1111,6 +1136,7 @@ export class Match {
     b.lastCarrier = p;
     b.intendedTarget = target;
     b.age = 0;
+    b.onGoalCounted = false;
     p.pickupLock = 0.28;
     p.windup = 0;
     p.animPose = 'throw';
@@ -1148,7 +1174,10 @@ export class Match {
       speed = SIM.passSpeedMin + power * 6;
     }
 
-    let ang = Math.atan2(ty - p.y, tx - p.x);
+    // Aim from the stick head, which is where the ball actually leaves from.
+    // Aiming from the player's centre throws every pass off by up to a yard.
+    const origin = this.stickPos(p);
+    let ang = Math.atan2(ty - origin.y, tx - origin.x);
     const err = (1 - accuracy / 100) * 0.3 + this.diff.aimNoise * 0.08;
     ang += this.rng.gauss(0, err * 0.45);
 
@@ -1259,9 +1288,12 @@ export class Match {
     const power = SIM.shotSpeedMin + (SIM.shotSpeedMax - SIM.shotSpeedMin) * (0.35 + charge * 0.65)
       * (0.72 + a.shotPower / 260);
 
-    const spread = (1 - acc / 100) * 0.38;
-    let ang = Math.atan2(aimY2 - p.y, goal.x - p.x + dir * 0.3);
-    ang += this.rng.gauss(0, spread * 0.62);
+    const spread = (1 - acc / 100) * 0.52;
+    // Same as passing: the ball leaves the stick head, so that is what has to be
+    // pointed at the corner.
+    const origin = this.stickPos(p);
+    let ang = Math.atan2(aimY2 - origin.y, goal.x + dir * 0.3 - origin.x);
+    ang += this.rng.gauss(0, spread * 0.68);
 
     // A bounce shot: low-charge shots skip off the turf and are harder to read.
     const bounce = charge < 0.55 && this.rng.bool(0.45);

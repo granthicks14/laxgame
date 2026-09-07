@@ -123,7 +123,7 @@ export const TEAMS: TeamData[] = [
   },
   {
     id: 'southlake-carroll', name: 'Southlake Carroll', short: 'Southlake', abbr: 'SLC', mascot: 'Dragons',
-    division: 'd1', primary: '#0f6b3c', secondary: '#f2f2f2', trim: '#ffffff',
+    division: 'd1', primary: '#12965a', secondary: '#f2f2f2', trim: '#ffffff',
     identity: 'transition',
     description: 'Push it every single time. Win a groundball at midfield and they are already at your crease.',
     homeField: { name: 'Dragon Stadium', venue: 'stadium', time: 'night', crowd: 0.98 },
@@ -242,7 +242,7 @@ export const TEAMS: TeamData[] = [
   },
   {
     id: 'argyle', name: 'Argyle', short: 'Argyle', abbr: 'ARG', mascot: 'Eagles',
-    division: 'd2', primary: '#1a6b3c', secondary: '#e8c33c', trim: '#ffffff',
+    division: 'd2', primary: '#1e8f4c', secondary: '#e8c33c', trim: '#ffffff',
     identity: 'balanced',
     description: 'Small school, tight roster, high chemistry. They have played together since sixth grade.',
     homeField: { name: 'Eagle Stadium', venue: 'school', time: 'day', crowd: 0.58 },
@@ -260,7 +260,7 @@ export const TEAMS: TeamData[] = [
   },
   {
     id: 'fwcd', name: 'Fort Worth Country Day', short: 'Country Day', abbr: 'FWCD', mascot: 'Falcons',
-    division: 'd2', primary: '#1f7a4d', secondary: '#f0f0f0', trim: '#ffffff',
+    division: 'd2', primary: '#22a163', secondary: '#f0f0f0', trim: '#ffffff',
     identity: 'goalie',
     description: 'A senior goalie stealing one game a week and a roster that never gets tired.',
     homeField: { name: 'Falcon Field', venue: 'complex', time: 'day', crowd: 0.55 },
@@ -296,7 +296,7 @@ export const TEAMS: TeamData[] = [
   },
   {
     id: 'hebron', name: 'Hebron', short: 'Hebron', abbr: 'HEB', mascot: 'Hawks',
-    division: 'd2', primary: '#0f7a45', secondary: '#14161a', trim: '#ffffff',
+    division: 'd2', primary: '#14a05a', secondary: '#14161a', trim: '#ffffff',
     identity: 'balanced',
     description: 'Rebuilding year three of a rebuild. The freshmen are good. The record is not.',
     homeField: { name: 'Hawk Stadium', venue: 'school', time: 'day', crowd: 0.5 },
@@ -343,8 +343,9 @@ export function coachingDifficulty(t: TeamData): number {
   const best = Math.max(...peers.map((p) => p.overall));
   const worst = Math.min(...peers.map((p) => p.overall));
   const norm = (t.overall - worst) / Math.max(1, best - worst); // 0 weakest .. 1 strongest
-  const divBump = t.division === 'd2' ? 0.35 : 0;
-  return Math.max(1, Math.min(5, Math.round(5 - norm * 3.2 + divBump)));
+  // Division II is a harder job at every level: less talent to work with.
+  const divBump = t.division === 'd2' ? 1 : 0;
+  return Math.max(1, Math.min(5, Math.round(5 - norm * 4 + divBump)));
 }
 
 export const DIFFICULTY_WORDS = ['', 'Easy', 'Moderate', 'Tough', 'Hard', 'Brutal'] as const;

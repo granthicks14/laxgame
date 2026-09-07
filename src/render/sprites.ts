@@ -11,6 +11,9 @@ export interface Jersey {
 
 const r = Math.round;
 
+/** Sprite outline. Dark enough to separate any jersey from any pitch. */
+const OUTLINE = '#0c1116';
+
 /** Slightly darken a hex colour for shading. */
 export function shade(hex: string, amount: number): string {
   const h = hex.replace('#', '');
@@ -68,11 +71,25 @@ export function drawPlayer(
 
   if (o.dim) ctx.globalAlpha = 0.72;
 
-  // Legs
   const legW = Math.max(1, r(bodyW * 0.28));
+  const legLX = cx - r(bodyW * 0.32) - r(legW / 2);
+  const legRX = cx + r(bodyW * 0.32) - r(legW / 2);
+  const legLY = feetY - legH + r(stride * legH * 0.35);
+  const legRY = feetY - legH - r(stride * legH * 0.35);
+
+  // Outline pass. A dark silhouette behind every part keeps a dark jersey from
+  // disappearing into a dark field — Southlake's green on turf, for instance.
+  const ol = Math.max(1, Math.round(u / 9));
+  ctx.fillStyle = OUTLINE;
+  ctx.fillRect(legLX - ol, legLY, legW + ol * 2, legH + ol);
+  ctx.fillRect(legRX - ol, legRY, legW + ol * 2, legH + ol);
+  ctx.fillRect(cx - r(bodyW / 2) - ol, bodyY - ol, bodyW + ol * 2, bodyH + ol * 2);
+  ctx.fillRect(cx - r(headS / 2) - ol, headY - ol, headS + ol * 2, headS + ol * 2);
+
+  // Legs
   ctx.fillStyle = shade(o.jersey.body, -0.45);
-  ctx.fillRect(cx - r(bodyW * 0.32) - r(legW / 2), feetY - legH + r(stride * legH * 0.35), legW, legH);
-  ctx.fillRect(cx + r(bodyW * 0.32) - r(legW / 2), feetY - legH - r(stride * legH * 0.35), legW, legH);
+  ctx.fillRect(legLX, legLY, legW, legH);
+  ctx.fillRect(legRX, legRY, legW, legH);
 
   // Body (jersey) with a shoulder band in the accent colour
   ctx.fillStyle = o.jersey.body;

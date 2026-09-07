@@ -98,6 +98,9 @@ export interface Ball {
   lastSide: Side | null;
   /** Time since the ball was released — used for interception windows. */
   age: number;
+  /** True once this shot has been recorded as on goal, so a deflection that
+   *  trickles in is not counted twice. */
+  onGoalCounted: boolean;
 }
 
 export interface TeamMatchStats {

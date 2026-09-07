@@ -1,10 +1,11 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
-import { screenEl, topbar, panel, panelFlush, teamBadge, emptyState, segmented } from '../components';
+import { screenEl, topbar, panel, panelFlush, teamBadge, emptyState, emptyPanel, segmented } from '../components';
 import { loadCareer } from '../../state/saves';
 import { userTeam } from '../../league/career';
 import type { Career } from '../../league/types';
 import { GRADE_LABEL, sortDepthChart } from '../../data/players';
+import { CareerEntryScreen } from './CareerEntry';
 
 export class StatsScreen implements Screen {
   el: HTMLElement;
@@ -19,7 +20,15 @@ export class StatsScreen implements Screen {
       const career = mode === 'dynasty' ? dynasty : season;
       body.replaceChildren();
       if (!career) {
-        body.appendChild(emptyState('No career saved in this mode yet. Start a season or dynasty to build a record book.'));
+        body.appendChild(emptyPanel(
+          'No record book yet',
+          'Play a season or start a dynasty and this becomes your program history: '
+          + 'final records, season leaders, career totals and every player who comes through.',
+          [
+            { label: 'Start a dynasty', primary: true, onClick: () => app.push((a) => new CareerEntryScreen(a, 'dynasty')) },
+            { label: 'Start a season', onClick: () => app.push((a) => new CareerEntryScreen(a, 'season')) },
+          ],
+        ));
         return;
       }
       for (const el of this.build(career)) body.appendChild(el);

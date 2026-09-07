@@ -1,6 +1,6 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
-import { screenEl, topbar, panel, panelFlush, ratingBar, segmented, teamBadge, emptyState } from '../components';
+import { screenEl, topbar, panel, panelFlush, ratingBar, segmented, teamBadge, emptyPanel } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
 import { TRAIN_COST, trainPlayer, userTeam } from '../../league/career';
 import type { Career } from '../../league/types';
@@ -16,7 +16,12 @@ export class TeamManageScreen implements Screen {
   constructor(app: App, mode: 'season' | 'dynasty') {
     const career = loadCareer(mode);
     if (!career) {
-      this.el = screenEl(topbar(app, 'Team'), h('div', { class: 'scroll' }, emptyState('No save found.')));
+      this.el = screenEl(topbar(app, 'Team'), h('div', { class: 'scroll' },
+        h('div', { class: 'wrapper' }, emptyPanel(
+          'No roster loaded',
+          `There is no ${mode} save on this device, so there is no roster to manage.`,
+          [{ label: 'Back', primary: true, onClick: () => app.pop() }],
+        ))));
       return;
     }
     const team = userTeam(career);
@@ -116,7 +121,12 @@ export class PlayerScreen implements Screen {
     const career = loadCareer(mode);
     const p = career?.roster.find((x) => x.id === playerId);
     if (!career || !p) {
-      this.el = screenEl(topbar(app, 'Player'), h('div', { class: 'scroll' }, emptyState('Player not found.')));
+      this.el = screenEl(topbar(app, 'Player'), h('div', { class: 'scroll' },
+        h('div', { class: 'wrapper' }, emptyPanel(
+          'Player not found',
+          'This player is no longer on the roster — he may have graduated between saves.',
+          [{ label: 'Back', primary: true, onClick: () => app.pop() }],
+        ))));
       return;
     }
 

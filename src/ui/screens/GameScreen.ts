@@ -7,6 +7,8 @@ import { h, clear } from '../dom';
 import type { App, Screen } from '../App';
 import { GAME_LENGTHS, type Side } from '../../data/constants';
 import { areRivals } from '../../data/teams';
+import { shortName } from '../../data/players';
+import type { MatchPlayer } from '../../match/types';
 import { Tutorial } from './tutorial';
 import { pauseIcon } from '../icons';
 
@@ -46,6 +48,8 @@ export class GameScreen implements Screen {
   private elQuarter!: HTMLElement;
   private elShotClock!: HTMLElement;
   private elBanner!: HTMLElement;
+  private elBannerText!: HTMLElement;
+  private elGoalSlot!: HTMLElement;
   private elTicker!: HTMLElement;
   private elFaceoff!: HTMLElement;
   private elFoZone!: HTMLElement;
@@ -119,7 +123,9 @@ export class GameScreen implements Screen {
     this.elClock = h('div', { class: 'score__clock num', text: this.match.clockText() });
     this.elQuarter = h('div', { class: 'score__q', text: practice ? 'DRILL' : 'Q1' });
     this.elShotClock = h('div', { class: 'shotclock num', text: '50' });
-    this.elBanner = h('div', { class: 'banner' });
+    this.elBannerText = h('div', { class: 'banner__slot' });
+    this.elGoalSlot = h('div', { class: 'banner__slot' });
+    this.elBanner = h('div', { class: 'banner' }, this.elBannerText, this.elGoalSlot);
     this.elTicker = h('div', { class: 'ticker', style: 'display:none' });
 
     this.elFoZone = h('div', { class: 'fo__zone' });
@@ -218,7 +224,7 @@ export class GameScreen implements Screen {
     };
 
     this.unsubscribes.push(
-      m.events.on('goal', ({ side, distance }) => {
+      m.events.on('goal', ({ side, scorer, assist, distance }) => {
         audio.play('goal');
         const goalPos = m.focus ?? { x: m.ball.x, y: m.ball.y };
         fx().confetti(goalPos.x, goalPos.y, 46, teamColors(side));
@@ -226,7 +232,7 @@ export class GameScreen implements Screen {
         fx().screenFlash('#ffffff', 0.45);
         this.renderer.cam.addShake(9);
         this.bumpScore(side);
-        void distance;
+        this.showGoalCard(side, scorer, assist, distance);
       }),
       m.events.on('save', ({ goalie, power }) => {
         audio.play('save', power);
@@ -435,16 +441,44 @@ export class GameScreen implements Screen {
   private showBanner(text: string, tone: 'big' | 'normal'): void {
     if (tone === 'big') {
       this.elBanner.dataset.text = text;
-      clear(this.elBanner);
-      this.elBanner.appendChild(h('div', { class: 'banner__text banner__text--big', text }));
+      clear(this.elBannerText);
+      this.elBannerText.appendChild(h('div', { class: 'banner__text banner__text--big', text }));
       window.setTimeout(() => {
-        if (this.elBanner.dataset.text === text) clear(this.elBanner);
+        if (this.elBanner.dataset.text === text) clear(this.elBannerText);
       }, 1200);
     }
     this.elTicker.textContent = text;
     this.elTicker.style.display = '';
     this.tickerTimer = tone === 'big' ? 2.2 : 1.6;
   }
+
+  /** Who scored it, who set it up, and from how far. */
+  private showGoalCard(
+    side: Side,
+    scorer: MatchPlayer | null,
+    assist: MatchPlayer | null,
+    distance: number,
+  ): void {
+    if (!scorer) return;
+    const team = this.opts.config[side].team;
+    const meta = [
+      `${team.abbr} · #${scorer.data.number} ${scorer.data.pos}`,
+      `${Math.round(distance)} yards`,
+      assist ? `assist ${shortName(assist.data)}` : null,
+    ].filter(Boolean).join('  ·  ');
+
+    clear(this.elGoalSlot);
+    const card = h('div', { class: 'goalcard' },
+      h('div', { class: 'goalcard__scorer', text: `${scorer.data.first} ${scorer.data.last}` }),
+      h('div', { class: 'goalcard__meta', text: meta }));
+    this.elGoalCard = card;
+    this.elGoalSlot.appendChild(card);
+    window.setTimeout(() => {
+      if (this.elGoalCard === card) { clear(this.elGoalSlot); this.elGoalCard = null; }
+    }, 2300);
+  }
+
+  private elGoalCard: HTMLElement | null = null;
 
   private showIntro(): void {
     const cfg = this.opts.config;
@@ -532,6 +566,7 @@ export class GameScreen implements Screen {
   }
 
   destroy(): void {
+    this.elGoalCard = null;
     this.running = false;
     cancelAnimationFrame(this.raf);
     for (const off of this.unsubscribes) off();

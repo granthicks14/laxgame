@@ -30,7 +30,6 @@ export function buildSeasonMatch(career: Career, game: ScheduledGame) {
     gameLength: career.gameLength,
     seed: hashSeed(`${career.seed}:${career.year}:${game.id}`),
     contextLabel: label,
-    suddenVictory: !!game.playoff,
     homeRoster: isHome ? yourRoster : oppRoster,
     awayRoster: isHome ? oppRoster : yourRoster,
     homeTactics: isHome ? career.tactics : tacticsFor(them),
