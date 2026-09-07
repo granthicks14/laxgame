@@ -59,7 +59,7 @@ export class MainMenuScreen implements Screen {
       },
       {
         label: 'Practice',
-        desc: 'Drills for shooting, faceoffs, defence and free play.',
+        desc: 'Drills for shooting, faceoffs, clearing, defence and free play.',
         go: (a) => a.push((b) => new PracticeScreen(b)),
       },
       {
