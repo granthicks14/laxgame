@@ -91,6 +91,46 @@ for (let i = 0; i < N; i++) {
   if (m.score.home > m.score.away) even++;
 }
 console.log(`Plano (78) vs Coppell (76): home wins ${even}/${N}`);
+/* --- spacing: the AI should hold a shape, not chase the ball in a pack. --- */
+{
+  const cfg = makeMatchConfig({
+    homeTeam: getTeam('highland-park'),
+    awayTeam: getTeam('jesuit-dallas'),
+    humanSide: null,
+    difficulty: 'varsity',
+    gameLength: 'short',
+    seed: 777,
+  });
+  const g = new Match(cfg);
+  let samples = 0;
+  let nearestSum = 0;
+  let clusterFrames = 0;
+  let guard = 0;
+  while (!g.isFinal() && guard++ < 60 * 60 * 30) {
+    g.update(DT);
+    if (g.phase !== 'live' || guard % 10 !== 0) continue;
+    samples++;
+    for (const side of ['home', 'away'] as const) {
+      const field = g.teams[side].filter((p) => p.slot !== 'G');
+      for (const a of field) {
+        let best = Infinity;
+        for (const b of field) {
+          if (a === b) continue;
+          best = Math.min(best, Math.hypot(a.x - b.x, a.y - b.y));
+        }
+        nearestSum += best;
+      }
+      const near = field.filter((p) => Math.hypot(p.x - g.ball.x, p.y - g.ball.y) < 6).length;
+      if (near >= 4) clusterFrames++;
+    }
+  }
+  const perPlayer = Math.max(1, samples * 2 * 9);
+  console.log(
+    `\nAI spacing: mean nearest teammate ${(nearestSum / perPlayer).toFixed(1)} yd, ` +
+    `packed around the ball ${((clusterFrames / Math.max(1, samples * 2)) * 100).toFixed(1)}% of the time`,
+  );
+}
+
 /* --- faceoff: timing should dominate, but the FOGO rating should be felt. --- */
 console.log('\nFaceoff win rate by timing precision (human vs AI faceoff rating):');
 {

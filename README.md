@@ -118,8 +118,8 @@ react sooner, aim better, slide smarter and pick better shots. Nothing cheats.
 ### Tuning and testing
 
 `npm run balance` runs the whole engine headlessly across every difficulty and
-prints goals, shots, save percentage, ground balls, turnovers, upset rates and
-faceoff win rates by timing precision. Use it after touching anything in
+prints goals, shots, save percentage, ground balls, turnovers, upset rates, how
+spread out the AI keeps its shape, and faceoff win rates by timing precision. Use it after touching anything in
 `src/match/`. Current output sits around 10–12 goals per game combined, a ~50%
 save rate, ~30 shots and no ties.
 
