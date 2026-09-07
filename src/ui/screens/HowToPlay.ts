@@ -24,6 +24,14 @@ const TOUCH: [string, string][] = [
   ['SWITCH', 'Take control of a different defender'],
 ];
 
+const SHOTS: [string, string][] = [
+  ['Quick stick', 'A short charge. Less power, but it is away before the slide arrives.'],
+  ['Bounce shot', 'Low-charge shots skip off the turf. Harder for a keeper to read.'],
+  ['Full wind-up', 'Hold to about four fifths for the sweet spot — max power without losing the corner.'],
+  ['On the run', 'Shooting at speed costs accuracy. Plant your feet if you have the room.'],
+  ['Picking a corner', 'Your movement direction at the moment of release chooses the side of the cage. Shoot away from where the keeper is standing.'],
+];
+
 const RULES: [string, string][] = [
   ['Faceoffs', 'Every quarter and every goal restarts at X. Clamp inside the green window to win possession.'],
   ['Offsides', 'Attackmen stay in the attacking half, close defenders stay home. You will feel a wall if you drift.'],
@@ -55,6 +63,7 @@ export class HowToPlayScreen implements Screen {
           h('div', { class: 'small', text: 'A live scrimmage that walks you through movement, passing, dodging, shooting and checking.' }),
           panel('Keyboard', rows(KEYS)),
           panel('Touch', rows(TOUCH)),
+          panel('Shot types', rows(SHOTS)),
           panel('Rules that matter', rows(RULES)),
           panel('How to actually win',
             h('div', { class: 'stack', style: 'gap:8px' },

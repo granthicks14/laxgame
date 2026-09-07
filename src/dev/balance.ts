@@ -4,7 +4,9 @@
 import { Match } from '../match/Match';
 import { makeMatchConfig } from '../league/matchSetup';
 import { getTeam, TEAMS } from '../data/teams';
-import { DIFFICULTY_ORDER } from '../data/difficulty';
+import { DIFFICULTIES, DIFFICULTY_ORDER } from '../data/difficulty';
+import { createFaceoff, stepFaceoff } from '../match/faceoff';
+import { Rng } from '../core/rng';
 
 const DT = 1 / 60;
 
@@ -89,4 +91,36 @@ for (let i = 0; i < N; i++) {
   if (m.score.home > m.score.away) even++;
 }
 console.log(`Plano (78) vs Coppell (76): home wins ${even}/${N}`);
+/* --- faceoff: timing should dominate, but the FOGO rating should be felt. --- */
+console.log('\nFaceoff win rate by timing precision (human vs AI faceoff rating):');
+{
+  const rng = new Rng(4242);
+  const trial = (humanFo: number, aiFo: number, precision: number, reps = 3000) => {
+    let wins = 0;
+    for (let i = 0; i < reps; i++) {
+      const fo = createFaceoff(rng, humanFo, aiFo, DIFFICULTIES.varsity, true);
+      const mid = (fo.zoneStart + fo.zoneEnd) / 2;
+      const target = mid + rng.gauss(0, precision);
+      let guard = 0;
+      while (guard++ < 600) {
+        const press = fo.stage === 'sweep' && !fo.humanDone && fo.marker >= target;
+        if (stepFaceoff(fo, 1 / 60, press, rng, 'home', 'away')) break;
+      }
+      if (fo.winner === 'home') wins++;
+    }
+    return `${Math.round((wins / reps) * 100)}%`;
+  };
+  const matchups: [number, number, string][] = [
+    [94, 68, 'elite FOGO vs weak'],
+    [83, 90, 'good FOGO vs better'],
+    [70, 90, 'weak FOGO vs elite'],
+  ];
+  for (const [h, a] of matchups) {
+    console.log(
+      `  ${String(h).padStart(2)} vs ${a}:  perfect ${trial(h, a, 0.01)}` +
+      `   good ${trial(h, a, 0.05)}   sloppy ${trial(h, a, 0.12)}`,
+    );
+  }
+}
+
 console.log(`\nTeams loaded: ${TEAMS.length}`);

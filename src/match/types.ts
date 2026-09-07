@@ -151,7 +151,7 @@ export interface TeamSetup {
   human: boolean;
 }
 
-export type PracticeKind = 'shoot' | 'defend' | 'faceoff' | 'free';
+export type PracticeKind = 'shoot' | 'defend' | 'faceoff' | 'clear' | 'free';
 
 export interface PracticeConfig {
   kind: PracticeKind;

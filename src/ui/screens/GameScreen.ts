@@ -486,6 +486,24 @@ export class GameScreen implements Screen {
     const label = cfg.contextLabel
       ?? (rivalry ? 'RIVALRY GAME' : cfg.practice ? cfg.practice.title : 'FACEOFF');
     this.showBanner(label, rivalry || cfg.contextLabel ? 'big' : 'normal');
+
+    // Then the venue line, so you know where you are and what it looks like.
+    window.setTimeout(() => {
+      if (this.finished || !this.running) return;
+      this.elTicker.textContent = this.venueLine();
+      this.elTicker.style.display = '';
+      this.tickerTimer = 3.2;
+    }, 1400);
+  }
+
+  private venueLine(): string {
+    const cfg = this.opts.config;
+    const field = cfg.home.team.homeField;
+    const weather = this.renderer.weather;
+    const bits = [field.name.toUpperCase()];
+    if (weather && weather.kind !== 'clear') bits.push(weather.label);
+    else if (field.time === 'night') bits.push('Under the lights');
+    return bits.join('  ·  ');
   }
 
   /* ---------------------------------------------------------------- pause */
@@ -515,6 +533,7 @@ export class GameScreen implements Screen {
         h('div', { class: 'panel__head', text: 'Paused' }),
         h('div', { class: 'panel__body stack' },
           h('div', { class: 'small', text: `${cfg.away.team.name} at ${cfg.home.team.name} · ${lengthLabel}` }),
+          h('div', { class: 'tiny', text: this.venueLine() }),
           h('div', { class: 'divider' }),
           h('div', { class: 'eyebrow', text: 'Controls' }),
           this.touchMode

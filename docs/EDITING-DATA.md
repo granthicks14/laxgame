@@ -99,6 +99,21 @@ Every generated player is fictional.
 
 ---
 
+## Faceoffs — `src/match/faceoff.ts`
+
+Two inputs, deliberately doing different jobs:
+
+- **Your FOGO's rating** sets the width of the clamp window, scaled by the
+  difference against the opponent's faceoff man. A specialist gives you a
+  forgiving target; a poor one gives you a sliver.
+- **Your timing** decides how close to the centre of that window you land.
+
+The opponent rolls a clamp quality of his own from his rating, and the better
+clamp wins; two poor clamps produce a scrum and a live ground ball at X. Perfect
+timing wins comfortably at any rating — skill is what the player controls — but
+against a much better FOGO a merely good clamp is a coin flip. `npm run balance`
+prints the full table.
+
 ## Difficulty — `src/data/difficulty.ts`
 
 Each profile tunes **AI decision quality only** — reaction delay, aim noise,

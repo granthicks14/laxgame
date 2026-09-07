@@ -573,8 +573,10 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
 .stick {
   position: absolute;
   width: 116px; height: 116px;
-  border: 2px solid rgba(255, 255, 255, 0.22);
-  background: rgba(9, 13, 18, 0.34);
+  /* Reads as a control, not as a hole in the pitch: light rim, barely any fill. */
+  border: 2px dashed rgba(255, 255, 255, 0.45);
+  background: rgba(9, 13, 18, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
   border-radius: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
@@ -584,12 +586,13 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
 .stick.is-on { opacity: 1; }
 .stick__nub {
   position: absolute;
-  width: 46px; height: 46px;
+  width: 44px; height: 44px;
   left: 50%; top: 50%;
-  margin: -23px 0 0 -23px;
+  margin: -22px 0 0 -22px;
   border-radius: 50%;
-  background: rgba(255, 197, 61, 0.85);
+  background: rgba(255, 197, 61, 0.92);
   border: 2px solid #fff3cf;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
 }
 .tbtns {
   position: absolute;

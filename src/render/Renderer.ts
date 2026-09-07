@@ -6,6 +6,7 @@ import { Camera } from './camera';
 import { Effects } from './effects';
 import { FieldLayer, venueTheme, type VenueTheme } from './field';
 import { drawBall, drawGoal, drawPlayer, type Jersey } from './sprites';
+import { weatherFor, type Weather } from './weather';
 
 export interface AimHint {
   x: number;
@@ -24,6 +25,7 @@ export class Renderer {
   readonly effects = new Effects();
   private field = new FieldLayer();
   private theme: VenueTheme | null = null;
+  weather: Weather | null = null;
   private scale = 3;
   private jerseys: Record<Side, Jersey> | null = null;
   private lastW = 0;
@@ -83,6 +85,7 @@ export class Renderer {
       home: jerseyFor(homeTeam, true),
       away: jerseyFor(awayTeam, false),
     };
+    this.weather = weatherFor(match.cfg.seed ?? match.rng.seed);
     this.field.build(this.cam.ppy, this.theme, homeTeam, awayTeam, match.rng.seed);
     this.cam.snap(match.ball.x, match.ball.y);
   }
@@ -163,6 +166,16 @@ export class Renderer {
     }
 
     this.effects.draw(ctx, this.cam);
+
+    // Cosmetic conditions, laid over the whole scene so players sit in the same
+    // light as the pitch.
+    if (this.weather?.tint) {
+      ctx.globalAlpha = this.weather.alpha;
+      ctx.fillStyle = this.weather.tint;
+      ctx.fillRect(0, 0, bw, bh);
+      ctx.globalAlpha = 1;
+    }
+
     this.effects.drawFlash(ctx, bw, bh);
 
     // Off-screen ball indicator

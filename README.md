@@ -66,7 +66,8 @@ or simulate the ones you don't want.
 graduate, recruits arrive, your program's reputation decides how good they are,
 and the rest of the league drifts around you.
 
-**Practice** — shooting, faceoff, and defensive drills, plus open free play.
+**Practice** — five drills: Shooting Gallery, Faceoff Reps, Clearing & Passing,
+Defensive Stand, and open Free Play.
 
 **How to Play** — an interactive walkthrough that teaches movement, passing,
 dodging, shooting and checking during a live scrimmage.
@@ -105,17 +106,34 @@ The match is a real simulation, not a dice roll:
   to move first beats him more often. League-wide save rate lands near 50%.
 - **Defence.** Man marking with help slides, timing-based checks, and real
   consequences for missing one.
+- **Faceoffs.** Your FOGO's rating sets how wide the clamp window is; your timing
+  decides how well you hit it. A specialist is worth having, but the draw is
+  yours to win.
 - **Rules that matter.** Faceoffs, crease, offsides, shot clock, and backing up
   a missed shot over the end line.
 
 **Difficulty changes AI decision quality, never its attributes.** Higher levels
 react sooner, aim better, slide smarter and pick better shots. Nothing cheats.
 
-### Tuning
+### Tuning and testing
 
 `npm run balance` runs the whole engine headlessly across every difficulty and
-prints goals, shots, save percentage, ground balls and turnovers per game, plus
-upset rates. Use it after touching anything in `src/match/`.
+prints goals, shots, save percentage, ground balls, turnovers, upset rates and
+faceoff win rates by timing precision. Use it after touching anything in
+`src/match/`. Current output sits around 10–12 goals per game combined, a ~50%
+save rate, ~30 shots and no ties.
+
+`npm run test:e2e` drives a real browser through the title screen, a quick game,
+a full season and playoff bracket, a dynasty offseason, a save reload, the
+practice drills, phone and tablet layouts, and a frame-rate check. Playwright is
+deliberately not a project dependency — install it only when you want to run the
+suite:
+
+```bash
+npm i -D playwright && npx playwright install chromium
+npm run build && npm run preview &
+npm run test:e2e
+```
 
 ---
 
@@ -132,6 +150,7 @@ src/
   league/    schedules, standings, playoffs, simulation, career progression
   ui/        DOM screens and the design system
   dev/       headless balance harness
+scripts/     browser end-to-end suite
 ```
 
 Gameplay renders to a low-resolution pixel buffer that is upscaled with

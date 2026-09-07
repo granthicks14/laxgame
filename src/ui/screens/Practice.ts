@@ -37,6 +37,14 @@ const DRILLS: Drill[] = [
     difficulty: 'varsity',
   },
   {
+    key: 'clear',
+    title: 'Clearing & Passing',
+    goal: 'Clear the ball ten times',
+    desc: 'Start behind your own cage with a ride on. Pass, dodge and carry it over midfield.',
+    build: () => ({ kind: 'clear', reps: 10, title: 'CLEARING DRILL', goal: 'Clear the ball ten times' }),
+    difficulty: 'varsity',
+  },
+  {
     key: 'defend',
     title: 'Defensive Stand',
     goal: 'Get ten stops',

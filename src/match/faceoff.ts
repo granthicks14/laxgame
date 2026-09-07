@@ -6,22 +6,37 @@ import type { DifficultyProfile } from '../data/difficulty';
 export type FaceoffStage = 'set' | 'down' | 'sweep' | 'result';
 export type FaceoffResult = 'win' | 'scrum' | 'violation';
 
+/* ---------------------------------------------------------------------------
+ * The faceoff is a timing contest, and the two inputs matter in different ways:
+ *
+ *  - YOUR FOGO'S RATING sets how wide the clamp window is. A great faceoff man
+ *    gives you a forgiving target; a poor one gives you a sliver.
+ *  - YOUR TIMING sets how well you hit it. Dead centre is a clean clamp.
+ *  - THE OPPONENT'S FOGO rolls a clamp quality of his own, and the better clamp
+ *    wins. Two bad clamps mean a scrum at X and a live ground ball.
+ *
+ * The upshot: timing is what you control and it dominates, but a faceoff
+ * specialist is worth having, which is the point of the rating.
+ * ------------------------------------------------------------------------- */
+
 export interface FaceoffState {
   stage: FaceoffStage;
   timer: number;
   /** 0..1 position of the sweeping clamp marker. */
   marker: number;
   markerSpeed: number;
-  /** Target window, 0..1. */
+  /** Target window, 0..1. Its width comes from the faceoff rating differential. */
   zoneStart: number;
   zoneEnd: number;
-  /** Where the AI will commit, 0..1 along the sweep. */
+  /** Where the AI commits, 0..1 along the sweep — purely cosmetic timing. */
   aiCommit: number;
   aiDone: boolean;
-  aiError: number;
-  humanError: number | null;
-  /** In an AI-vs-AI faceoff, the error rolled for the non-AI-labelled side. */
-  autoError: number;
+  /** 0..1 quality of the opponent's clamp, rolled from his rating. */
+  aiQuality: number;
+  /** 0..1 quality of the other AI in an AI-vs-AI draw. */
+  autoQuality: number;
+  /** 0..1 quality of the human's clamp; null until he commits. */
+  humanQuality: number | null;
   humanDone: boolean;
   result: FaceoffResult | null;
   winner: Side | null;
@@ -32,6 +47,22 @@ export interface FaceoffState {
 }
 
 const SWEEP_TIME = 1.05;
+/** Below this, a clamp is a whiff rather than a losing clamp. */
+const SCRUM_THRESHOLD = 0.22;
+
+/** Rolls how cleanly a rated faceoff man clamps. Can exceed 1, which is how a
+ *  genuine specialist occasionally beats a perfectly timed clamp. */
+function clampQuality(rng: Rng, rating: number, skillMul = 1): number {
+  const skill = clamp((rating / 99) * skillMul, 0.1, 1.1);
+  return clamp(rng.gauss(skill * 0.8, 0.24), 0, 1.15);
+}
+
+/** Turns a timing error into a clamp quality. Forgiving near the centre of the
+ *  window and falling away past its edge, so being close still counts. */
+function timingQuality(error: number, halfWidth: number): number {
+  const ratio = Math.abs(error) / Math.max(1e-4, halfWidth);
+  return clamp(1 - (ratio / 1.5) ** 1.5, 0, 1);
+}
 
 export function createFaceoff(
   rng: Rng,
@@ -40,16 +71,10 @@ export function createFaceoff(
   diff: DifficultyProfile,
   humanInvolved: boolean,
 ): FaceoffState {
-  // The clamp window grows with your faceoff rating relative to the opponent.
-  const edge = (humanFo - aiFo) / 320;
-  const width = clamp(0.2 + edge, 0.09, 0.42);
-  const start = rng.range(0.14, 0.86 - width);
-
-  // The AI commits with an error derived from its rating and the difficulty profile.
-  const aiSkill = clamp(aiFo / 99, 0.2, 1) * (humanInvolved ? diff.faceoffSkill : 1);
-  const aiError = Math.abs(rng.gauss(0, 0.135 / Math.max(0.35, aiSkill)));
-  const homeSkill = clamp(humanFo / 99, 0.2, 1);
-  const autoError = Math.abs(rng.gauss(0, 0.135 / Math.max(0.35, homeSkill)));
+  // The window is your FOGO's rating expressed as a target: better man, bigger
+  // target. The differential swings it hard, so a specialist is felt.
+  const width = clamp(0.22 + (humanFo - aiFo) / 190, 0.075, 0.42);
+  const start = rng.range(0.13, 0.87 - width);
 
   return {
     stage: 'set',
@@ -58,11 +83,11 @@ export function createFaceoff(
     markerSpeed: 1 / SWEEP_TIME,
     zoneStart: start,
     zoneEnd: start + width,
-    aiCommit: clamp(start + width / 2 + rng.gauss(0, 0.12) * (1.3 - aiSkill), 0.02, 0.98),
+    aiCommit: clamp(start + width / 2 + rng.gauss(0, 0.09), 0.03, 0.97),
     aiDone: false,
-    aiError,
-    autoError,
-    humanError: null,
+    aiQuality: clampQuality(rng, aiFo, humanInvolved ? diff.faceoffSkill : 1),
+    autoQuality: clampQuality(rng, humanFo),
+    humanQuality: null,
     humanDone: false,
     result: null,
     winner: null,
@@ -81,6 +106,7 @@ export function stepFaceoff(
   aiSide: Side,
 ): boolean {
   if (fo.stage === 'result') return true;
+  void rng;
 
   fo.timer -= dt;
 
@@ -91,7 +117,7 @@ export function stepFaceoff(
     }
     if (fo.timer <= 0) {
       fo.stage = 'down';
-      fo.timer = rng.range(0.35, 0.95);
+      fo.timer = 0.35 + Math.random() * 0.6;
       fo.message = 'DOWN';
     }
     return false;
@@ -110,15 +136,15 @@ export function stepFaceoff(
     return false;
   }
 
-  // sweep
-  const zoneCenter = (fo.zoneStart + fo.zoneEnd) / 2;
-  const halfWidth = (fo.zoneEnd - fo.zoneStart) / 2;
+  // --- sweep
+  const center = (fo.zoneStart + fo.zoneEnd) / 2;
+  const halfWidth = Math.max(1e-4, (fo.zoneEnd - fo.zoneStart) / 2);
 
   if (!fo.aiDone && fo.marker >= fo.aiCommit) fo.aiDone = true;
 
   if (!fo.auto && pressed && !fo.humanDone) {
     fo.humanDone = true;
-    fo.humanError = Math.abs(fo.marker - zoneCenter);
+    fo.humanQuality = timingQuality(fo.marker - center, halfWidth);
   }
 
   fo.marker += fo.markerSpeed * dt;
@@ -128,24 +154,21 @@ export function stepFaceoff(
   if (!swept && !bothCommitted) return false;
 
   if (fo.auto) {
-    // AI vs AI: both sides roll against their own faceoff rating.
-    const winner = fo.autoError < fo.aiError ? humanSide : aiSide;
+    const winner = fo.autoQuality >= fo.aiQuality ? humanSide : aiSide;
     finish(fo, 'win', winner, 'CLAMP WON');
     return true;
   }
 
-  const hErr = fo.humanError ?? 1;
-  // A miss outside the window by a lot is a scrum, not an automatic loss.
-  const humanClean = hErr <= halfWidth;
-  const aiClean = fo.aiError <= halfWidth;
+  // Never pressed at all counts as a whiff.
+  const hq = fo.humanQuality ?? 0;
+  const aq = fo.aiQuality;
 
-  if (humanClean && !aiClean) finish(fo, 'win', humanSide, 'CLAMP WON');
-  else if (!humanClean && aiClean) finish(fo, 'win', aiSide, 'CLAMP LOST');
-  else if (humanClean && aiClean) {
-    finish(fo, 'win', hErr <= fo.aiError ? humanSide : aiSide,
-      hErr <= fo.aiError ? 'CLAMP WON' : 'CLAMP LOST');
-  } else {
+  if (hq < SCRUM_THRESHOLD && aq < SCRUM_THRESHOLD) {
     finish(fo, 'scrum', null, 'SCRUM!');
+  } else if (hq >= aq) {
+    finish(fo, 'win', humanSide, 'CLAMP WON');
+  } else {
+    finish(fo, 'win', aiSide, 'CLAMP LOST');
   }
   return true;
 }

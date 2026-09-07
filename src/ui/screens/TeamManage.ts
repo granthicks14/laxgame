@@ -9,6 +9,7 @@ import {
 } from '../../data/players';
 import { OFFENSE_STYLES, DEFENSE_STYLES, type DefenseStyle, type OffenseStyle } from '../../data/tactics';
 import { POSITION_LABEL } from '../../data/constants';
+import type { TeamData } from '../../data/teams';
 
 export class TeamManageScreen implements Screen {
   el: HTMLElement;
@@ -66,11 +67,48 @@ export class TeamManageScreen implements Screen {
               }, true),
             defBlurb),
 
+          panel('Strengths and weaknesses', ...profile(team)),
+
           panelFlush('Roster', rosterTable(app, career, mode)),
           h('div', { class: 'tiny', text: `Training costs ${TRAIN_COST} coaching points. Earn points by playing games — more for wins, rivalry wins and playoff games.` }),
         )),
     );
   }
+}
+
+/** Reads the squad's ratings and says, in words, what this team is good and bad
+ *  at — the thing a coach actually wants to know from a screen of numbers. */
+function profile(team: TeamData): HTMLElement[] {
+  const parts: { label: string; value: number; good: string; bad: string }[] = [
+    { label: 'Attack', value: team.attack, good: 'Attackmen who can beat their man one-on-one', bad: 'Not enough finish at attack' },
+    { label: 'Midfield', value: team.midfield, good: 'Midfield depth that runs all four quarters', bad: 'Thin at midfield — legs go late' },
+    { label: 'Defense', value: team.defense, good: 'Poles who slide on time and check clean', bad: 'Defence gets beaten off the dodge' },
+    { label: 'Goalie', value: team.goalie, good: 'A keeper who steals games', bad: 'Shaky in the cage' },
+    { label: 'Faceoff', value: team.faceoff, good: 'Wins the draw and the possession battle', bad: 'Losing the draw hands away possessions' },
+    { label: 'Speed', value: team.speed, good: 'Genuine transition speed', bad: 'Gets beaten down the field' },
+    { label: 'Chemistry', value: team.chemistry, good: 'Passing and off-ball movement are sharp', bad: 'Sloppy passes under pressure' },
+  ];
+  const sorted = [...parts].sort((a, b) => b.value - a.value);
+  const strengths = sorted.filter((p) => p.value >= 74).slice(0, 3);
+  const weaknesses = sorted.filter((p) => p.value <= 69).slice(-3).reverse();
+
+  const line = (text: string, cls: string, tag: string) => h('div', { class: 'row', style: 'gap:8px;align-items:flex-start' },
+    h('span', { class: `pill ${cls}`, style: 'flex:0 0 auto', text: tag }),
+    h('span', { class: 'small', style: 'flex:1 1 auto', text }));
+
+  const out: HTMLElement[] = [];
+  if (strengths.length) {
+    out.push(h('div', { class: 'eyebrow', text: 'What is working' }));
+    for (const p of strengths) out.push(line(p.good, 'pill--green', p.label));
+  }
+  if (weaknesses.length) {
+    out.push(h('div', { class: 'eyebrow', style: 'margin-top:6px', text: 'What needs work' }));
+    for (const p of weaknesses) out.push(line(p.bad, 'pill--red', p.label));
+  }
+  if (!out.length) {
+    out.push(h('div', { class: 'small', text: 'A balanced squad with no obvious hole and no obvious edge.' }));
+  }
+  return out;
 }
 
 function rosterTable(app: App, career: Career, mode: 'season' | 'dynasty'): HTMLElement {

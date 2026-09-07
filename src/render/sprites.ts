@@ -59,9 +59,12 @@ export function drawPlayer(
   const speed = Math.hypot(p.vx, p.vy);
   const stride = down ? 0 : Math.sin(p.animPhase * 2.2) * Math.min(1, speed / 6);
 
-  const bodyW = Math.max(3, r(u * 0.78));
-  const bodyH = Math.max(3, r(u * (down ? 0.42 : 0.72)));
-  const legH = Math.max(2, r(u * (down ? 0.12 : 0.44)));
+  // A diving keeper stretches out — the save should be visible, not implied.
+  const diving = p.animPose === 'dive';
+  const stretch = diving ? 1.45 : 1;
+  const bodyW = Math.max(3, r(u * 0.78 * stretch));
+  const bodyH = Math.max(3, r(u * (down ? 0.42 : diving ? 0.58 : 0.72)));
+  const legH = Math.max(2, r(u * (down ? 0.12 : diving ? 0.3 : 0.44)));
   const headS = Math.max(2, r(u * 0.5));
 
   const feetY = r(sy);
@@ -109,8 +112,9 @@ export function drawPlayer(
   ctx.fillRect(cx - r(headS / 2) + faceOff, headY + r(headS * 0.45), headS, Math.max(1, r(headS * 0.22)));
 
   // Stick
-  const stickLen = u * 1.5;
-  const sa = p.facing - 1.15 + (p.animPose === 'wind' ? -0.5 : 0) + (p.animPose === 'throw' ? 0.9 : 0);
+  const stickLen = u * (diving ? 2.1 : 1.5);
+  const sa = p.facing - 1.15 + (p.animPose === 'wind' ? -0.5 : 0)
+    + (p.animPose === 'throw' ? 0.9 : 0) + (diving ? 0.75 : 0);
   const hx = cx + Math.cos(sa) * stickLen * 0.55;
   const hy = bodyY + r(bodyH * 0.25) + Math.sin(sa) * stickLen * 0.3;
   ctx.strokeStyle = down ? '#6b6f78' : '#d7d2c6';

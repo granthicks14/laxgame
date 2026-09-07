@@ -101,7 +101,7 @@ export class Match {
     }
 
     this.buildTeams();
-    if (cfg.practice && (cfg.practice.kind === 'shoot' || cfg.practice.kind === 'defend')) {
+    if (cfg.practice && this.isRepDrill) {
       this.startPracticeRep();
     } else {
       this.beginFaceoff(true);
@@ -119,20 +119,27 @@ export class Match {
     return this.cfg.practice?.kind === 'defend' ? otherSide(human) : human;
   }
 
+  /** True for the drills that run as a series of possessions from a set spot. */
+  private get isRepDrill(): boolean {
+    const k = this.cfg.practice?.kind;
+    return k === 'shoot' || k === 'defend' || k === 'clear';
+  }
+
   private startPracticeRep(): void {
     const side = this.practiceOwner();
     this.resetToFaceoffPositions();
     this.phase = 'restart';
     this.phaseTimer = 0.5;
     this.restartSide = side;
-    // Start reps in the offensive half so a drill is about the skill it names,
-    // not about clearing the ball eighty yards first.
+    // Start reps where the drill's skill actually lives: shooting and defending
+    // start in the offensive half, clearing starts behind your own cage.
     const goal = attackingGoal(side);
     const dir = attackDir(side);
-    this.restartAt = {
-      x: goal.x - dir * 19,
-      y: FIELD.centerY + this.rng.range(-11, 11),
-    };
+    const own = defendingGoal(side);
+    const clearing = this.cfg.practice?.kind === 'clear';
+    this.restartAt = clearing
+      ? { x: own.x - dir * 5, y: FIELD.centerY + this.rng.range(-7, 7) }
+      : { x: goal.x - dir * 19, y: FIELD.centerY + this.rng.range(-11, 11) };
     this.ball.state = 'loose';
     this.ball.carrier = null;
     this.ball.x = this.restartAt.x;
@@ -338,7 +345,7 @@ export class Match {
 
   private beginRestart(side: Side, x: number, y: number, reason: string): void {
     const pr = this.cfg.practice;
-    if (pr && (pr.kind === 'shoot' || pr.kind === 'defend')) {
+    if (pr && this.isRepDrill) {
       this.practiceRep(pr.kind === 'defend' && side === (this.humanSide ?? 'home'));
       return;
     }
@@ -578,8 +585,23 @@ export class Match {
     for (const p of this.players) this.integrate(p, dt);
     this.resolveCollisions();
     this.updateBall(dt);
+    if (this.phase !== 'live') return;
+    this.checkClearDrill();
     this.autoSwitch(false);
     if (this.manualHold > 0) this.manualHold -= dt;
+  }
+
+  /** The clearing drill is won by getting the ball over the midline in your own
+   *  sticks — exactly what a real clear is. */
+  private checkClearDrill(): void {
+    if (this.cfg.practice?.kind !== 'clear') return;
+    const carrier = this.ball.carrier;
+    if (!carrier) return;
+    const human = this.humanSide ?? 'home';
+    if (carrier.side !== human) return;
+    const dir = attackDir(human);
+    const past = dir > 0 ? carrier.x > FIELD.centerX + 2 : carrier.x < FIELD.centerX - 2;
+    if (past) this.practiceRep(true);
   }
 
   /** Dead-ball phases: timers still tick and players get their breath back. */
@@ -966,9 +988,9 @@ export class Match {
     this.phase = 'goal';
     this.phaseTimer = this.isPractice ? 1.2 : SIM.goalCelebration;
     const pr = this.cfg.practice;
-    if (pr && (pr.kind === 'shoot' || pr.kind === 'defend')) {
+    if (pr && this.isRepDrill) {
       const human = this.humanSide ?? 'home';
-      this.pendingPracticeResult = pr.kind === 'shoot' ? side === human : side !== human;
+      this.pendingPracticeResult = pr.kind === 'defend' ? side !== human : side === human;
     }
     if (shooter) { shooter.animPose = 'idle'; shooter.flash = 1.2; }
   }
@@ -1101,7 +1123,10 @@ export class Match {
     const pr = this.cfg.practice;
     if (pr && prevSide !== null && prevSide !== p.side) {
       const human = this.humanSide ?? 'home';
-      if (pr.kind === 'shoot' && p.side !== human) { this.practiceRep(false); return; }
+      if ((pr.kind === 'shoot' || pr.kind === 'clear') && p.side !== human) {
+        this.practiceRep(false);
+        return;
+      }
       if (pr.kind === 'defend' && p.side === human) { this.practiceRep(true); return; }
     }
     b.state = 'carried';
