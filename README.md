@@ -1,5 +1,7 @@
 # Lone Star Lax
 
+**Play it: [lone-star-lax.vercel.app](https://lone-star-lax.vercel.app)**
+
 An original retro arcade lacrosse game set in the **THSLL North District**. Pick a
 North Texas program, play the games yourself, and build it into a champion.
 
@@ -28,18 +30,26 @@ Requires Node 18+.
 
 ### Deploying to Vercel
 
-`vercel.json` is already set up — import the repository at
-[vercel.com/new](https://vercel.com/new) and it builds with no further
-configuration (framework `vite`, `npm run build`, output `dist`). Or from the
-command line:
+The repository is already linked to a Vercel project and every push rebuilds it.
+`vercel.json` pins the settings (framework `vite`, `npm ci`, `npm run build`,
+output `dist`) and adds immutable caching for hashed assets.
+
+To deploy your own copy, import the repository at
+[vercel.com/new](https://vercel.com/new) — no further configuration needed — or
+from the command line:
 
 ```bash
 npx vercel        # preview deployment
 npx vercel --prod # production
 ```
 
-The whole game is static, so it runs on Vercel's free Hobby tier with no
-functions, no environment variables and no external services.
+The whole game is static: no functions, no environment variables, no external
+services, and it fits comfortably in Vercel's free Hobby tier.
+
+> The linked project's production branch is currently
+> `claude/retro-lacrosse-game-32i9po`, since that is the only branch in the
+> repository. Once this is merged, point the project at your default branch in
+> **Project → Settings → Git**.
 
 ---
 
