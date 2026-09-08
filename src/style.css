@@ -605,6 +605,7 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
   transform: translateX(-50%);
   /* Sits above the keyboard hint strip so the two never overlap. */
   bottom: calc(var(--safe-b) + 40px);
+  max-width: min(92vw, 420px);
   z-index: 5;
   pointer-events: none;
   font-family: var(--display);
@@ -747,7 +748,8 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
 .tbtn--screen {
   position: absolute;
   right: calc(var(--safe-r) + 14px);
-  bottom: calc(var(--safe-b) + 176px);
+  /* Clears the 2x2 cluster (2 x 74px + 10px gap + 18px inset) with room to spare. */
+  bottom: calc(var(--safe-b) + 188px);
   width: 74px;
   height: 40px;
   border-radius: 20px;
@@ -774,6 +776,10 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
 /* ---------------------------------------------------------------- dynasty */
 
 /* Coach's office: level pips */
+/* Star players carry the same mark in the UI that they wear on the field. */
+.star { font-size: 11px; letter-spacing: -1px; color: var(--accent); }
+.star--2 { color: #8fd8ff; }
+
 .pips { display: flex; gap: 4px; }
 .pip {
   width: 14px; height: 8px;
@@ -1103,13 +1109,19 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
 }
 @keyframes toast-in { from { transform: translate(-50%, 14px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
 
+/* With touch controls the bottom of the screen belongs to the thumbs, so the
+   faceoff meter and the ticker move up out of the way of the buttons. */
+.game.is-touch .fo { bottom: calc(var(--safe-b) + 236px); width: min(420px, 92vw); }
+.game.is-touch .ticker { bottom: calc(var(--safe-b) + 238px); max-width: 74vw; }
+.game.is-touch .shotclock { top: calc(var(--safe-t) + var(--hud-h) + 14px); }
+
 @media (max-width: 560px) {
   .topbar__title { font-size: 17px; }
   .seg__opt { font-size: 12px; letter-spacing: 0.06em; }
   .menu-btn__label { font-size: 19px; }
   .grid-teams { grid-template-columns: 1fr; }
   .tbtns { grid-template-columns: repeat(2, 70px); grid-template-rows: repeat(2, 70px); gap: 9px; }
-  .tbtn--screen { bottom: calc(var(--safe-b) + 166px); width: 70px; }
+  .tbtn--screen { bottom: calc(var(--safe-b) + 178px); width: 70px; }
   .hint-strip { display: none; }
 }
 

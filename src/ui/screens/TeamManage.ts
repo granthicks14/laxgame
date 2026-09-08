@@ -5,7 +5,8 @@ import { loadCareer, saveCareer } from '../../state/saves';
 import { TRAIN_COST, trainPlayer, userTeam } from '../../league/career';
 import type { Career } from '../../league/types';
 import {
-  ATTR_LABEL, GRADE_LABEL, sortDepthChart, type PlayerAttrs, type PlayerData,
+  ATTR_LABEL, GRADE_LABEL, sortDepthChart, starTier,
+  type PlayerAttrs, type PlayerData,
 } from '../../data/players';
 import { OFFENSE_STYLES, DEFENSE_STYLES, type DefenseStyle, type OffenseStyle } from '../../data/tactics';
 import { POSITION_LABEL } from '../../data/constants';
@@ -118,6 +119,17 @@ function profile(team: TeamData): HTMLElement[] {
   return out;
 }
 
+/** The same star a player wears on the field, so the two never disagree. */
+export function starMark(overall: number): HTMLElement | null {
+  const tier = starTier(overall);
+  if (!tier) return null;
+  return h('span', {
+    class: `star star--${tier}`,
+    title: tier === 2 ? 'Elite player' : 'Star player',
+    text: tier === 2 ? '★★' : '★',
+  });
+}
+
 function rosterTable(app: App, career: Career, mode: 'season' | 'dynasty'): HTMLElement {
   const roster = sortDepthChart(career.roster);
   const rows = roster.map((p) => {
@@ -129,7 +141,8 @@ function rosterTable(app: App, career: Career, mode: 'season' | 'dynasty'): HTML
       h('td', { class: 'name' },
         h('div', { style: 'display:flex;align-items:center;gap:8px' },
           h('span', { class: 'num', style: 'color:var(--muted);width:22px', text: `#${p.number}` }),
-          h('span', { text: `${p.first} ${p.last}` }))),
+          h('span', { text: `${p.first} ${p.last}` }),
+          starMark(p.overall))),
       h('td', { text: p.pos }),
       h('td', { text: GRADE_LABEL[p.grade] }),
       h('td', { text: String(p.overall) }),
@@ -223,6 +236,12 @@ export class PlayerScreen implements Screen {
                 h('div', { class: 'row row--wrap', style: 'gap:6px' },
                   h('span', { class: 'pill pill--accent', text: POSITION_LABEL[p.pos] }),
                   h('span', { class: 'pill', text: gradeWord(p.grade) }),
+                  starTier(p.overall)
+                    ? h('span', {
+                      class: 'pill pill--green',
+                      text: starTier(p.overall) === 2 ? '★★ Elite' : '★ Star',
+                    })
+                    : null,
                   cpLabel),
                 h('div', { class: 'small', text: potentialText(p) })))),
 

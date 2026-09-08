@@ -201,3 +201,89 @@ sticking on the crease, ignoring loose balls). If you retune scoring, also
 re-check `src/league/simulate.ts` — the season simulator is calibrated to
 produce the same scorelines as a played game, and drifting apart makes the
 standings describe a different sport from the one you played.
+
+---
+
+## Stadiums and emblems — `src/data/stadiums.ts`, `src/data/emblems.ts`
+
+Neither file holds art. A venue is derived from the data a team already carries
+(its `homeField` kind, crowd, colours and identity) and drawn by
+`src/render/field.ts` from one architecture with four styles: `bowl`,
+`grandstand`, `bleachers` and `complex`. To pin a specific look, add an entry to
+`OVERRIDES` in stadiums.ts:
+
+```ts
+'highland-park': { style: 'bowl', pressBox: true, lightTowers: true, scoreboard: 'big' },
+```
+
+Emblems work the same way: `emblemFor(team)` builds an original mark from the
+team's initials, colours and playing style, and `EMBLEM_OVERRIDES` pins a shape
+or glyph. These are **original marks, not school logos** — nothing is fetched,
+so there is no broken image and no empty logo box to design around.
+
+---
+
+## Weather — `src/render/weather.ts`
+
+Five conditions, chosen from the venue's time of day and seeded from the match,
+with a generated temperature. Only `rain` touches the simulation, through
+`passAccuracy` and `footing`, and both sit within a few percent of 1 on purpose:
+weather is atmosphere, and a game should never be decided by it.
+
+---
+
+## Coaching — `src/league/coaching.ts`
+
+Five tracks, four levels, costs in `COSTS`. `coachEffects(staff)` turns a staff
+into the numbers every other system reads: `offenseIQ` and `defenseIQ` go into
+`src/match/ai.ts`, `developmentRate` and `breakoutRate` into development,
+`staminaRate` into `Match.tickStamina`, and `appeal`/`retention` into transfers
+and recruiting.
+
+Retuning the pace of a dynasty is two numbers: `COSTS` here, and the Coach Point
+award in `recordUserResult` (`src/league/career.ts`). A season currently pays
+around twenty points, which is roughly one upgrade.
+
+---
+
+## Development — `src/league/development.ts`
+
+`BANDS` holds the overall-point value of each outcome; everything else scales
+it by grade, headroom, playing time, production and coaching. Growth is applied
+to the attributes that carry weight at the player's position (`positionKeys`),
+which is what makes a jump show up in his overall — spreading points evenly
+across all thirteen attributes does not.
+
+Check any change with `npm run dynasty`, which prints the average gain, the
+number of breakouts and the biggest jump for each season.
+
+---
+
+## Promotion and relegation — `src/league/promotion.ts`
+
+`FLOWS` is the whole rulebook: which divisions exchange teams, and how many.
+Every promotion is matched by a relegation, which is what keeps divisions the
+same size year on year. A career stores its own class table in
+`career.classOverrides`, so the data file's `classKey` is only the starting
+position — read a team's current class with `effectiveClass(career, id)` and a
+division's membership with `classMembers(career, key)`.
+
+---
+
+## Transfers — `src/league/transfers.ts`
+
+`MARKET_SIZE`, `MAX_PITCHES` and `POS_CAP` shape the window; `interestIn()` is
+the model. The playing-time term dominates deliberately, and `NEEDED` (starters
+plus cover) decides whether a team is actually short at a position — measuring
+need against the full squad shape is how a market ends up full of third-choice
+goalkeepers.
+
+---
+
+## League statistics — `src/league/leagueStats.ts`
+
+Other teams' player stats are derived from the schedule rather than stored, so a
+save stays small and the tables never drift. Rosters are cached per season
+because player IDs are not seeded: accumulating stats against one copy of a
+roster and reading them back off another silently produces an empty
+leaderboard.

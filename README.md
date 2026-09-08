@@ -63,9 +63,29 @@ ending in the class championship. Small classes play everyone home and away;
 the playoff field is roughly the top half, so qualifying means something. Play
 every game or simulate the ones you don't want.
 
-**Dynasty** — the same season, run back year after year. Players develop and
-graduate, recruits arrive, your program's reputation decides how good they are,
-and the rest of the league drifts around you.
+**Dynasty** — the same season, run back year after year, built out of five
+systems that feed each other:
+
+- **The coach's office.** Coach Points buy staff across five tracks — offensive
+  scheme, defensive scheme, player development, strength and conditioning, team
+  culture — four levels each. A season is worth roughly one upgrade, so you
+  choose what your programme is good at. The scheme tracks change how your side
+  *thinks* in the match engine (spacing, cutting, slide timing, lane coverage);
+  none of them inflate a rating.
+- **Player development.** Growth depends on grade, headroom, playing time,
+  production and coaching, and lands in bands you can read: breakout, strong,
+  normal, limited, and the occasional step back for an older player at his
+  ceiling who never got on the field. Young players with room make real jumps.
+- **Transfers.** Eight players a window, each of whom left an actual situation —
+  buried behind somebody better, on a losing team, wanting a bigger role. What
+  decides their interest is the role they would have *here*, worked out against
+  your depth chart. Three pitches a window, and they can commit, think it over,
+  decline, or choose somebody else.
+- **Promotion and relegation.** Win your division and go up; finish at the
+  bottom and go down. Promotions and relegations are matched one for one, so
+  every division stays the size it was, and every move comes with its reason.
+- **Statistics.** Team totals, your full squad's lines, and district
+  leaderboards for points, goals, assists, saves and ground balls.
 
 **Practice** — five drills: Shooting Gallery, Faceoff Reps, Clearing & Passing,
 Defensive Stand, and open Free Play.
@@ -77,23 +97,42 @@ the scorer and assist on screen. Skippable, and switchable off in Settings.
 **How to Play** — an interactive walkthrough that teaches movement, passing,
 dodging, shooting and checking during a live scrimmage.
 
+**Stadiums and weather** — every programme has its own ground, built from one
+reusable architecture: stands sized to the crowd, benches and a scorer's table,
+a branded scoreboard behind the end line, a mark at midfield and the programme's
+name painted across the end zone. Conditions run from clear afternoons to rain
+under the lights, with a pregame card showing the venue, the weather and the
+temperature. Only light rain touches the simulation, and only barely.
+
 ---
 
 ## Controls
+
+Movement lives under the left hand and every action under the right, so you can
+hold a direction and act at the same time.
 
 | Keyboard | |
 | --- | --- |
 | `W A S D` / arrows | Move |
 | `Shift` | Sprint (burns stamina) |
-| `Space` | Pass with the ball · Check without it · Clamp at the faceoff |
-| `F` (hold) | Charge a shot; release to fire. Push toward the post you want |
-| `E` | Dodge |
-| `Tab` | Switch to whoever can reach the ball first |
+| `J` / `Space` | Pass with the ball · Check without it · Clamp at the faceoff |
+| `K` / `F` (hold) | Charge a shot; release to fire. Push toward the post you want |
+| `L` / `E` | Dodge |
+| `I` | Call for a screen |
+| `O` / `Tab` | Switch to whoever can reach the ball first |
 | `Esc` / `P` | Pause |
 
+**Every one of these is rebindable**, in Settings or from the pause menu without
+leaving the game. Taking a key that another action holds moves it, and nothing
+can be left unbound. The hint strip, the faceoff prompt, How to Play and the
+walkthrough all read whatever you have set.
+
+**Pause** gives you Resume, Simulate a quarter, Game settings, Controls and the
+live box score, so you never have to quit a game to look something up.
+
 **Touch:** drag anywhere on the field to move (push to the edge to sprint), with
-PASS / SHOOT / DODGE / SWITCH buttons. On a phone in portrait the camera rotates
-so you play up and down the field.
+PASS / SHOOT / DODGE / SWITCH buttons and a SCREEN pill above them. On a phone
+in portrait the camera rotates so you play up and down the field.
 
 ---
 
@@ -120,6 +159,15 @@ The match is a real simulation, not a dice roll:
 - **Faceoffs.** Your FOGO's rating sets how wide the clamp window is; your timing
   decides how well you hit it. A specialist is worth having, but the draw is
   yours to win.
+- **Screens.** Call for one and the best-placed team-mate comes over, plants on
+  your defender's shoulder and holds it. A defender fighting through is slowed,
+  never stopped: it buys a step, not a goal.
+- **Superstars.** A player at 86 overall wears a star, 90 an elite pair —
+  roughly one a squad and a handful in the district. Defences mark them tighter
+  and slide to them sooner.
+- **Simulating a quarter.** The pause menu can hand the rest of a quarter to the
+  bench. It runs the same engine from the same game state with both sides on AI,
+  then gives it back: the stats are real because the quarter was really played.
 - **Rules that matter.** Faceoffs, crease, offsides, shot clock, and backing up
   a missed shot over the end line.
 
@@ -133,6 +181,14 @@ prints goals, shots, save percentage, ground balls, turnovers, upset rates, how
 spread out the AI keeps its shape, and faceoff win rates by timing precision. Use it after touching anything in
 `src/match/`. Current output sits around 10–12 goals per game combined, a ~50%
 save rate, ~30 shots and no ties.
+
+`npm run dynasty` plays a programme through eight seasons headlessly and prints
+what each system produced: development spread and breakouts, league movement,
+staff spending, transfer outcomes, district leaders and squad strength. Use it
+after touching anything in `src/league/`.
+
+`npm run ratings` prints the league-wide overall distribution, which is what the
+star and elite thresholds are calibrated against.
 
 `npm run test:e2e` drives a real browser through the title screen, a quick game,
 a full season and playoff bracket, a dynasty offseason, a save reload, the

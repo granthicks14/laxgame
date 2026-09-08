@@ -215,7 +215,7 @@ export class GameScreen implements Screen {
     const hints = this.app.settings.showHints && !this.touchMode ? this.elHints : null;
     this.refreshHints();
 
-    return h('div', { class: 'game' },
+    return h('div', { class: `game${this.touchMode ? ' is-touch' : ''}` },
       this.canvas,
       scoreboard,
       practice ? null : this.elShotClock,
@@ -504,16 +504,19 @@ export class GameScreen implements Screen {
    *  the field is never buried under text. */
   private showBanner(text: string, tone: 'big' | 'normal'): void {
     if (tone === 'big') {
+      // A big call gets the banner. Echoing it in the ticker as well put the
+      // same words twice on a phone screen, once behind the faceoff meter.
       this.elBanner.dataset.text = text;
       clear(this.elBannerText);
       this.elBannerText.appendChild(h('div', { class: 'banner__text banner__text--big', text }));
       window.setTimeout(() => {
         if (this.elBanner.dataset.text === text) clear(this.elBannerText);
       }, 1200);
+      return;
     }
     this.elTicker.textContent = text;
     this.elTicker.style.display = '';
-    this.tickerTimer = tone === 'big' ? 2.2 : 1.6;
+    this.tickerTimer = 1.6;
   }
 
   /** Who scored it, who set it up, and from how far. */
@@ -567,10 +570,10 @@ export class GameScreen implements Screen {
       this.introHold = false;
       this.input.suspended = this.paused || this.finished;
       this.last = performance.now();
+      // The pregame card already said where we are and what it is doing, so the
+      // ticker stays free for commentary rather than repeating it over the
+      // faceoff meter.
       this.showBanner(label, rivalry ? 'big' : 'normal');
-      this.elTicker.textContent = this.venueLine();
-      this.elTicker.style.display = '';
-      this.tickerTimer = 3.0;
     };
     card.addEventListener('pointerdown', dismiss);
     window.setTimeout(dismiss, 3400);
