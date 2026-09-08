@@ -13,6 +13,7 @@
  * ------------------------------------------------------------------------- */
 
 import { Rng } from '../core/rng';
+import { clamp } from '../core/math';
 import { GAME_LENGTHS } from '../data/constants';
 import { getTeam, tryGetTeam, type TeamData } from '../data/teams';
 import { tryWorldTeam } from '../data/world';
@@ -27,6 +28,22 @@ export function fixtureTeam(career: Career, teamId: string): TeamData {
   const base = (tryWorldTeam(teamId) ?? tryGetTeam(teamId) ?? getTeam(teamId)) as unknown as TeamData;
   const over = career.ratingOverrides[teamId];
   return over ? { ...base, ...over } : base;
+}
+
+/**
+ * Every other programme has a coaching staff too.
+ *
+ * Leaving this at zero was a real balance bug: the coach's own office fed the
+ * model while nobody else's did, so a well-run programme won far more than it
+ * should have and a Challenge career climbed the ladder in fifteen seasons. A
+ * coach's investment should be an edge only insofar as it beats the opposition's.
+ */
+function aiCoaching(teamId: string): number {
+  const wt = tryWorldTeam(teamId);
+  if (!wt) return 0.45;
+  // The world's `coaching` rating runs roughly 20-90; a typical programme sits
+  // near the middle of the staff scale.
+  return clamp((wt.coaching - 30) / 70, 0.15, 0.9);
 }
 
 /** Quarter length relative to Short, which is how the rest of the game measures it. */
@@ -48,9 +65,7 @@ export function simulateFixture(career: Career, g: ScheduledGame): SimResult {
     tryWorldTeam(g.homeId)?.region ?? 'texas',
   );
   const fx = coachEffects(career.staff);
-  const coaching = fx.offenseIQ * 0.5 + fx.defenseIQ * 0.5;
-  const userIsHome = g.homeId === career.teamId;
-  const userInvolved = g.homeId === career.teamId || g.awayId === career.teamId;
+  const mine = fx.offenseIQ * 0.5 + fx.defenseIQ * 0.5;
 
   return simulateMatch(home, away, `${career.seed}:${career.year}:${g.id}`, {
     level: career.level,
@@ -59,9 +74,9 @@ export function simulateFixture(career: Career, g: ScheduledGame): SimResult {
     weather: { rain: w.rain, wind: w.wind, label: w.label },
     rivalry: g.rivalry,
     playoff: !!g.playoff,
-    homeTactics: userInvolved && userIsHome ? career.tactics : tacticsFor(home),
-    awayTactics: userInvolved && !userIsHome ? career.tactics : tacticsFor(away),
-    homeCoaching: userInvolved && userIsHome ? coaching : 0,
-    awayCoaching: userInvolved && !userIsHome ? coaching : 0,
+    homeTactics: g.homeId === career.teamId ? career.tactics : tacticsFor(home),
+    awayTactics: g.awayId === career.teamId ? career.tactics : tacticsFor(away),
+    homeCoaching: g.homeId === career.teamId ? mine : aiCoaching(g.homeId),
+    awayCoaching: g.awayId === career.teamId ? mine : aiCoaching(g.awayId),
   });
 }

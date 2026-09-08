@@ -295,6 +295,19 @@ export function promotionReach(state: ChallengeState): number {
   return state.reputation >= 70 && state.stageIndex < FINAL_STAGE - 1 ? 2 : 1;
 }
 
+/**
+ * The reputation a coach needs before anybody at the NEXT rung will interview
+ * him, whatever he has just won.
+ *
+ * A championship opens the door; it does not walk you through it. Without this
+ * the ladder is gated only on winning one title per rung, and a coach who gets
+ * hot for a single season climbs the whole sport — which is not a career, it is
+ * a lucky year. The bar rises as you go up, because the jobs do.
+ */
+export function promotionFloor(stageIndex: number): number {
+  return 26 + stageIndex * 6;
+}
+
 /** Applies an accepted offer. The career continues; the job does not. */
 export function acceptOffer(state: ChallengeState, offer: JobOffer): void {
   state.stageIndex = offer.stageIndex;

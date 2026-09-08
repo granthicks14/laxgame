@@ -112,7 +112,9 @@ driving a full season and offseason in each.
   professional opponent genuinely thinks better than a high schooler.
 - **You can be sacked.** Three seasons below what the programme wanted and you
   are out: down a rung, the recruits you were chasing gone, starting again. Two
-  years without a job and the career is over.
+  years without a job and the career is over. *(Since the scoring rewrite a
+  well-run programme wins more, so sackings have become rare and the ladder
+  climbs faster — see the note under Tuning and testing.)*
 - **Legacy.** Championships weighted by how hard they were to win, how far you
   climbed, the players you found and developed, and the years you gave it.
 
@@ -337,9 +339,21 @@ with shooting around 26–32% and saves around 50–57%.
 
 `npm run challenge` runs a whole Challenge career headlessly — every season, job
 offer, sacking and championship — and `RUNS=10 npm run challenge` samples ten of
-them. Across sixty simulated seasons a coach averages the fifth rung of nine and
-about one in ten reaches the PLL, which is roughly the intended difficulty for a
-player who simulates rather than plays.
+them.
+
+**Known balance shift.** The possession model rewards a rating edge more steeply
+than the formula it replaced, so a coach who spends Coach Points well and
+develops his squad now wins considerably more. Across eight simulated careers of
+45 seasons the average coach reaches the seventh rung of nine, six of eight
+reach the PLL (in 15–45 seasons), and *nobody was sacked*. Before the rewrite it
+was the fifth rung, one in ten reaching the PLL, and about one sacking a career.
+The climb is more satisfying and the failure consequence has stopped biting.
+If you want the old difficulty back, the levers in order of bluntness are
+`parWinPct` in `src/challenge/ladder.ts` (what a programme expects),
+`promotionFloor` in `src/challenge/state.ts` (the reputation needed before the
+next rung will interview you), and the response slopes in `shotRateFactor` and
+`onGoalFactor` in `src/league/simulate.ts` — the last of which would also move
+the matchup table above, so measure with `npm run scoring` before and after.
 
 `npm run scouting` measures the recruiting model: how often a ranking is wrong,
 how fast scouting closes the gap, what a class looks like with none, one, three
