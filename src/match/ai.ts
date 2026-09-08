@@ -243,7 +243,12 @@ function nearestOpponent(m: Match, p: MatchPlayer): MatchPlayer | null {
 function shotQuality(m: Match, p: MatchPlayer): number {
   const goal = attackingGoal(p.side);
   const d = dist(p.x, p.y, goal.x, goal.y);
-  if (d > 19 || d < 1.5) return 0;
+  // Better players shoot from further out, and hit from further out. The range
+  // a shot is worth taking from grows with the standard of the game, which is
+  // most of why a professional offence generates more looks than a high school
+  // one against defenders who are also better.
+  const reach = 19 + (m.par - 66) * 0.14;
+  if (d > reach || d < 1.5) return 0;
 
   // Angle: shooting from straight on is far better than from behind the cage.
   const dir = attackDir(p.side);
@@ -252,7 +257,7 @@ function shotQuality(m: Match, p: MatchPlayer): number {
   const lateral = Math.abs(p.y - goal.y);
   const angleScore = clamp(1 - lateral / (along * 1.5 + 7), 0.08, 1);
 
-  const distScore = clamp(1 - (d - 3) / 16, 0.05, 1);
+  const distScore = clamp(1 - (d - 3) / (16 + (m.par - 66) * 0.14), 0.05, 1);
   const pressureF = clamp(1 - m.pressureOn(p) * 0.45, 0.25, 1);
   const laneF = clamp(1 - m.laneRisk(p.x, p.y, goal.x, goal.y, p.side) * 0.45, 0.4, 1);
 
@@ -376,7 +381,7 @@ function shotQualityAt(m: Match, side: Side, q: MatchPlayer): number {
   if (along < 0.5 || d > 19) return 0;
   const lateral = Math.abs(q.y - goal.y);
   const angleScore = clamp(1 - lateral / (along * 1.5 + 7), 0.08, 1);
-  const distScore = clamp(1 - (d - 3) / 16, 0.05, 1);
+  const distScore = clamp(1 - (d - 3) / (16 + (m.par - 66) * 0.14), 0.05, 1);
   return distScore * angleScore * clamp(1 - m.pressureOn(q) * 0.45, 0.25, 1);
 }
 

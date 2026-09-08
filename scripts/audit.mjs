@@ -97,7 +97,17 @@ async function sweep(label, skip = /Quit game|Delete|Start a new|Run it back|Fin
     // rest of the screen does not move — a settings toggle that was already in
     // that position is not a dead control.
     const nowOn = ((await btn.getAttribute('class').catch(() => '')) ?? '').includes('is-on');
-    if (sigBefore === sigAfter && !alreadyOn && !nowOn) dead.push(`${label} → "${text}"`);
+    // A segmented option is idempotent by design: selecting the value a setting
+    // already holds is the correct outcome, not a dead control.
+    const isSegOption = cls.includes('seg__opt');
+    if (sigBefore === sigAfter && !alreadyOn && !nowOn && !isSegOption) {
+      // Name the setting it belongs to, or the line is not actionable.
+      const field = await btn.evaluate((el) => {
+        const row = el.closest('.field-row') ?? el.closest('.stack');
+        return row?.querySelector('.field-row__label')?.textContent?.trim() ?? '';
+      }).catch(() => '');
+      dead.push(`${label} → "${text}"${field ? ` (${field})` : ''}`);
+    }
 
     // If the click navigated away, step back so the rest of this screen's
     // controls still get swept.

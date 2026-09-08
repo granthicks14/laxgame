@@ -89,7 +89,12 @@ systems that feed each other:
   leaderboards for points, goals, assists, saves and ground balls.
 
 **Challenge** — one coaching career, nine rungs, from Class D high school to the
-Premier Lacrosse League. This is the long game.
+Premier Lacrosse League. This is the long game. It is the **same career engine
+as Dynasty** — every offseason system, the transfer window, recruiting,
+scouting, development, staff, statistics and the record book — plus the ladder
+on top. Nothing is missing because the mode is called something else; `npm run
+checklist` prints the compatibility table and `npm run modes` proves it by
+driving a full season and offseason in each.
 
 - **You climb by winning championships.** Nothing else moves you up, and even a
   title only gets you *interviews*: which jobs you are offered depends on the
@@ -135,6 +140,22 @@ Premier Lacrosse League. This is the long game.
   scouting report and a breakdown of exactly what he is weighing about you.
 - **The professional draft** spends picks instead of offers, and the players
   nobody took are undrafted free agents you can sign with a camp invite.
+
+**The transfer window, by level** — the same machinery, called what each level
+actually calls it. High school has player movement between schools; a college
+has the portal, and **your own players can enter it** — a man with years left
+and no path to the field leaves, and the culture track in the coach's office is
+what keeps him; the professional levels have free agency. Ratings on a target
+are your own estimate with an error bar: a player you have faced this season is
+a known quantity, one from across the league is a report, and your scouting
+staff narrows the gap.
+
+| Level | Window | Approaches | Pool | Your players can leave |
+| --- | --- | --- | --- | --- |
+| High school | Player movement | 3 | 8 | no |
+| D-III / D-II | Transfer portal | 4 | 12 | yes |
+| D-I | Transfer portal | 5 | 14 | yes |
+| Semi-pro / PLL | Free agency | 3–4 | 8–10 | yes |
 
 **Player development** — every player has an archetype, a development curve and
 a hidden work rate. An early developer arrives close to finished; a late bloomer
@@ -198,6 +219,60 @@ PASS / SHOOT / DODGE / SWITCH buttons and a SCREEN pill above them. On a phone
 in portrait the camera rotates so you play up and down the field.
 
 ---
+
+## Simulated games
+
+A game the coach does not play is not a random number in the right range. It is
+played out in four steps, the same four that decide a real one:
+
+1. **Possessions.** Faceoffs, pace, both sides' style and turnovers decide how
+   many times each team gets the ball.
+2. **Shots.** Offensive quality against defensive pressure decides how often a
+   possession ends in a shot, and how many of those are on frame — minus
+   whatever the rain and the wind take off.
+3. **Quality.** A shot against a packed crease is not a shot on the break, and a
+   greedy offence takes worse ones than a patient one.
+4. **The goalie.** Save percentage is driven by his rating measured against the
+   level he plays at, and it is the sharpest lever in the model: across four
+   hundred games between otherwise identical teams, a 65-rated keeper concedes
+   **10.5** a game and a 99-rated one concedes **5.3**.
+
+**The box score comes out of those steps**, so saves always equal shots on goal
+minus goals, faceoffs always equal goals plus the period starts, and no player's
+line can disagree with the scoreboard. `npm run scoring` checks every one of
+them: 2,395/2,395 box scores agree with their scoreline.
+
+Results respond to the things that should move them, and only those:
+
+| Matchup (Division I, 400 games each) | Average |
+| --- | --- |
+| Even teams | 6.6–6.7 |
+| Elite offence against a weak defence | 11.2–6.5 |
+| Two elite defences | 5.2–4.8 |
+| One elite keeper against a poor one | 9.3–5.2 |
+| Extreme mismatch | 15.3–3.6 |
+| Fast break against a packed defence | 9.1–8.0 |
+| Heavy rain and wind | 7.5–7.2 (8.9–8.2 in perfect conditions) |
+| District champion against the bottom club (high school) | 22.2–4.9 |
+
+**A note on the size of the numbers.** Each level is calibrated separately, and
+a *played* game is the ground truth: whatever the simulation says has to be a
+game you could have played, or the league table is a lie. Across all six levels
+simulated and played results now agree within 4%. But the game's quarters are
+2–4½ minutes, not the 12–15 of a real match, so scorelines are compressed
+against real-world ones however realistic the *shape* is. **Long quarters get
+closest**: a PLL game reads about 12–12, semi-pro 11–11, Division II 10–10.
+Division I comes out as the most defensive level in this engine — better
+defenders everywhere genuinely suppress the game — which is a known limitation
+rather than a target.
+
+`npm run scoring` reports goals, shots, shooting and save percentages,
+possessions, overtime and blowout rates for every level; `npm run levels` runs
+the same measurements through the real match engine, which is how you tell
+whether the two still agree. **Settings → Simulation details** turns on a
+per-game breakdown on the schedule screen — possessions, shots, shooting
+percentage, saves, ground balls, turnovers and faceoffs — for working out why a
+scoreline looks wrong.
 
 ## How the game works
 
@@ -283,6 +358,18 @@ whistle never reaching the post-game screen.
 `npm run test:challenge` drives a browser through a Challenge career: the ladder,
 taking the first job, hiring a scout, working a class, playing a season out, the
 end-of-season verdict, and the career tracker.
+
+`npm run modes` drives a full season and offseason in Dynasty (high school),
+Challenge (high school) and Challenge (Division I) and asserts that all 35
+career systems produced a real result in each — 105 checks. Dynasty and
+Challenge are the same engine, and this is what stops a feature quietly working
+in one and not the other. It caught the offseason emptying the squad it was
+about to refill.
+
+`npm run checklist` prints the mode compatibility table and what each level gets.
+
+`npm run scoring` simulates thousands of games per level and reports the
+distributions; `npm run levels` does the same through the real match engine.
 
 `npm run test:responsive` walks the Challenge and recruiting screens at four
 widths from an iPhone SE up and fails on horizontal overflow, text under 10.5px

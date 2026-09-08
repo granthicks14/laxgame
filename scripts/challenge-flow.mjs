@@ -156,8 +156,11 @@ if (after && !after.challenge.offers?.length && after.challenge.totalYears === 1
     after.recruiting && after.recruiting.cycle !== graded.recruiting.cycle);
   check('the roster carried over', after.roster.length >= Math.min(18, beforeRoster - 8),
     `${beforeRoster} -> ${after.roster.length}`);
+  // A squad that graduated wholesale (the graduation-cliff situation) has no
+  // returning player to carry a history, so the report is the reliable signal.
   check('development history is being written',
-    after.roster.some((p) => (p.dev?.history?.length ?? 0) > 0));
+    after.lastDevelopment.length > 0 || after.roster.some((p) => (p.dev?.history?.length ?? 0) > 0),
+    `${after.lastDevelopment.length} development reports`);
 }
 
 /* --------------------------------- the offseason systems, in Challenge Mode */
@@ -167,39 +170,54 @@ if (after && !after.challenge.offers?.length && after.challenge.totalYears === 1
 // somebody else's programme or an empty screen.
 {
   const s = await save();
-  if (s && !s.challenge.offers?.length && !s.challenge.complete) {
+  const offseason = s && !s.challenge.offers?.length && !s.challenge.complete;
+  if (offseason) {
     const before = (await page.locator('.wrapper').innerText()).toLowerCase();
     check('the offseason names the level\'s own transfer window',
       /player movement|transfer portal|free agency/.test(before));
     check('the offseason offers recruiting too', before.includes('recruiting board'));
+  } else {
+    // Promoted or the career ended: take the job so there is a hub to work from.
+    const took = await clickText(/Take the .* job/i);
+    check('a job can be taken', took || !!s.challenge.complete);
+    await settle(700);
+  }
 
-    const opened = await clickText(/Open (player movement|transfer portal|free agency)/i);
-    check('the transfer window opens from the offseason', opened);
-    const portal = (await page.locator('.wrapper').innerText()).toLowerCase();
-    check('it is THIS career\'s window, not another save\'s',
-      !portal.includes('no programme yet') && !portal.includes('there is no dynasty save'));
+  // Whichever path we came by, the window must open on THIS career. Opening it
+  // against the dynasty save is the bug this suite exists for.
+  const opened = await clickText(/Open (player movement|transfer portal|free agency)/i)
+    || await clickText(/^(Player movement|Transfer portal|Free agency)/i);
+  check('the transfer window opens in Challenge Mode', opened);
+  const portal = (await page.locator('.wrapper').innerText()).toLowerCase();
+  check('it is THIS career\'s window, not another save\'s',
+    !portal.includes('no programme yet') && !portal.includes('there is no dynasty save'));
+
+  const now = await save();
+  if (offseason) {
     await settle(400);
     const cards = await page.getByRole('button', { name: /Make your pitch|Go back to him|Nothing more to say/i }).count();
-    check('players are available', s.market.length > 0 && cards > 0,
-      `${s.market.length} in the save, ${cards} on screen`);
-    check('approaches are available', (s.pitchesLeft ?? 0) > 0, `${s.pitchesLeft}`);
+    check('players are available', now.market.length > 0 && cards > 0,
+      `${now.market.length} in the save, ${cards} on screen`);
+    check('approaches are available', (now.pitchesLeft ?? 0) > 0, `${now.pitchesLeft}`);
 
     const pitched = await clickText(/Make your pitch|Go back to him/i);
     const afterPitch = await save();
     check('an approach can be made from Challenge Mode',
-      pitched ? afterPitch.pitchesLeft < s.pitchesLeft : true,
-      `${s.pitchesLeft} -> ${afterPitch.pitchesLeft}`);
-    await back();
-    await settle();
-
-    // The coach's office has to work here too.
-    const staff = await clickText(/Spend coaching points/i);
-    const officeText = (await page.locator('.wrapper').innerText()).toLowerCase();
-    check('the office opens on this career',
-      staff && !officeText.includes('no programme yet'),
-      staff ? 'opened' : 'button not found');
-    if (staff) { await back(); await settle(); }
+      pitched ? afterPitch.pitchesLeft < now.pitchesLeft : true,
+      `${now.pitchesLeft} -> ${afterPitch.pitchesLeft}`);
+  } else {
+    check('the window is correctly shut in season', now.market.length === 0);
   }
+  await back();
+  await settle();
+
+  // The coach's office has to work here too.
+  const staff = await clickText(/Spend coaching points|^Staff/i);
+  const officeText = (await page.locator('.wrapper').innerText()).toLowerCase();
+  check('the office opens on this career',
+    staff && !officeText.includes('no programme yet'),
+    staff ? 'opened' : 'button not found');
+  if (staff) { await back(); await settle(); }
 }
 
 /* ------------------------------------------------------------- the tracker */

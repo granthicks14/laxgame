@@ -136,30 +136,30 @@ const LEVEL_PROFILE: Record<Level, LevelProfile> = {
   // High school: fewer possessions, weaker keepers, and the widest gap between
   // the best programme in a district and the worst.
   hs: {
-    possessions: 32, shotRate: 1.02, onGoal: 0.6, savePct: 0.56,
-    groundBalls: 26, turnovers: 19, spread: 1.35, twoPointRate: 0, enginePace: 0.94,
+    possessions: 32, shotRate: 1.02, onGoal: 0.6, savePct: 0.54,
+    groundBalls: 26, turnovers: 19, spread: 1.35, twoPointRate: 0, enginePace: 1.06,
   },
   d3: {
-    possessions: 35, shotRate: 1.08, onGoal: 0.61, savePct: 0.54,
-    groundBalls: 29, turnovers: 17, spread: 1.15, twoPointRate: 0, enginePace: 0.83,
+    possessions: 35, shotRate: 1.08, onGoal: 0.61, savePct: 0.53,
+    groundBalls: 29, turnovers: 17, spread: 1.15, twoPointRate: 0, enginePace: 0.80,
   },
   d2: {
-    possessions: 35, shotRate: 1.08, onGoal: 0.62, savePct: 0.54,
-    groundBalls: 30, turnovers: 16, spread: 1.0, twoPointRate: 0, enginePace: 0.91,
+    possessions: 35, shotRate: 1.08, onGoal: 0.62, savePct: 0.53,
+    groundBalls: 30, turnovers: 16, spread: 1.0, twoPointRate: 0, enginePace: 0.93,
   },
   d1: {
-    possessions: 36, shotRate: 1.1, onGoal: 0.62, savePct: 0.53,
-    groundBalls: 31, turnovers: 15, spread: 0.95, twoPointRate: 0, enginePace: 0.70,
+    possessions: 36, shotRate: 1.1, onGoal: 0.62, savePct: 0.55,
+    groundBalls: 31, turnovers: 15, spread: 0.95, twoPointRate: 0, enginePace: 0.74,
   },
   semipro: {
-    possessions: 35, shotRate: 1.08, onGoal: 0.62, savePct: 0.53,
-    groundBalls: 29, turnovers: 15, spread: 0.9, twoPointRate: 0, enginePace: 0.82,
+    possessions: 35, shotRate: 1.08, onGoal: 0.62, savePct: 0.51,
+    groundBalls: 29, turnovers: 15, spread: 0.9, twoPointRate: 0, enginePace: 0.94,
   },
   // The professional game: a shot clock, the best finishers alive, the best
   // keepers alive, and a two-point arc that adds about a goal a game.
   pll: {
-    possessions: 36, shotRate: 1.14, onGoal: 0.63, savePct: 0.54,
-    groundBalls: 30, turnovers: 14, spread: 0.8, twoPointRate: 0.09, enginePace: 1.05,
+    possessions: 36, shotRate: 1.14, onGoal: 0.63, savePct: 0.55,
+    groundBalls: 30, turnovers: 14, spread: 0.8, twoPointRate: 0.09, enginePace: 1.01,
   },
 };
 
