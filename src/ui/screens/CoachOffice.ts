@@ -1,5 +1,6 @@
 import { h, clear } from '../dom';
 import type { App, Screen } from '../App';
+import type { CareerMode } from '../../league/types';
 import { screenEl, topbar, panel, emptyPanel } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
 import { syncUserTeamRatings, userTeam } from '../../league/career';
@@ -17,7 +18,7 @@ import type { Career } from '../../league/types';
 export class CoachOfficeScreen implements Screen {
   el: HTMLElement;
 
-  constructor(app: App, mode: 'season' | 'dynasty') {
+  constructor(app: App, mode: CareerMode) {
     const career = loadCareer(mode);
     if (!career) {
       this.el = screenEl(topbar(app, 'Coach'), h('div', { class: 'scroll' },

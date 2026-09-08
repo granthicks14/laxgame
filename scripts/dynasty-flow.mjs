@@ -13,7 +13,7 @@ import { chromium } from 'playwright';
 import { chromiumPath } from './chromium.mjs';
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
-const SAVE = 'lsl.career.dynasty.v5';
+const SAVE = 'lsl.career.dynasty.v6';
 
 const results = [];
 const problems = [];

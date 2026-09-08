@@ -28,6 +28,13 @@ const PLAYER_RADIUS = 0.62;
 const GOAL_HEIGHT = 2; // yards (6 ft)
 const CREASE_PAD = 0.15;
 
+/**
+ * The average overall of a typical high school squad. Every shooting, saving
+ * and faceoff constant in this engine was tuned against players on that scale,
+ * so it is the yardstick a higher level is measured back to.
+ */
+const HS_PAR = 66;
+
 export class Match {
   readonly cfg: MatchConfig;
   readonly events = new Emitter<MatchEvents>();
@@ -78,6 +85,14 @@ export class Match {
   /** Separate, larger swing for goaltending. A keeper standing on his head is the
    *  single biggest reason an underdog wins a lacrosse game. */
   readonly goalieForm: Record<Side, number> = { home: 0, away: 0 };
+  /**
+   * The standard this particular game is played to: the average overall of the
+   * two squads on the field. Keepers are judged against it rather than against
+   * an absolute number, because a 95 goalie facing 95 shooters is an ordinary
+   * professional goalie, not an unbeatable high school one. Without this the
+   * game gets LOWER scoring the higher up the ladder you go, which is backwards.
+   */
+  readonly par: number;
 
   /** The most recent shot, for on-screen feedback and for balance tooling. */
   lastShot: ShotInfo | null = null;
@@ -100,6 +115,8 @@ export class Match {
     this.diff = DIFFICULTIES[cfg.difficulty];
     this.commentary = new Commentary(this.rng.seed);
     this.setups = { home: cfg.home, away: cfg.away };
+    const all = [...cfg.home.roster, ...cfg.away.roster];
+    this.par = all.length ? all.reduce((n, p) => n + p.overall, 0) / all.length : HS_PAR;
     this.humanSide = cfg.home.human ? 'home' : cfg.away.human ? 'away' : null;
     this.clock = cfg.quarterSeconds;
 
@@ -265,6 +282,16 @@ export class Match {
   opponentsOf(p: MatchPlayer): MatchPlayer[] {
     return this.teams[otherSide(p.side)];
   }
+  /**
+   * A keeper's rating for save purposes, re-centred on the high school scale
+   * the shooting model was tuned against. A professional keeper is still better
+   * than a high school one — his own squad's par pulls him back only as far as
+   * the shooters he is facing.
+   */
+  keeperRating(g: MatchPlayer): number {
+    return clamp(g.data.attrs.goalie - (this.par - HS_PAR) * 0.85, 25, 99);
+  }
+
   goalieOf(side: Side): MatchPlayer {
     return this.teams[side][0];
   }
@@ -1004,7 +1031,7 @@ export class Match {
       // A keeper on a hot night covers more of the cage, not just holds more of
       // what he reaches. This is the single biggest source of upsets.
       const diffReach = this.setups[side].human ? 1 : this.diff.goalieReach;
-      const reach = saveRadius(g) * diffReach
+      const reach = saveRadius(this.keeperRating(g)) * diffReach
         * (1 + (this.isPractice ? 0 : this.goalieForm[side] * 1.9));
       const d = pointSegDist(g.x, g.y, prevX, prevY, b.x, b.y);
       if (d > reach) continue;
@@ -1013,7 +1040,7 @@ export class Match {
       const power = clamp(speed / SIM.shotSpeedMax, 0, 1);
       // Even in position, a rocket can beat a keeper's hands.
       const hold = clamp(
-        0.58 + g.data.attrs.goalie / 260 - speed / 180 - (b.z < 0.4 ? 0.09 : 0)
+        0.58 + this.keeperRating(g) / 260 - speed / 180 - (b.z < 0.4 ? 0.09 : 0)
         + (this.isPractice ? 0 : this.form[side] * 0.005 + this.goalieForm[side]),
         0.2, 0.92,
       );

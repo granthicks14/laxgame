@@ -29,7 +29,9 @@ import { POSITION_LABEL } from '../data/constants';
 import {
   generateRoster, sortDepthChart, starTier, type PlayerData,
 } from '../data/players';
-import { getTeam, teamsInClass, type ClassKey, type TeamData } from '../data/teams';
+import type { GameTeam, TeamData } from '../data/teams';
+import { teamsInConference as WORLD_TEAMS_IN, tryWorldTeam } from '../data/world';
+import type { Level } from '../data/levels';
 import { coachEffects, type CoachStaff } from './coaching';
 
 export type TransferReason =
@@ -59,12 +61,55 @@ export interface TransferCandidate {
   lostToTeamId?: string;
   /** Pitches you have already spent on him. */
   attempts: number;
+  /**
+   * 0..100 — how well you know this player. A man you played against twice is
+   * a known quantity; one from the other side of the league is a report.
+   * Set when the market opens and raised by the scouts on your payroll.
+   */
+  known: number;
+}
+
+/**
+ * What the coach can actually say about a transfer target. A player he has
+ * faced is a known quantity; one from across the league is an estimate, and the
+ * scouting staff is what narrows it.
+ */
+export interface TransferEstimate {
+  overall: number;
+  potential: number;
+  margin: number;
+  /** Plain words for the screen. */
+  confidence: string;
+}
+
+export function transferEstimate(c: TransferCandidate): TransferEstimate {
+  const t = clamp((c.known ?? 60) / 100, 0, 1);
+  const known = t * t * (3 - 2 * t);
+  const margin = Math.max(0, Math.round(10 * (1 - known)));
+  // A stable per-candidate offset, so the number does not jitter per render.
+  const off = ((Rng.hash(c.id) % 200) / 100 - 1) * margin * 0.6;
+  return {
+    overall: Math.round(clamp(c.player.overall + off, 20, 99)),
+    potential: Math.round(clamp(c.player.potential + off, 20, 99)),
+    margin,
+    confidence: margin === 0 ? 'You know exactly what he is'
+      : margin <= 3 ? 'Your people have watched him closely'
+        : margin <= 6 ? 'Second-hand reports only'
+          : 'You are going on a highlight reel',
+  };
 }
 
 export interface InterestBreakdown {
   /** 0..100 overall. */
   score: number;
   factors: { label: string; delta: number }[];
+}
+
+/** Programmes a player would plausibly pick instead: his own conference. */
+function rivalProgrammes(teamId: string): GameTeam[] {
+  const wt = tryWorldTeam(teamId);
+  if (!wt) return [];
+  return WORLD_TEAMS_IN(wt.conference);
 }
 
 /** Starters plus one for cover: the point past which a team stops being short. */
@@ -80,18 +125,27 @@ export const MAX_PITCHES = 3;
  * exactly as those teams generate them, so a transfer is a player who genuinely
  * existed on somebody's depth chart.
  */
+export interface MarketKnowledge {
+  /** Teams the coach actually played this season: film exists on those players. */
+  playedIds: string[];
+  /** Scouts on the payroll, which is what closes the gap on everybody else. */
+  scouts: number;
+}
+
 export function buildMarket(
-  seed: number, year: number, userTeamId: string, classKey: ClassKey,
+  seed: number, year: number, userTeamId: string, sources: GameTeam[],
   standings: Record<string, { wins: number; losses: number }>,
+  level: Level = 'hs',
+  knowledge: MarketKnowledge = { playedIds: [], scouts: 0 },
 ): TransferCandidate[] {
   const rng = new Rng(`${seed}:market:${year}`);
   const pool: TransferCandidate[] = [];
 
-  // Look at this class and the ones either side of it: a player moves between
-  // programmes he has actually played against.
-  const teams = teamsInClass(classKey).filter((t) => t.id !== userTeamId);
+  // Candidates come from programmes the coach has actually played against, so a
+  // transfer is a player who genuinely existed on somebody's depth chart.
+  const teams = sources.filter((t) => t.id !== userTeamId);
   for (const team of teams) {
-    const roster = sortDepthChart(generateRoster(team, `${seed}:${year}:${team.id}`));
+    const roster = sortDepthChart(generateRoster(team, `${seed}:${year}:${team.id}`, level));
     const record = standings[team.id];
     const losing = record ? record.losses > record.wins + 1 : false;
 
@@ -116,10 +170,20 @@ export function buildMarket(
           currentDepth: depth,
           status: 'open',
           attempts: 0,
+          known: 0,
         });
         void pos;
       }
     }
+  }
+
+  // How well the coach knows each of them, before the cut.
+  for (const c of pool) {
+    const seen = knowledge.playedIds.includes(c.fromTeamId);
+    c.known = clamp(
+      (seen ? 82 : 34) + knowledge.scouts * 9 + rng.range(-6, 6),
+      0, 100,
+    );
   }
 
   // Best stories first, then a cut, so the market is short and interesting.
@@ -272,7 +336,7 @@ export function pitch(
   }
   // Somebody else in the league takes him: a rival with a real need.
   if (rng.next() < 0.3) {
-    const rivals = teamsInClass(getTeam(c.fromTeamId).classKey)
+    const rivals = rivalProgrammes(c.fromTeamId)
       .filter((t) => t.id !== c.fromTeamId && t.id !== prog.team.id);
     const to = rivals.length ? rng.pick(rivals) : null;
     return {

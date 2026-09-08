@@ -117,6 +117,7 @@ const routes = [
   ['Settings', async () => { await sweep('Settings'); }],
   ['Season', async () => { await sweep('Season entry'); }],
   ['Dynasty', async () => { await sweep('Dynasty entry'); }],
+  ['Challenge', async () => { await sweep('Challenge entry', /Take the job|Abandon/i); }],
 ];
 
 for (const [label, fn] of routes) {
@@ -162,11 +163,40 @@ async function toHub() {
 for (const [name, label] of [
   ['Team', 'Team screen'], ['Schedule', 'Schedule'], ['Standings', 'Standings'],
   ['Statistics', 'Statistics'], ['Staff', "Coach's office"], ['Transfers', 'Transfer portal'],
+  ['Recruiting board', 'Recruiting board'],
 ]) {
   await toHub();
   const b = page.locator('button.btn', { hasText: name }).first();
   if (await b.count()) {
     await b.click(); await settle(400);
+    if (name === 'Recruiting board') {
+      // The prospect page and the scout market are both a click deeper. Do them
+      // before sweeping the board itself, because sweeping clicks the back
+      // arrow and wanders off the screen.
+      const openBoard = async () => {
+        if (await page.locator('.list__row').count()) return true;
+        // Sweeping clicks the back arrow too, so we may be anywhere. Getting
+        // home can fail outright — that is not an audit failure, just the end
+        // of what this branch can reach.
+        try { await toHub(); } catch { return false; }
+        const again = page.locator('button.btn', { hasText: 'Recruiting board' }).first();
+        if (await again.count()) { await again.click().catch(() => {}); await settle(420); }
+        return await page.locator('.list__row').count() > 0;
+      };
+      if (await openBoard()) {
+        await page.locator('.list__row').first().click();
+        await settle(400);
+        await sweep('Prospect report', /Offer him a place|Draft him|Sign as an undrafted/i);
+      }
+      if (await openBoard()) {
+        const market = page.getByRole('button', { name: /Scout market/i }).first();
+        if (await market.count()) {
+          await market.click(); await settle(400);
+          await sweep('Scout market', /^\d+ CP$/);
+        }
+      }
+      await openBoard();
+    }
     await sweep(label, /Quit game|Delete|Start a new|Run it back|Finish and clear|Needs \d+ CP|Nothing more to say|No pitches left/i);
     if (name === 'Staff') {
       // Buying staff is a spend, not a no-op; the sweep skips it because a

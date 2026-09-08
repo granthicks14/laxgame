@@ -1,20 +1,21 @@
 import { load, save, removeRaw, readRaw, writeRaw } from '../core/storage';
-import { CAREER_VERSION, type Career } from '../league/types';
+import { CAREER_VERSION, type Career, type CareerMode } from '../league/types';
 import { tryGetTeam } from '../data/teams';
 import { EMPTY_STAFF } from '../league/coaching';
 
 const RETIRED_KEY = 'lsl.retiredSave';
 
 /** Versions this build can read and upgrade in place. */
-const MIGRATABLE = [4];
+const MIGRATABLE = [4, 5];
 
-const key = (mode: 'season' | 'dynasty'): string => `lsl.career.${mode}.v${CAREER_VERSION}`;
+const key = (mode: CareerMode): string => `lsl.career.${mode}.v${CAREER_VERSION}`;
 
 /**
  * Fills in everything a newer build expects. Version 5 added the coach's
  * office, promotion and relegation, the transfer market and the development
- * report — all of which have sensible empty values, so an in-progress career
- * upgrades rather than being thrown away.
+ * report; version 6 added the level system, so a career that predates it is a
+ * high school career in its own district. All of them have sensible values, so
+ * an in-progress career upgrades rather than being thrown away.
  */
 function migrateCareer(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;
@@ -29,6 +30,19 @@ function migrateCareer(raw: unknown): unknown {
   if (!Array.isArray(c.market)) c.market = [];
   if (typeof c.pitchesLeft !== 'number') c.pitchesLeft = 0;
   if (!Array.isArray(c.lastDevelopment)) c.lastDevelopment = [];
+
+  // v5 -> v6: the world gained five levels above high school. Every existing
+  // career is a high school one, and its "conference" is its own class.
+  if (typeof c.level !== 'string') c.level = 'hs';
+  if (typeof c.conferenceId !== 'string') {
+    const team = typeof c.teamId === 'string' ? tryGetTeam(c.teamId) : null;
+    c.conferenceId = team ? team.classKey : 'a';
+  }
+  if (c.nationalSeeds === undefined) c.nationalSeeds = null;
+  if (!Array.isArray(c.autoBids)) c.autoBids = [];
+  // The recruiting class opens on the next offseason for an upgraded save.
+  if (c.recruiting === undefined) c.recruiting = null;
+  if (c.challenge === undefined) c.challenge = null;
   c.version = CAREER_VERSION;
   return c;
 }
@@ -48,7 +62,7 @@ function isValidCareer(c: unknown): c is Career {
   );
 }
 
-export function loadCareer(mode: 'season' | 'dynasty'): Career | null {
+export function loadCareer(mode: CareerMode): Career | null {
   // Look for this version first, then anything upgradable, so a career in
   // progress is carried forward instead of being lost to a version bump.
   let raw = load<unknown>(key(mode), null);
@@ -79,7 +93,7 @@ export function loadCareer(mode: 'season' | 'dynasty'): Career | null {
  */
 export function retireOldSaves(): void {
   const found: string[] = [];
-  for (const mode of ['season', 'dynasty'] as const) {
+  for (const mode of ['season', 'dynasty', 'challenge'] as const) {
     for (let v = 1; v < CAREER_VERSION; v++) {
       if (MIGRATABLE.includes(v)) continue; // these are upgraded, not retired
       const oldKey = `lsl.career.${mode}.v${v}`;
@@ -104,10 +118,10 @@ export function saveCareer(career: Career): boolean {
   return save(key(career.mode), career);
 }
 
-export function deleteCareer(mode: 'season' | 'dynasty'): void {
+export function deleteCareer(mode: CareerMode): void {
   removeRaw(key(mode));
 }
 
-export function hasCareer(mode: 'season' | 'dynasty'): boolean {
+export function hasCareer(mode: CareerMode): boolean {
   return loadCareer(mode) !== null;
 }

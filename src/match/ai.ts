@@ -559,8 +559,8 @@ function pointSeg(px: number, py: number, ax: number, ay: number, bx: number, by
 
 /** How much of the cage a keeper covers with body and stick, in yards. The goal
  *  mouth is 2 yards wide, so this deliberately never covers the whole thing. */
-export function saveRadius(g: MatchPlayer): number {
-  return 0.25 + g.data.attrs.goalie / 300;
+export function saveRadius(goalieRating: number): number {
+  return 0.25 + goalieRating / 300;
 }
 
 export function updateGoalie(m: Match, g: MatchPlayer, dt: number): void {
@@ -595,7 +595,8 @@ export function updateGoalie(m: Match, g: MatchPlayer, dt: number): void {
   // first, which is exactly why picking a corner beats him.
   if (b.state === 'shot' && isComingAt(m, g)) {
     const reactMul = m.setups[g.side].human ? 1 : m.diff.goalieReaction;
-    const reactionWindow = clamp(0.34 - a.goalie / 520, 0.08, 0.34) / Math.max(0.5, reactMul);
+    const keeper = m.keeperRating(g);
+    const reactionWindow = clamp(0.34 - keeper / 520, 0.08, 0.34) / Math.max(0.5, reactMul);
     g.aiMark += dt;
     if (g.aiMark < reactionWindow) {
       // Frozen for a beat — still holding his arc position.
@@ -607,7 +608,7 @@ export function updateGoalie(m: Match, g: MatchPlayer, dt: number): void {
     const tCross = timeToLine(m, own.x);
     const predictedY = b.y + b.vy * clamp(tCross, 0, 0.7);
     // Weaker keepers guess late and short.
-    const blend = clamp(0.3 + a.goalie / 190, 0.25, 0.95) * clamp(reactMul, 0.6, 1.1);
+    const blend = clamp(0.3 + m.keeperRating(g) / 190, 0.25, 0.95) * clamp(reactMul, 0.6, 1.1);
     const targetY = b.y + (predictedY - b.y) * blend;
     const ty = clamp(targetY, own.y - 3.2, own.y + 3.2);
     const tx = own.x + dir * 0.55;

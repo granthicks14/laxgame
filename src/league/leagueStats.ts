@@ -16,6 +16,7 @@ import { Rng } from '../core/rng';
 import { generateRoster, type PlayerData } from '../data/players';
 import type { Position } from '../data/constants';
 import { getTeam } from '../data/teams';
+import { tryWorldTeam } from '../data/world';
 import type { Career, ScheduledGame } from './types';
 
 export interface StatLine {
@@ -76,10 +77,10 @@ const rosterCache = new Map<string, PlayerData[]>();
 
 export function seasonRoster(career: Career, teamId: string): PlayerData[] {
   if (teamId === career.teamId) return career.roster;
-  const key = `${career.seed}:${career.year}:${teamId}`;
+  const key = `${career.seed}:${career.year}:${career.level}:${teamId}`;
   let roster = rosterCache.get(key);
   if (!roster) {
-    roster = generateRoster(getTeam(teamId), key);
+    roster = generateRoster(tryWorldTeam(teamId) ?? getTeam(teamId), key, career.level);
     // One season of one career at a time is all that is ever needed.
     if (rosterCache.size > 120) rosterCache.clear();
     rosterCache.set(key, roster);

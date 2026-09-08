@@ -3,11 +3,18 @@ import type { ClassKey, TeamRatings } from '../data/teams';
 import type { Tactics } from '../data/tactics';
 import type { DifficultyKey } from '../data/difficulty';
 import type { GameLengthKey } from '../data/constants';
+import type { Level } from '../data/levels';
+import type { Bracket, PlayoffRound } from '../world/season';
+
+/** Challenge shares the season engine with Dynasty; it just never stops. */
+export type CareerMode = 'season' | 'dynasty' | 'challenge';
 import type { CoachStaff } from './coaching';
 import type { TransferCandidate } from './transfers';
 import type { MovementReport } from './promotion';
+import type { RecruitingState } from '../scouting/recruiting';
+import type { ChallengeState } from '../challenge/state';
 
-export type PlayoffRound = 'QF' | 'SF' | 'F';
+export type { PlayoffRound } from '../world/season';
 
 export interface ScheduledGame {
   id: string;
@@ -19,6 +26,10 @@ export interface ScheduledGame {
   awayScore: number;
   rivalry: boolean;
   playoff: PlayoffRound | null;
+  /** Which competition a playoff game belongs to. Absent means the league's own. */
+  bracket?: Bracket;
+  /** False for a non-conference fixture. Absent means in-conference. */
+  inConference?: boolean;
   /** True when the human's team is involved. */
   featured: boolean;
 }
@@ -65,11 +76,15 @@ export interface Alumnus {
 
 export interface Career {
   version: number;
-  mode: 'season' | 'dynasty';
+  mode: CareerMode;
   seed: number;
   year: number;
   teamId: string;
   classKey: ClassKey;
+  /** Which tier of the sport this season is played at. */
+  level: Level;
+  /** Conference or class the coach's team plays in. */
+  conferenceId: string;
   difficulty: DifficultyKey;
   gameLength: GameLengthKey;
   tactics: Tactics;
@@ -97,6 +112,10 @@ export interface Career {
   pitchesLeft: number;
   /** Development report from the last offseason. */
   lastDevelopment: DevelopmentEntry[];
+  /** The recruiting class currently being worked. Runs alongside the season. */
+  recruiting: RecruitingState | null;
+  /** Only set in Challenge Mode: the coach's whole career, across programmes. */
+  challenge: ChallengeState | null;
 
   history: SeasonRecord[];
   alumni: Alumnus[];
@@ -106,10 +125,14 @@ export interface Career {
 
   /** Set once the regular season is complete. */
   playoffSeeds: string[] | null;
+  /** Field for the national bracket, at levels that have one. */
+  nationalSeeds: string[] | null;
+  /** Conference champions across the level, filled in when the bracket is drawn. */
+  autoBids: string[];
   eliminated: boolean;
   seasonComplete: boolean;
   /** Result text for the season summary screen. */
   finish: string | null;
 }
 
-export const CAREER_VERSION = 5;
+export const CAREER_VERSION = 6;

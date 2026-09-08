@@ -17,7 +17,13 @@
     "test:input": "node scripts/input-stress.mjs",
     "ratings": "esbuild src/dev/ratings.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-ratings.mjs --log-level=error && node node_modules/.cache/lsl-ratings.mjs",
     "dynasty": "esbuild src/dev/dynasty.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-dynasty.mjs --log-level=error && node node_modules/.cache/lsl-dynasty.mjs",
-    "test:dynasty": "node scripts/dynasty-flow.mjs"
+    "test:dynasty": "node scripts/dynasty-flow.mjs",
+    "challenge": "esbuild src/dev/challenge.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-challenge.mjs --log-level=error && node node_modules/.cache/lsl-challenge.mjs",
+    "scouting": "esbuild src/dev/scouting.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-scouting.mjs --log-level=error && node node_modules/.cache/lsl-scouting.mjs",
+    "test:challenge": "node scripts/challenge-flow.mjs",
+    "ladder": "esbuild src/dev/ladder.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-ladder.mjs --log-level=error && node node_modules/.cache/lsl-ladder.mjs",
+    "world": "esbuild src/dev/world-check.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-world.mjs --log-level=error && node node_modules/.cache/lsl-world.mjs",
+    "levels": "esbuild src/dev/levels.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-levels.mjs --log-level=error && node node_modules/.cache/lsl-levels.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

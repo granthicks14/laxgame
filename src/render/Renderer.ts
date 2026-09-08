@@ -1,5 +1,6 @@
 import { FIELD, attackingGoal, type Side } from '../data/constants';
 import { jerseyFor } from '../data/teams';
+import { tryWorldTeam } from '../data/world';
 import type { Match } from '../match/Match';
 import type { MatchPlayer } from '../match/types';
 import { starTier } from '../data/players';
@@ -95,7 +96,12 @@ export class Renderer {
   prepare(match: Match): void {
     const homeTeam = match.setups.home.team;
     const awayTeam = match.setups.away.team;
-    this.weather = weatherFor(match.cfg.seed ?? match.rng.seed, homeTeam.homeField.time);
+    // Where the home team plays decides the spring it plays in.
+    this.weather = weatherFor(
+      match.cfg.seed ?? match.rng.seed,
+      homeTeam.homeField.time,
+      tryWorldTeam(homeTeam.id)?.region ?? 'texas',
+    );
     this.theme = venueTheme(homeTeam.homeField, this.weather);
     this.jerseys = {
       home: jerseyFor(homeTeam, true),

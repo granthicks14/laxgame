@@ -1133,3 +1133,38 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
   animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
 }
+
+/* --- prospect and news lists ------------------------------------------- */
+.list { display: flex; flex-direction: column; }
+.list__row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 12px; background: transparent; border: none;
+  border-bottom: 1px solid var(--line-soft); text-align: left;
+}
+.list__row:last-child { border-bottom: none; }
+.list__row:hover { background: #ffffff08; }
+.list__row:active { background: #ffffff12; }
+.list__rank { flex: 0 0 auto; width: 2.6rem; color: var(--muted); font-size: 12px; }
+.list__name {
+  font-family: var(--display); font-size: 15px; letter-spacing: .04em;
+  text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pill--xs { padding: 1px 5px; font-size: 9px; letter-spacing: .1em; }
+.pip { border-radius: 1px; }
+
+/* --- the ladder --------------------------------------------------------- */
+.rung {
+  display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 10px;
+  padding: 8px 4px; border-bottom: 1px solid var(--line-soft);
+}
+.rung:last-child { border-bottom: none; }
+.rung__dot {
+  width: 14px; height: 14px; margin: 0 auto; border: 2px solid var(--line);
+  background: var(--panel-3);
+}
+.rung.is-done .rung__dot { background: var(--green); border-color: var(--green); }
+.rung.is-here .rung__dot { background: var(--accent); border-color: var(--accent); }
+.rung.is-here { background: #ffc53d14; }
+.rung__name { font-family: var(--display); letter-spacing: .05em; text-transform: uppercase; }
+.rung.is-locked .rung__name { color: var(--muted); }
+.rung__need { font-size: 11px; color: var(--muted); }

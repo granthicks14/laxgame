@@ -1,12 +1,17 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
+import type { CareerMode } from '../../league/types';
 import { screenEl, topbar, panelFlush, teamBadge, emptyPanel } from '../components';
 import { loadCareer } from '../../state/saves';
-import { classMembers, effectiveTeam, opponentOf, playoffFieldSize, roundName, standingsSorted, userIsHome, winPct } from '../../league/career';
-import type { Career, ScheduledGame } from '../../league/types';
-import { CLASSES } from '../../data/teams';
+import {
+  effectiveTeam, leagueMembers, opponentOf, playoffFieldSize, roundNameIn,
+  seasonFormat, standingsSorted, userIsHome, winPct,
+} from '../../league/career';
+import { divisionName } from './divisionName';
+import type { Bracket } from '../../world/season';
+import type { Career, PlayoffRound, ScheduledGame } from '../../league/types';
 
-function requireCareer(app: App, mode: 'season' | 'dynasty', title: string): Career | HTMLElement {
+function requireCareer(app: App, mode: CareerMode, title: string): Career | HTMLElement {
   const c = loadCareer(mode);
   if (c) return c;
   return screenEl(
@@ -22,11 +27,14 @@ function requireCareer(app: App, mode: 'season' | 'dynasty', title: string): Car
 export class StandingsScreen implements Screen {
   el: HTMLElement;
 
-  constructor(app: App, mode: 'season' | 'dynasty') {
+  constructor(app: App, mode: CareerMode) {
     const res = requireCareer(app, mode, 'Standings');
     if (res instanceof HTMLElement) { this.el = res; return; }
     const career = res;
-    const field = playoffFieldSize(classMembers(career, career.classKey).length);
+    const format = seasonFormat(career);
+    const field = format.conferenceField > 0
+      ? format.conferenceField
+      : playoffFieldSize(leagueMembers(career).length);
     const rows = standingsSorted(career).map((r, i) => {
       const t = effectiveTeam(career, r.teamId);
       const diff = r.goalsFor - r.goalsAgainst;
@@ -46,7 +54,7 @@ export class StandingsScreen implements Screen {
     });
 
     this.el = screenEl(
-      topbar(app, 'Standings', CLASSES[career.classKey].short),
+      topbar(app, 'Standings', divisionName(career)),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
           panelFlush(null,
@@ -56,7 +64,7 @@ export class StandingsScreen implements Screen {
                 h('th', { text: 'PCT' }), h('th', { text: 'GF' }), h('th', { text: 'GA' }), h('th', { text: 'DIFF' }))),
               h('tbody', null, ...rows))),
           h('div', { class: 'tiny', text: field >= 4
-            ? `Top ${field} teams reach the ${CLASSES[career.classKey].short} playoffs — the line under ${field}${field === 1 ? 'st' : 'th'} is the cut.`
+            ? `Top ${field} teams reach the ${divisionName(career)} playoffs — the line under ${field}${field === 1 ? 'st' : 'th'} is the cut.`
             : 'The top two teams meet in the district championship.' }),
         )),
     );
@@ -66,7 +74,7 @@ export class StandingsScreen implements Screen {
 export class ScheduleScreen implements Screen {
   el: HTMLElement;
 
-  constructor(app: App, mode: 'season' | 'dynasty') {
+  constructor(app: App, mode: CareerMode) {
     const res = requireCareer(app, mode, 'Schedule');
     if (res instanceof HTMLElement) { this.el = res; return; }
     const career = res;
@@ -99,7 +107,7 @@ export class ScheduleScreen implements Screen {
         h('div', { class: 'stack', style: 'gap:0;flex:1 1 auto;min-width:0' },
           h('div', { style: 'font-size:14px' }, `${isHome ? 'vs' : 'at'} ${opp.short}`),
           h('div', { class: 'tiny' },
-            g.playoff ? roundName(g.playoff) : g.rivalry ? 'Rivalry' : `OVR ${opp.overall}`)),
+            g.playoff ? roundNameIn(career, g) : g.rivalry ? 'Rivalry' : `OVR ${opp.overall}`)),
         g.played
           ? h('div', { class: `num ${cls}`, style: 'font-size:15px' }, `${won ? 'W' : 'L'} ${you}-${them}`)
           : h('span', { class: 'pill', text: 'Upcoming' }),
@@ -107,12 +115,15 @@ export class ScheduleScreen implements Screen {
   }
 
   private bracket(career: Career): HTMLElement {
-    const rounds: ('QF' | 'SF' | 'F')[] = ['QF', 'SF', 'F'];
-    const blocks = rounds.map((r) => {
-      const games = career.schedule.filter((g) => g.playoff === r);
+    // Colleges play a conference tournament and then a national bracket, so the
+    // page walks every competition in the order it is decided.
+    const rounds: PlayoffRound[] = ['R16', 'QF', 'SF', 'F'];
+    const brackets: Bracket[] = ['league', 'conference', 'national'];
+    const blocks = brackets.flatMap((b) => rounds.map((r) => {
+      const games = career.schedule.filter((g) => g.playoff === r && (g.bracket ?? 'league') === b);
       if (!games.length) return null;
       return h('div', { class: 'panel' },
-        h('div', { class: 'panel__head', text: roundName(r) }),
+        h('div', { class: 'panel__head', text: roundNameIn(career, games[0]) }),
         h('div', { class: 'panel__body stack', style: 'gap:6px' },
           ...games.map((g) => {
             const home = effectiveTeam(career, g.homeId);
@@ -125,10 +136,10 @@ export class ScheduleScreen implements Screen {
               h('span', { style: `flex:1 1 0;text-align:right;${homeWon ? 'font-weight:700' : 'color:var(--text-2)'}`, text: home.short }),
               teamBadge(home, 'sm'));
           })));
-    }).filter(Boolean) as HTMLElement[];
+    })).filter(Boolean) as HTMLElement[];
 
     return h('div', { class: 'stack' },
-      h('div', { class: 'eyebrow', style: 'margin-top:8px', text: 'District playoffs' }),
+      h('div', { class: 'eyebrow', style: 'margin-top:8px', text: 'Postseason' }),
       ...blocks);
   }
 }

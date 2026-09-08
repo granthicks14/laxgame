@@ -4,6 +4,7 @@ import type { DifficultyKey } from '../data/difficulty';
 import type { TeamData } from '../data/teams';
 import { areRivals } from '../data/teams';
 import type { MatchConfig, PracticeConfig } from '../match/types';
+import type { Level } from '../data/levels';
 import { DEFAULT_TACTICS, type Tactics } from '../data/tactics';
 import type { CoachEffects } from './coaching';
 
@@ -38,6 +39,12 @@ export interface MatchSetupOptions {
   practice?: PracticeConfig;
   /** Show a highlight replay after each goal. Defaults to on. */
   replays?: boolean;
+  /**
+   * Which tier the fixture is played at. Rosters generated here are drawn from
+   * that level's player band, so a professional game is not two high school
+   * squads wearing different colours.
+   */
+  level?: Level;
 }
 
 export function makeMatchConfig(o: MatchSetupOptions): MatchConfig {
@@ -45,14 +52,14 @@ export function makeMatchConfig(o: MatchSetupOptions): MatchConfig {
   return {
     home: {
       team: o.homeTeam,
-      roster: o.homeRoster ?? generateRoster(o.homeTeam, `${seed}:h`),
+      roster: o.homeRoster ?? generateRoster(o.homeTeam, `${seed}:h`, o.level ?? 'hs'),
       tactics: o.homeTactics ?? tacticsFor(o.homeTeam),
       human: o.humanSide === 'home',
       coaching: o.homeCoaching,
     },
     away: {
       team: o.awayTeam,
-      roster: o.awayRoster ?? generateRoster(o.awayTeam, `${seed}:a`),
+      roster: o.awayRoster ?? generateRoster(o.awayTeam, `${seed}:a`, o.level ?? 'hs'),
       tactics: o.awayTactics ?? tacticsFor(o.awayTeam),
       human: o.humanSide === 'away',
       coaching: o.awayCoaching,

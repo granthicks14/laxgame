@@ -4,13 +4,15 @@ import { screenEl } from '../components';
 import { QuickSetupScreen } from './QuickSetup';
 import { TeamSelectScreen } from './TeamSelect';
 import { CareerEntryScreen } from './CareerEntry';
+import { ChallengeEntryScreen } from './Challenge';
 import { PracticeScreen } from './Practice';
 import { SettingsScreen } from './Settings';
 import { StatsScreen } from './Stats';
 import { HowToPlayScreen } from './HowToPlay';
 import { loadCareer, takeRetiredNotice } from '../../state/saves';
 import { getTeam } from '../../data/teams';
-import { seasonRecordText } from '../../league/career';
+import { seasonRecordText, userTeam } from '../../league/career';
+import { stageAt } from '../../challenge/ladder';
 
 interface Item {
   label: string;
@@ -26,6 +28,8 @@ export class MainMenuScreen implements Screen {
   constructor(app: App) {
     const season = loadCareer('season');
     const dynasty = loadCareer('dynasty');
+    const challenge = loadCareer('challenge');
+    const climb = challenge?.challenge ?? null;
 
     const firstTime = !app.settings.seenTutorial;
 
@@ -56,6 +60,14 @@ export class MainMenuScreen implements Screen {
           : 'Build a program over many seasons. Develop players, recruit, win titles.',
         note: dynasty ? 'CONTINUE' : undefined,
         go: (a) => a.push((b) => new CareerEntryScreen(b, 'dynasty')),
+      },
+      {
+        label: 'Challenge',
+        desc: climb && challenge
+          ? `${userTeam(challenge).short} · ${stageAt(climb.stageIndex).short} · season ${climb.totalYears + 1} · rep ${Math.round(climb.reputation)}`
+          : 'One coaching career, from the bottom of Class D to the professional game. Climb by winning.',
+        note: climb ? 'CONTINUE' : 'NEW',
+        go: (a) => a.push((b) => new ChallengeEntryScreen(b)),
       },
       {
         label: 'Practice',

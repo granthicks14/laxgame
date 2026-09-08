@@ -1,9 +1,12 @@
 import { Rng } from '../core/rng';
 import { clamp } from '../core/math';
 import type { Position } from './constants';
-import type { TeamData } from './teams';
+import type { GameTeam } from './teams';
+import { LEVELS, bandFor, type Level } from './levels';
+import { levelSpanOf } from './levelSpan';
 import { FIRST_NAMES, LAST_NAMES } from './names';
 import { officialRoster, type OfficialPlayer, type RosterSource } from './rosters';
+import { CURVES, CURVE_ORDER, archetype, archetypesFor, type DevCurve } from './archetypes';
 
 export interface PlayerAttrs {
   speed: number;
@@ -52,6 +55,30 @@ export function addStats(a: PlayerStats, b: PlayerStats): PlayerStats {
   return out;
 }
 
+/** One offseason in a player's development, kept so a career has a record. */
+export interface DevYear {
+  year: number;
+  from: number;
+  to: number;
+  outcome: string;
+  note: string;
+}
+
+/**
+ * The part of a player that decides how he grows. Every generated player has
+ * one; it is hidden from the coach until scouting or a season of coaching
+ * reveals it, which is what makes a recruiting decision a real bet.
+ */
+export interface DevProfile {
+  /** Key into data/archetypes.ts. */
+  archetype: string;
+  curve: DevCurve;
+  /** 0..1 hidden multiplier on how reliably he reaches his ceiling. */
+  workRate: number;
+  /** Filled in every offseason. */
+  history: DevYear[];
+}
+
 export interface PlayerData {
   id: string;
   first: string;
@@ -70,6 +97,10 @@ export interface PlayerData {
   xp: number;
   season: PlayerStats;
   career: PlayerStats;
+  /** How this player develops. Absent on saves written before it existed. */
+  dev?: DevProfile;
+  /** An active development project, from the roster hub. */
+  project?: string | null;
 }
 
 const WEIGHTS: Record<Position, Partial<Record<keyof PlayerAttrs, number>>> = {
@@ -134,8 +165,8 @@ const POS_PROFILE: Record<Position, Partial<Record<keyof PlayerAttrs, number>>> 
   FO: { faceoff: +24, checking: +7, stamina: +4, shooting: -10, shotAccuracy: -9, dodging: -5, goalie: -30 },
 };
 
-/** Which team rating feeds each position group. */
-function poolRating(team: TeamData, pos: Position): number {
+/** Which team rating feeds each position group, in within-level terms. */
+function rawPool(team: GameTeam, pos: Position): number {
   switch (pos) {
     case 'A': return team.attack;
     case 'M': return team.midfield;
@@ -143,6 +174,15 @@ function poolRating(team: TeamData, pos: Position): number {
     case 'G': return team.goalie;
     case 'FO': return team.faceoff;
   }
+}
+
+/**
+ * The absolute attribute pool for a position group. High school ratings ARE the
+ * player scale; every level above maps its own range onto a higher band, which
+ * is the single mechanism that makes a step up the ladder a genuine step up.
+ */
+function poolRating(team: GameTeam, pos: Position, level: Level): number {
+  return bandFor(level, rawPool(team, pos), levelSpanOf(level));
 }
 
 const ATTR_KEYS: (keyof PlayerAttrs)[] = [
@@ -167,27 +207,65 @@ interface GenOpts {
   source?: RosterSource;
   /** Extra ceiling, earned by a programme that develops players well. */
   potentialBonus?: number;
+  /** Which tier of the sport this player belongs to. Defaults to high school. */
+  level?: Level;
 }
 
-/** Compresses the top of the scale so the best programs produce excellent
- *  players rather than a roster of identical 99s. */
-function softCap(v: number): number {
-  const knee = 82;
+/**
+ * Compresses the top of the scale so the best programmes produce excellent
+ * players rather than a roster of identical 99s. The knee sits near the top of
+ * the level's own band: without that, every professional would be squashed back
+ * into the high school range and the whole ladder would collapse.
+ */
+function softCap(v: number, level: Level): number {
+  const band = LEVELS[level].band;
+  const knee = band ? band.lo + (band.hi - band.lo) * 0.72 : 82;
   return v <= knee ? v : knee + (v - knee) * 0.42;
 }
 
-function makeAttrs(rng: Rng, team: TeamData, pos: Position, opts: GenOpts): PlayerAttrs {
-  const base = poolRating(team, pos) - opts.depth * 5.5;
+function makeAttrs(
+  rng: Rng, team: GameTeam, pos: Position, opts: GenOpts, lean?: Partial<Record<keyof PlayerAttrs, number>>,
+): PlayerAttrs {
+  const level = opts.level ?? 'hs';
+  // Depth costs less the higher you go: a professional bench is not a drop-off
+  // the way a high school third line is.
+  const depthStep = LEVELS[level].ageSystem === 'hs' ? 5.5 : LEVELS[level].ageSystem === 'college' ? 3.6 : 2.4;
+  const base = poolRating(team, pos, level) - opts.depth * depthStep;
   const profile = POS_PROFILE[pos];
   const speedBias = (team.speed - 72) * 0.35;
   const attrs = {} as PlayerAttrs;
   for (const key of ATTR_KEYS) {
-    const off = profile[key] ?? 0;
+    // The archetype leans the profile: a sniper and a dodger are built from the
+    // same pool but are not the same attackman.
+    const off = (profile[key] ?? 0) + (lean?.[key] ?? 0);
     let v = base + off + rng.gauss(0, 5.5);
     if (key === 'speed' || key === 'acceleration') v += speedBias;
-    attrs[key] = Math.round(clamp(softCap(v), 25, 97));
+    attrs[key] = Math.round(clamp(softCap(v, level), 25, 99));
   }
   return attrs;
+}
+
+/**
+ * Picks an archetype and a development curve. The curve is weighted, not
+ * uniform: most players are steady, a fifth are late bloomers, and one in ten
+ * is boom-or-bust — rare enough that finding one matters.
+ */
+export function makeDevProfile(rng: Rng, pos: Position): DevProfile {
+  const options = archetypesFor(pos);
+  const arch = options.length ? rng.pick(options).key : 'steady';
+  let roll = rng.next();
+  let curve: DevCurve = 'steady';
+  for (const c of CURVE_ORDER) {
+    roll -= CURVES[c].weight;
+    if (roll <= 0) { curve = c; break; }
+  }
+  return { archetype: arch, curve, workRate: rng.range(0.55, 1), history: [] };
+}
+
+/** Backfills a development profile on a player from an older save. */
+export function ensureDevProfile(p: PlayerData, rng: Rng): DevProfile {
+  if (!p.dev) p.dev = makeDevProfile(rng, p.pos);
+  return p.dev;
 }
 
 let uid = 0;
@@ -196,19 +274,35 @@ function nextId(): string {
 }
 
 export function generatePlayer(
-  rng: Rng, team: TeamData, pos: Position, opts: GenOpts, usedNumbers: Set<number>,
+  rng: Rng, team: GameTeam, pos: Position, opts: GenOpts, usedNumbers: Set<number>,
 ): PlayerData {
+  const level = opts.level ?? 'hs';
   const grade: Grade = opts.grade ?? (rng.pick([9, 10, 10, 11, 11, 11, 12, 12, 12, 12]) as Grade);
-  // Underclassmen are rawer but have more room to grow.
-  const youthPenalty = { 9: 9, 10: 5, 11: 2, 12: 0 }[grade];
-  const attrs = makeAttrs(rng, team, pos, opts);
+  // Younger players are rawer but have more room to grow. A professional roster
+  // ages the other way: a rookie is raw, a veteran is finished and starting to
+  // slide, so the penalty curve flattens and the ceilings close.
+  const pro = LEVELS[level].ageSystem === 'pro';
+  const youthPenalty = pro
+    ? { 9: 5, 10: 2, 11: 0, 12: 1 }[grade]
+    : { 9: 9, 10: 5, 11: 2, 12: 0 }[grade];
+  const dev = makeDevProfile(rng, pos);
+  const attrs = makeAttrs(rng, team, pos, opts, archetype(dev.archetype)?.lean);
   for (const k of ATTR_KEYS) attrs[k] = Math.round(clamp(attrs[k] - youthPenalty, 25, 99));
 
   const overall = computeOverall(pos, attrs);
   // A programme known for developing players attracts recruits with more in
-  // them, which is the only way a small programme ever climbs.
-  const growthRoom = { 9: 16, 10: 12, 11: 7, 12: 3 }[grade] + (opts.potentialBonus ?? 0);
-  const potential = Math.round(clamp(overall + rng.range(2, growthRoom), overall, 99));
+  // them, which is the only way a small programme ever climbs. Rooms narrow as
+  // the level rises: nobody arrives in the PLL with fifteen points of upside.
+  const roomBase = pro
+    ? { 9: 8, 10: 5, 11: 3, 12: 1 }[grade]
+    : LEVELS[level].ageSystem === 'college'
+      ? { 9: 13, 10: 10, 11: 6, 12: 2 }[grade]
+      : { 9: 16, 10: 12, 11: 7, 12: 3 }[grade];
+  // The curve moves the ceiling as well as the timing: a late bloomer is worth
+  // more than he looks, an early developer is worth roughly what he looks.
+  const curveRoom = { early: 0.6, steady: 1, late: 1.45, 'boom-bust': 1.7 }[dev.curve];
+  const growthRoom = (roomBase + (opts.potentialBonus ?? 0)) * curveRoom;
+  const potential = Math.round(clamp(overall + rng.range(2, Math.max(3, growthRoom)), overall, 99));
 
   let number = 0;
   if (opts.number !== undefined && !usedNumbers.has(opts.number)) number = opts.number;
@@ -225,6 +319,8 @@ export function generatePlayer(
   usedNumbers.add(number);
 
   return {
+    dev,
+    project: null,
     id: nextId(),
     first: opts.first ?? rng.pick(FIRST_NAMES),
     last: opts.last ?? rng.pick(LAST_NAMES),
@@ -250,6 +346,19 @@ export const ROSTER_SHAPE: { pos: Position; count: number }[] = [
   { pos: 'FO', count: 1 },
 ];
 
+/** Squads get deeper as the level rises, which is half of why they are harder. */
+const LEVEL_SHAPE: Partial<Record<Level, { pos: Position; count: number }[]>> = {
+  d3: [{ pos: 'A', count: 5 }, { pos: 'M', count: 9 }, { pos: 'D', count: 8 }, { pos: 'G', count: 3 }, { pos: 'FO', count: 1 }],
+  d2: [{ pos: 'A', count: 5 }, { pos: 'M', count: 9 }, { pos: 'D', count: 8 }, { pos: 'G', count: 3 }, { pos: 'FO', count: 1 }],
+  d1: [{ pos: 'A', count: 6 }, { pos: 'M', count: 10 }, { pos: 'D', count: 8 }, { pos: 'G', count: 3 }, { pos: 'FO', count: 2 }],
+  semipro: [{ pos: 'A', count: 5 }, { pos: 'M', count: 8 }, { pos: 'D', count: 6 }, { pos: 'G', count: 2 }, { pos: 'FO', count: 1 }],
+  pll: [{ pos: 'A', count: 5 }, { pos: 'M', count: 7 }, { pos: 'D', count: 5 }, { pos: 'G', count: 2 }, { pos: 'FO', count: 1 }],
+};
+
+export function rosterShape(level: Level): { pos: Position; count: number }[] {
+  return LEVEL_SHAPE[level] ?? ROSTER_SHAPE;
+}
+
 export const ROSTER_SIZE = ROSTER_SHAPE.reduce((n, s) => n + s.count, 0);
 
 /** Splits a published "First Last" name without mangling suffixes or initials. */
@@ -265,11 +374,14 @@ function splitName(name: string): { first: string; last: string } {
  * are generated. Otherwise the whole squad is fictional. Either way the squad
  * is filled out to ROSTER_SHAPE so the match engine always has a full team.
  */
-export function generateRoster(team: TeamData, seed: number | string): PlayerData[] {
+export function generateRoster(
+  team: GameTeam, seed: number | string, level: Level = 'hs',
+): PlayerData[] {
   const rng = new Rng(`${team.id}:${seed}`);
   const used = new Set<number>();
   const roster: PlayerData[] = [];
   const official = officialRoster(team.id);
+  const shape = rosterShape(level);
 
   // Bucket any imported players by position so they fill their own slots first.
   const pool = new Map<Position, OfficialPlayer[]>();
@@ -282,17 +394,17 @@ export function generateRoster(team: TeamData, seed: number | string): PlayerDat
     }
   }
 
-  for (const { pos, count } of ROSTER_SHAPE) {
+  for (const { pos, count } of shape) {
     const listed = pool.get(pos) ?? [];
     for (let i = 0; i < count; i++) {
       const real = listed[i];
       if (real) {
         const { first, last } = splitName(real.name);
         roster.push(generatePlayer(rng, team, pos, {
-          depth: i, grade: real.grade, first, last, number: real.number, source: 'official',
+          depth: i, grade: real.grade, first, last, number: real.number, source: 'official', level,
         }, used));
       } else {
-        roster.push(generatePlayer(rng, team, pos, { depth: i }, used));
+        roster.push(generatePlayer(rng, team, pos, { depth: i, level }, used));
       }
     }
   }

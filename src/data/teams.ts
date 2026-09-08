@@ -105,15 +105,20 @@ export interface TeamRatings {
   chemistry: number;
 }
 
-export interface TeamData extends TeamRatings {
+/**
+ * Everything the game needs to PLAY a team: who they are, what they look like,
+ * how good they are and where they play. Both the THSLL teams below and every
+ * college and professional programme in data/world.ts satisfy this, so the
+ * match engine, the renderer, the emblems and the stadiums all work at every
+ * level of the sport without knowing which one they are looking at.
+ */
+export interface GameTeam extends TeamRatings {
   id: string;
   name: string;
   short: string;
   /** 2-4 char scoreboard abbreviation. */
   abbr: string;
   mascot: string;
-  classKey: ClassKey;
-  placement: Placement;
   primary: string;
   secondary: string;
   /** Number/text colour drawn on the jersey. */
@@ -123,6 +128,12 @@ export interface TeamData extends TeamRatings {
   homeField: HomeField;
   /** Gameplay rivalries, by team id. */
   rivals: string[];
+}
+
+/** A THSLL team: a game team that also sits in one of the district's classes. */
+export interface TeamData extends GameTeam {
+  classKey: ClassKey;
+  placement: Placement;
 }
 
 /* eslint-disable max-len */
@@ -564,7 +575,7 @@ export const DIFFICULTY_WORDS = ['', 'Easy', 'Moderate', 'Tough', 'Hard', 'Bruta
 
 /** Colours used to draw a team on the field. Home wears its primary shell; the
  *  visitor wears a light shell accented with its primary so the two never clash. */
-export function jerseyFor(team: TeamData, isHome: boolean) {
+export function jerseyFor(team: GameTeam, isHome: boolean) {
   if (isHome) {
     return { body: team.primary, accent: team.secondary, trim: team.trim, helmet: team.secondary };
   }

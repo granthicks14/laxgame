@@ -1,5 +1,5 @@
 import { FIELD, attackingGoal } from '../data/constants';
-import type { HomeField, TeamData } from '../data/teams';
+import type { GameTeam, HomeField } from '../data/teams';
 import { emblemFor } from '../data/emblems';
 import { stadiumFor, type StadiumConfig } from '../data/stadiums';
 import { FIELD_MARGIN } from './camera';
@@ -77,7 +77,7 @@ export class FieldLayer {
     return FIELD_MARGIN * this.ppy;
   }
 
-  build(ppy: number, theme: VenueTheme, home: TeamData, away: TeamData, seed: number): void {
+  build(ppy: number, theme: VenueTheme, home: GameTeam, away: GameTeam, seed: number): void {
     const key = `${ppy.toFixed(2)}|${theme.grassA}|${theme.tint}|${theme.light.toFixed(2)}|${home.id}|${away.id}`;
     if (key === this.key) return;
     this.key = key;
@@ -147,7 +147,7 @@ function drawGround(
 
 function drawStands(
   ctx: CanvasRenderingContext2D, w: number, h: number, ppy: number,
-  theme: VenueTheme, st: StadiumConfig, home: TeamData, away: TeamData, rnd: () => number,
+  theme: VenueTheme, st: StadiumConfig, home: GameTeam, away: GameTeam, rnd: () => number,
 ): void {
   // Stands are anchored a fixed distance off each sideline and grow outward, so
   // the front rows are in shot whenever play reaches a boundary. Bigger venues
@@ -203,7 +203,7 @@ function drawStands(
 
 function stand(
   ctx: CanvasRenderingContext2D, x: number, y: number, w: number, depth: number,
-  theme: VenueTheme, st: StadiumConfig, team: TeamData, isHome: boolean,
+  theme: VenueTheme, st: StadiumConfig, team: GameTeam, isHome: boolean,
   rnd: () => number, ppy: number,
 ): void {
   if (depth <= 2) return;
@@ -254,7 +254,7 @@ function stand(
 
 function crowd(
   ctx: CanvasRenderingContext2D, x: number, y: number, w: number, depth: number,
-  theme: VenueTheme, team: TeamData, rnd: () => number, ppy: number,
+  theme: VenueTheme, team: GameTeam, rnd: () => number, ppy: number,
 ): void {
   const size = Math.max(1, Math.round(ppy * 0.22));
   const cols = Math.floor(w / (size * 2));
@@ -302,7 +302,7 @@ function lightTower(
 
 function drawScoreboard(
   ctx: CanvasRenderingContext2D, X: Proj, Y: Proj, ppy: number,
-  theme: VenueTheme, st: StadiumConfig, home: TeamData, away: TeamData,
+  theme: VenueTheme, st: StadiumConfig, home: GameTeam, away: GameTeam,
 ): void {
   if (st.scoreboard === 'none') return;
   const big = st.scoreboard === 'big';
@@ -388,7 +388,7 @@ function drawTurf(
 
 function drawBranding(
   ctx: CanvasRenderingContext2D, X: Proj, Y: Proj, ppy: number,
-  theme: VenueTheme, st: StadiumConfig, home: TeamData, away: TeamData,
+  theme: VenueTheme, st: StadiumConfig, home: GameTeam, away: GameTeam,
 ): void {
   // Painted end zones in each end's colours, with the programme name across
   // the home end — the clearest "whose field is this" cue on the pitch.
@@ -510,7 +510,7 @@ function drawMarkings(
 
 function drawSidelineFurniture(
   ctx: CanvasRenderingContext2D, X: Proj, Y: Proj, ppy: number,
-  theme: VenueTheme, home: TeamData, away: TeamData,
+  theme: VenueTheme, home: GameTeam, away: GameTeam,
 ): void {
   // Team areas sit either side of the substitution box on the bench side, home
   // to the right of the box and visitors to the left, as they do in real games.
@@ -530,7 +530,7 @@ function drawSidelineFurniture(
 
 function bench(
   ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number,
-  team: TeamData, theme: VenueTheme, label: string,
+  team: GameTeam, theme: VenueTheme, label: string,
 ): void {
   const rx = Math.round(x);
   const ry = Math.round(y - h);

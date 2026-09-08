@@ -1,5 +1,6 @@
 import { h, clear } from '../dom';
 import type { App, Screen } from '../App';
+import type { CareerMode } from '../../league/types';
 import { screenEl, topbar, panel, panelFlush, emptyPanel, segmented, teamBadge } from '../components';
 import { loadCareer } from '../../state/saves';
 import { effectiveTeam, seasonRecordText, userTeam } from '../../league/career';
@@ -20,7 +21,7 @@ const CATEGORIES: LeaderCategory[] = ['points', 'goals', 'assists', 'saves', 'gr
 export class DynastyStatsScreen implements Screen {
   el: HTMLElement;
 
-  constructor(app: App, mode: 'season' | 'dynasty') {
+  constructor(app: App, mode: CareerMode) {
     const career = loadCareer(mode);
     if (!career) {
       this.el = screenEl(topbar(app, 'Statistics'), h('div', { class: 'scroll' },

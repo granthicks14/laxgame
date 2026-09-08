@@ -1,12 +1,16 @@
 import { h, clear } from '../dom';
 import type { App, Screen } from '../App';
+import type { CareerMode } from '../../league/types';
 import { screenEl, topbar, panel, emptyPanel, teamBadge } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
 import { pitchTo, programSnapshot } from '../../league/career';
-import { MAX_PITCHES, REASON_TEXT, interestIn, type TransferCandidate } from '../../league/transfers';
+import {
+  MAX_PITCHES, REASON_TEXT, interestIn, transferEstimate, type TransferCandidate,
+} from '../../league/transfers';
 import { GRADE_LABEL, starTier } from '../../data/players';
 import { POSITION_LABEL } from '../../data/constants';
 import { getTeam } from '../../data/teams';
+import { tryWorldTeam } from '../../data/world';
 import type { Career } from '../../league/types';
 
 /**
@@ -17,7 +21,7 @@ import type { Career } from '../../league/types';
 export class TransferPortalScreen implements Screen {
   el: HTMLElement;
 
-  constructor(app: App, mode: 'season' | 'dynasty') {
+  constructor(app: App, mode: CareerMode) {
     const career = loadCareer(mode);
     if (!career) {
       this.el = screenEl(topbar(app, 'Transfers'), h('div', { class: 'scroll' },
@@ -68,9 +72,10 @@ export class TransferPortalScreen implements Screen {
   }
 
   private card(app: App, career: Career, c: TransferCandidate, render: () => void): HTMLElement {
-    const from = getTeam(c.fromTeamId);
+    const from = tryWorldTeam(c.fromTeamId) ?? getTeam(c.fromTeamId);
     const { score, factors } = interestIn(c, programSnapshot(career));
-    const tier = starTier(c.player.overall);
+    // The star mark is your OPINION of him, so it comes off the estimate too.
+    const tier = starTier(transferEstimate(c).overall);
     const closed = c.status === 'committed' || c.status === 'declined' || c.status === 'lost';
 
     const statusLine = () => {
@@ -79,7 +84,9 @@ export class TransferPortalScreen implements Screen {
         case 'considering': return { text: 'Thinking it over', cls: 'pill' };
         case 'declined': return { text: 'Staying put', cls: 'pill pill--red' };
         case 'lost': return {
-          text: c.lostToTeamId ? `Chose ${getTeam(c.lostToTeamId).short}` : 'Gone elsewhere',
+          text: c.lostToTeamId
+            ? `Chose ${(tryWorldTeam(c.lostToTeamId) ?? getTeam(c.lostToTeamId)).short}`
+            : 'Gone elsewhere',
           cls: 'pill pill--red',
         };
         default: return null;
@@ -93,6 +100,7 @@ export class TransferPortalScreen implements Screen {
         style: `width:${score}%;background:${score > 66 ? 'var(--green)' : score > 38 ? 'var(--accent)' : 'var(--red)'}`,
       }));
 
+    const est = transferEstimate(c);
     return panel(null,
       h('div', { class: 'row', style: 'gap:10px;align-items:flex-start' },
         teamBadge(from, 'md'),
@@ -100,7 +108,12 @@ export class TransferPortalScreen implements Screen {
           h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' },
             h('div', { class: 'display', style: 'font-size:17px', text: `${c.player.first} ${c.player.last}` }),
             tier ? h('span', { class: 'pill pill--green', text: tier === 2 ? '★★ Elite' : '★ Star' }) : null),
-          h('div', { class: 'small', text: `${POSITION_LABEL[c.player.pos]} · ${GRADE_LABEL[c.player.grade]} · OVR ${c.player.overall} · ceiling ${c.player.potential}` }),
+          h('div', {
+            class: 'small',
+            text: `${POSITION_LABEL[c.player.pos]} · ${GRADE_LABEL[c.player.grade]} · OVR ${est.overall}${est.margin ? `±${est.margin}` : ''}`
+              + ` · ceiling ${est.potential}${est.margin ? `±${est.margin}` : ''}`,
+          }),
+          h('div', { class: 'tiny', text: est.confidence }),
           h('div', { class: 'small', style: 'color:var(--muted)', text: `${from.short} · ${REASON_TEXT[c.reason]}` }),
           status ? h('span', { class: status.cls, text: status.text }) : null)),
 

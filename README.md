@@ -2,8 +2,9 @@
 
 **Play it: [lone-star-lax.vercel.app](https://lone-star-lax.vercel.app)**
 
-An original retro arcade lacrosse game set in the **THSLL North District**. Pick a
-North Texas program, play the games yourself, and build it into a champion.
+An original retro arcade lacrosse game. Start in the **THSLL North District**,
+play the games yourself, and — if you want the long version — coach your way from
+the bottom of high school lacrosse to the professional game.
 
 Runs entirely in the browser. No accounts, no servers, no paid APIs, no asset
 downloads — everything from the pixel field to the crowd noise is generated in
@@ -87,6 +88,56 @@ systems that feed each other:
 - **Statistics.** Team totals, your full squad's lines, and district
   leaderboards for points, goals, assists, saves and ground balls.
 
+**Challenge** — one coaching career, nine rungs, from Class D high school to the
+Premier Lacrosse League. This is the long game.
+
+- **You climb by winning championships.** Nothing else moves you up, and even a
+  title only gets you *interviews*: which jobs you are offered depends on the
+  reputation you have built, and taking one is a decision.
+- **Every job is a mess, and the mess is real.** A rebuild genuinely hands you a
+  squad of underclassmen; a goalie problem genuinely means the man in the cage
+  cannot stop the ball. The situation is applied to the roster you inherit, and
+  it lowers what the programme expects of you — you are not sacked for failing
+  to win with a roster that cannot win. What it costs you is *time*.
+- **Each rung is harder because the players are better.** Every level maps its
+  teams onto a higher band of actual attributes (D-III 62–93, D-I 74–99, PLL
+  84–99), carries deeper squads, and floors the AI's decision quality. A
+  professional opponent genuinely thinks better than a high schooler.
+- **You can be sacked.** Three seasons below what the programme wanted and you
+  are out: down a rung, the recruits you were chasing gone, starting again. Two
+  years without a job and the career is over.
+- **Legacy.** Championships weighted by how hard they were to win, how far you
+  climbed, the players you found and developed, and the years you gave it.
+
+**Recruiting and scouting** — a class runs alongside every season, in every mode.
+
+- **You never see a prospect's real rating.** You see the public ranking, which
+  is *wrong*, and your own estimate with an error bar around it. Scouting slides
+  the estimate off the ranking and onto the truth.
+- **Hidden gems are genuinely hidden.** Around 7% of a class belongs near the top
+  and is ranked in the middle, because nobody has watched him. Another 7% is the
+  same mistake pointing the other way. You cannot scout a player you have never
+  heard of — a scout has to *tip* you, and a scout with an eye for a sleeper is
+  the only reliable way that happens.
+- **Scouts are hired, and they cost the same Coach Points as your staff.** They
+  have a specialty, a quality and a trait; a programme that scouts brilliantly
+  coaches worse unless it is winning enough to afford both.
+- **Rivals recruit for real, mostly off the rankings.** A well-resourced
+  programme scouts too and will eventually see through one — but it takes them
+  most of a cycle. That window is the whole game. Leave a gem alone and roughly
+  a third of the time somebody else takes him.
+- **Offers are scarce** (three at high school, seven at Division I) and a
+  prospect ranked far above your programme is not listening.
+- **The professional draft** spends picks instead of offers, and the players
+  nobody took are undrafted free agents you can sign with a camp invite.
+
+**Player development** — every player has an archetype, a development curve and
+a hidden work rate. An early developer arrives close to finished; a late bloomer
+looks ordinary for two years and then jumps. **Development projects** commit one
+player for a season: they cost Coach Points, concentrate his growth into named
+attributes, and suppress everything outside them. Each player carries the history
+of what every offseason actually did to him.
+
 **Practice** — five drills: Shooting Gallery, Faceoff Reps, Clearing & Passing,
 Defensive Stand, and open Free Play.
 
@@ -100,9 +151,16 @@ dodging, shooting and checking during a live scrimmage.
 **Stadiums and weather** — every programme has its own ground, built from one
 reusable architecture: stands sized to the crowd, benches and a scorer's table,
 a branded scoreboard behind the end line, a mark at midfield and the programme's
-name painted across the end zone. Conditions run from clear afternoons to rain
-under the lights, with a pregame card showing the venue, the weather and the
-temperature. Only light rain touches the simulation, and only barely.
+name painted across the end zone. Crowds scale with the level, so a PLL stadium
+is not a school field. Conditions run from clear afternoons to rain under the
+lights and shift with the region — a spring game in the northeast is greyer,
+wetter and thirteen degrees colder than one in Texas. Only light rain touches
+the simulation, and only barely.
+
+**News** — the hub carries a feed of what is actually happening: results,
+streaks, upsets, a player who has just taken a jump, a scout's report, a job in
+danger. Every line is *derived* from the save, so it can never tell you
+something that did not happen.
 
 ---
 
@@ -190,11 +248,36 @@ after touching anything in `src/league/`.
 `npm run ratings` prints the league-wide overall distribution, which is what the
 star and elite thresholds are calibrated against.
 
+`npm run levels` runs the real match engine at every tier and prints what a game
+looks like there. This is the check that stops the ladder quietly inverting:
+before goalies were judged against the standard of the game they are playing in
+rather than an absolute number, scoring *fell* as the level rose, because keepers
+improved faster than shooters. Current output is 7–10 goals a game at every rung
+with shooting around 26–32% and saves around 50–57%.
+
+`npm run challenge` runs a whole Challenge career headlessly — every season, job
+offer, sacking and championship — and `RUNS=10 npm run challenge` samples ten of
+them. Across sixty simulated seasons a coach averages the fifth rung of nine and
+about one in ten reaches the PLL, which is roughly the intended difficulty for a
+player who simulates rather than plays.
+
+`npm run scouting` measures the recruiting model: how often a ranking is wrong,
+how fast scouting closes the gap, what a class looks like with none, one, three
+and five scouts, and how many gems the AI takes if you ignore them.
+
+`npm run world` validates the 243-team world — every conference is the right
+level and big enough to play a season — and `npm run ladder` prints the actual
+player pools each level produces.
+
 `npm run test:dynasty` drives a browser through two whole years — preseason
 staff and tactics, a played game, a simulated quarter, statistics, the playoffs,
 development, league movement and the transfer window — and checks that every
 stage actually did something. It is what caught a game simulated to its final
 whistle never reaching the post-game screen.
+
+`npm run test:challenge` drives a browser through a Challenge career: the ladder,
+taking the first job, hiring a scout, working a class, playing a season out, the
+end-of-season verdict, and the career tracker.
 
 `npm run test:e2e` drives a real browser through the title screen, a quick game,
 a full season and playoff bracket, a dynasty offseason, a save reload, the
@@ -220,6 +303,9 @@ src/
   render/    canvas renderer, camera, pixel sprites, field layer, particles
   input/     unified keyboard + touch input
   audio/     Web Audio synthesis (no sound files)
+  world/     season formats: conference tournaments, national brackets, auto-bids
+  challenge/ the nine-rung ladder, starting situations, job offers, legacy
+  scouting/  prospects and fog of war, scouts, the recruiting class
   league/    schedules, standings, playoffs, simulation, career progression
   ui/        DOM screens and the design system
   dev/       headless balance, human-proxy and AI audit harnesses
@@ -238,6 +324,17 @@ The league is modelled on the **THSLL North District** and its real class
 structure: Class A, Class B, Class C East, Class C West and Class D. The
 district also runs a Sixes competition; that is a different format and is
 deliberately not modelled, because this game simulates the field game.
+
+**The wider world.** Above high school the game carries 203 further programmes
+across NCAA Division III, II and I, a fictional semi-professional league, and the
+eight Premier Lacrosse League clubs. **Programme names and conference
+memberships are real (2026) but unverified from this build environment**;
+everything else about them — every rating, every player, every rivalry, the
+prestige numbers and the venues — is invented gameplay data. The Continental
+Lacrosse League is invented outright and does not correspond to any real
+competition. See
+[`src/data/world/programs.ts`](src/data/world/programs.ts), which states all of
+this at the top of the file.
 
 What is taken from THSLL is the class structure and the set of member
 programmes. **Which class each programme sits in is best-effort** — every team

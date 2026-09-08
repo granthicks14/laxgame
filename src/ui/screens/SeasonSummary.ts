@@ -3,9 +3,12 @@ import type { App, Screen } from '../App';
 import { screenEl, topbar, panel, panelFlush, teamBadge, emptyState } from '../components';
 import { saveCareer, deleteCareer } from '../../state/saves';
 import {
-  champion, createCareer, effectiveTeam, runOffseason, seasonRecordText, userTeam,
-  type OffseasonReport,
+  champion, createCareer, effectiveTeam, resolveChallengeSeason, runOffseason,
+  seasonFormat, seasonRecordText, userTeam, type OffseasonReport,
 } from '../../league/career';
+import { ChallengeEndScreen, JobOffersScreen } from './Challenge';
+import { stageAt } from '../../challenge/ladder';
+import { recruitingSummary } from '../../league/career';
 import type { Career } from '../../league/types';
 import { GRADE_LABEL, sortDepthChart } from '../../data/players';
 import { SeasonHubScreen } from './SeasonHub';
@@ -13,6 +16,7 @@ import { MainMenuScreen } from './MainMenu';
 import { audio } from '../../audio/Audio';
 import { trophyIcon } from '../icons';
 import { LADDER_LABEL, type Movement, type MovementReport } from '../../league/promotion';
+import { LEVELS } from '../../data/levels';
 import { staffSummary } from '../../league/coaching';
 import { TransferPortalScreen } from './TransferPortal';
 import { CoachOfficeScreen } from './CoachOffice';
@@ -32,8 +36,43 @@ export class SeasonSummaryScreen implements Screen {
       .sort((a, b) => (b.season.goals * 2 + b.season.assists) - (a.season.goals * 2 + a.season.assists))
       .slice(0, 10);
 
+    // Challenge grades the season the moment it ends: reputation, the hot seat,
+    // and whether the phone rings.
+    const verdict = career.mode === 'challenge' ? resolveChallengeSeason(career) : null;
+    if (verdict) saveCareer(career);
+    const climb = career.challenge;
+
     const actions: HTMLElement[] = [];
-    if (career.mode === 'dynasty') {
+    if (career.mode === 'challenge' && climb) {
+      if (climb.complete) {
+        actions.push(h('button', {
+          class: 'btn btn--primary btn--block',
+          style: 'min-height:54px;font-size:18px',
+          text: 'See how the career ended',
+          on: { click: () => app.replace((a) => new ChallengeEndScreen(a, career)) },
+        }));
+      } else if (climb.offers && climb.offers.length) {
+        actions.push(h('button', {
+          class: 'btn btn--primary btn--block',
+          style: 'min-height:54px;font-size:18px',
+          text: `${climb.offers.length} job${climb.offers.length === 1 ? '' : 's'} on the table`,
+          on: { click: () => app.replace((a) => new JobOffersScreen(a, career)) },
+        }));
+      } else {
+        actions.push(h('button', {
+          class: 'btn btn--primary btn--block',
+          style: 'min-height:54px;font-size:18px',
+          text: `Advance to season ${climb.totalYears + 1}`,
+          on: {
+            click: () => {
+              const report = runOffseason(career);
+              saveCareer(career);
+              app.replace((a) => new OffseasonScreen(a, career, report));
+            },
+          },
+        }));
+      }
+    } else if (career.mode === 'dynasty') {
       actions.push(h('button', {
         class: 'btn btn--primary btn--block',
         style: 'min-height:54px;font-size:18px',
@@ -84,10 +123,20 @@ export class SeasonSummaryScreen implements Screen {
       topbar(app, `Year ${career.year}`, 'Season complete', () => app.reset((a) => new MainMenuScreen(a))),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
+          verdict && climb
+            ? panel(`${stageAt(climb.stageIndex).short} · reputation ${Math.round(climb.reputation)}`,
+              ...verdict.messages.map((m) => h('div', { class: 'small', style: 'color:var(--text)', text: m })),
+              h('div', {
+                class: 'tiny',
+                style: verdict.reputationDelta >= 0 ? 'color:var(--green)' : 'color:var(--red)',
+                text: `Reputation ${verdict.reputationDelta >= 0 ? '+' : ''}${verdict.reputationDelta}`,
+              }),
+              recruitingSummary(career) ? h('div', { class: 'tiny', text: recruitingSummary(career)! }) : null)
+            : null,
           won
             ? h('div', { class: 'trophy' },
               h('div', { class: 'trophy__icon' }, trophyIcon(58)),
-              h('div', { class: 'trophy__title', text: 'District Champions' }),
+              h('div', { class: 'trophy__title', text: seasonFormat(career).titleName }),
               h('div', { class: 'small', text: `${team.name} · ${seasonRecordText(career)}` }))
             : h('div', { class: 'panel' },
               h('span', { class: 'stripe', style: `background:${team.primary}` }),
@@ -156,9 +205,13 @@ export class OffseasonScreen implements Screen {
             h('div', { class: 'panel__body stack center' },
               h('div', { class: 'display', style: 'font-size:22px', text: `Welcome to year ${career.year}` }),
               h('div', { class: 'small', text: `Program prestige ${Math.round(career.prestige)} · ${career.coachingPoints} coaching points banked` }),
-              h('div', { class: 'small', text: `Now in ${LADDER_LABEL[career.classKey]}` }))),
+              h('div', {
+                class: 'small',
+                text: career.level === 'hs' ? `Now in ${LADDER_LABEL[career.classKey]}` : LEVELS[career.level].name,
+              }))),
 
           this.developmentPanel(report),
+          this.recruitingPanel(career),
           this.movementPanel(app, career, report),
 
           section('Graduating', report.graduated.map((g) => h('div', { class: 'row' },
@@ -232,6 +285,18 @@ export class OffseasonScreen implements Screen {
   }
 
   /** Promotion and relegation, with the reason for every move. */
+  /** How the class you spent the season working actually turned out. */
+  private recruitingPanel(career: Career): HTMLElement | null {
+    const summary = recruitingSummary(career);
+    if (!summary) return null;
+    return panel('Signing day',
+      h('div', { class: 'small', text: summary }),
+      h('div', {
+        class: 'tiny',
+        text: 'Their real ratings are on the roster now. This is where you find out whether your scouts were right.',
+      }));
+  }
+
   private movementPanel(app: App, career: Career, report: OffseasonReport): HTMLElement | null {
     const movement = report.movement;
     if (!movement || !movement.moves.length) return null;

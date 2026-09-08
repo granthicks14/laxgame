@@ -17,12 +17,15 @@
  * raises the odds of reaching it, never the ceiling itself.
  * ------------------------------------------------------------------------- */
 
-import type { Rng } from '../core/rng';
+import { Rng } from '../core/rng';
 import { clamp } from '../core/math';
 import {
-  ATTR_KEYS_ORDER, positionKeys, refreshOverall,
+  ATTR_KEYS_ORDER, ensureDevProfile, positionKeys, refreshOverall,
   type Grade, type PlayerAttrs, type PlayerData,
 } from '../data/players';
+import { CURVES, archetype } from '../data/archetypes';
+import { LEVELS, type Level } from '../data/levels';
+import { project } from './projects';
 import type { CoachEffects } from './coaching';
 
 export type DevOutcome = 'breakout' | 'strong' | 'normal' | 'limited' | 'regression';
@@ -68,13 +71,23 @@ const BANDS: Record<DevOutcome, [number, number]> = {
  */
 export function developPlayer(
   p: PlayerData, rng: Rng, fx: CoachEffects, focusKeys: (keyof PlayerAttrs)[],
+  level: Level = 'hs',
 ): DevResult {
   const before = p.overall;
   const room = Math.max(0, p.potential - p.overall);
+  const dev = ensureDevProfile(p, rng);
+  const curve = CURVES[dev.curve];
 
-  // Age curve: underclassmen improve fastest, seniors barely at all.
+  // Age curve, shaped by the player's own development curve. A late bloomer's
+  // third year is when everything arrives; an early developer's first year is.
   const byGrade: Record<Grade, number> = { 9: 1.35, 10: 1.15, 11: 0.85, 12: 0.55 };
-  const age = byGrade[p.grade];
+  const yearIndex = Math.min(3, Math.max(0, p.grade - 9));
+  // Professionals do not have class years to improve through: a rookie improves,
+  // a veteran holds and then slides, whatever curve he was drafted with.
+  const pro = LEVELS[level].ageSystem === 'pro';
+  const age = pro
+    ? byGrade[p.grade] * 0.7
+    : byGrade[p.grade] * curve.byYear[yearIndex];
 
   // Playing time: appearances and production both count. A player who never got
   // on the field does not develop like a starter, but he does not stall either.
@@ -87,10 +100,14 @@ export function developPlayer(
   // Headroom. A player at his ceiling gains almost nothing, whoever coaches him.
   const roomFactor = clamp(room / 9, 0.1, 1.2);
 
-  const scale = age * minutesFactor * productionFactor * roomFactor * fx.developmentRate;
+  // Work rate is the hidden half of a prospect: two players with the same
+  // ceiling do not both reach it.
+  const scale = age * minutesFactor * productionFactor * roomFactor
+    * fx.developmentRate * (0.7 + dev.workRate * 0.45);
 
-  // The dice. Breakouts are rare; coaching makes them less rare.
-  const roll = rng.next();
+  // The dice, spread by his curve. A boom-or-bust player's season is a much
+  // wider distribution than a steady one's — that is the whole bet.
+  const roll = clamp(0.5 + (rng.next() - 0.5) * curve.variance, 0, 0.999);
   const breakoutChance = clamp(0.07 * fx.breakoutRate * age * roomFactor, 0.01, 0.32);
   const strongChance = breakoutChance + clamp(0.24 * fx.developmentRate, 0.12, 0.46);
 
@@ -110,13 +127,32 @@ export function developPlayer(
   // Never blow past the ceiling in one summer; a point of overshoot is fine.
   if (gain > 0) gain = Math.min(gain, room + 1);
 
-  const highlights = applyGrowth(p, gain, rng, fx, focusKeys);
+  // A development project concentrates the year into named attributes and
+  // suppresses everything else — the tradeoff the coach signed up for.
+  const proj = project(p.project);
+  const archLean = archetype(dev.archetype)?.grows ?? [];
+  const emphasis = proj ? (proj.focus.length ? proj.focus : positionKeys(p.pos)) : [...focusKeys, ...archLean];
+  const narrow = !!proj && proj.focus.length > 0;
+  if (proj) gain *= proj.focus.length ? 1.22 : 1.05;
+
+  const highlights = applyGrowth(p, gain, rng, fx, emphasis, narrow);
   refreshOverall(p);
   if (p.overall > p.potential) {
     const excess = p.overall - p.potential;
     for (const k of ATTR_KEYS_ORDER) p.attrs[k] = clamp(p.attrs[k] - excess, 1, 99);
     refreshOverall(p);
   }
+
+  dev.history.push({
+    year: dev.history.length + 1,
+    from: before,
+    to: p.overall,
+    outcome,
+    note: proj ? proj.label : DEV_LABEL[outcome],
+  });
+  if (dev.history.length > 12) dev.history.shift();
+  // A project is a one-season commitment; it has to be renewed.
+  p.project = null;
 
   return { player: p, from: before, to: p.overall, outcome, highlights };
 }
@@ -129,6 +165,7 @@ export function developPlayer(
  */
 function applyGrowth(
   p: PlayerData, gain: number, rng: Rng, fx: CoachEffects, focusKeys: (keyof PlayerAttrs)[],
+  narrow = false,
 ): string[] {
   if (Math.abs(gain) < 0.05) return [];
   const core = positionKeys(p.pos);
@@ -142,6 +179,8 @@ function applyGrowth(
     // differently.
     let mul = rng.range(0.7, 1.3);
     if (focusKeys.includes(k)) mul *= 1.35;
+    // Under a project, anything outside it barely moves. That is the cost.
+    else if (narrow) mul *= 0.25;
     if (fx.athleticGrowth > 0.35 && athletic.includes(k)) mul *= 1 + fx.athleticGrowth * 0.5;
     p.attrs[k] = clamp(Math.round(p.attrs[k] + gain * mul), 1, 99);
   }

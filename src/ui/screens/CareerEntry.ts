@@ -1,5 +1,6 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
+import type { CareerMode } from '../../league/types';
 import { screenEl, topbar, panel, teamBadge, segmented, fieldRow } from '../components';
 import { getTeam } from '../../data/teams';
 import { DIFFICULTIES, DIFFICULTY_ORDER, type DifficultyKey } from '../../data/difficulty';
@@ -9,7 +10,7 @@ import { createCareer, seasonRecordText, userTeam } from '../../league/career';
 import { TeamSelectScreen } from './TeamSelect';
 import { SeasonHubScreen } from './SeasonHub';
 
-const MODE_COPY = {
+const MODE_COPY: Record<CareerMode, { title: string; blurb: string }> = {
   season: {
     title: 'Season',
     blurb: 'One district campaign: a full round-robin schedule, then the playoff bracket.',
@@ -19,12 +20,17 @@ const MODE_COPY = {
     blurb: 'Season after season. Players develop and graduate, recruits arrive, and your '
       + 'program reputation decides who shows up.',
   },
-} as const;
+  challenge: {
+    title: 'Challenge',
+    blurb: 'A coaching career that starts at the bottom of high school lacrosse and only '
+      + 'moves up when you win a championship.',
+  },
+};
 
 export class CareerEntryScreen implements Screen {
   el: HTMLElement;
 
-  constructor(app: App, mode: 'season' | 'dynasty') {
+  constructor(app: App, mode: CareerMode) {
     const existing = loadCareer(mode);
     const copy = MODE_COPY[mode];
 

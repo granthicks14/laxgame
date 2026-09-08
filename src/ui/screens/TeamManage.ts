@@ -1,5 +1,6 @@
-import { h } from '../dom';
+import { h, clear } from '../dom';
 import type { App, Screen } from '../App';
+import type { CareerMode } from '../../league/types';
 import { screenEl, topbar, panel, panelFlush, ratingBar, segmented, teamBadge, emptyPanel } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
 import { TRAIN_COST, trainPlayer, userTeam } from '../../league/career';
@@ -12,11 +13,14 @@ import { OFFENSE_STYLES, DEFENSE_STYLES, type DefenseStyle, type OffenseStyle } 
 import { POSITION_LABEL } from '../../data/constants';
 import type { TeamData } from '../../data/teams';
 import { rosterSourceFor } from '../../data/rosters';
+import { PROJECTS, committedCost, project, projectsFor } from '../../league/projects';
+import { CURVES, TIERS, archetype, tierFor } from '../../data/archetypes';
+import { levelPar } from '../../scouting/prospects';
 
 export class TeamManageScreen implements Screen {
   el: HTMLElement;
 
-  constructor(app: App, mode: 'season' | 'dynasty') {
+  constructor(app: App, mode: CareerMode) {
     const career = loadCareer(mode);
     if (!career) {
       this.el = screenEl(topbar(app, 'Team'), h('div', { class: 'scroll' },
@@ -130,7 +134,7 @@ export function starMark(overall: number): HTMLElement | null {
   });
 }
 
-function rosterTable(app: App, career: Career, mode: 'season' | 'dynasty'): HTMLElement {
+function rosterTable(app: App, career: Career, mode: CareerMode): HTMLElement {
   const roster = sortDepthChart(career.roster);
   const rows = roster.map((p) => {
     const starter = isStarter(roster, p);
@@ -175,7 +179,7 @@ const TRAINABLE: (keyof PlayerAttrs)[] = [
 export class PlayerScreen implements Screen {
   el: HTMLElement;
 
-  constructor(app: App, mode: 'season' | 'dynasty', playerId: string) {
+  constructor(app: App, mode: CareerMode, playerId: string) {
     const career = loadCareer(mode);
     const p = career?.roster.find((x) => x.id === playerId);
     if (!career || !p) {
@@ -253,9 +257,106 @@ export class PlayerScreen implements Screen {
               p.pos === 'G' ? stat('GA', s.goalsAgainst) : null,
               stat('TO', s.turnovers))),
 
+          this.profilePanel(career, p),
+          this.projectPanel(app, career, p),
           panel('Attributes', attrsBox),
+          this.historyPanel(p),
         )),
     );
+  }
+
+  /**
+   * Who this player actually is: his archetype, how he develops, and where his
+   * ceiling sits at this level. A coach only sees this for his OWN players —
+   * a prospect is still a guess.
+   */
+  private profilePanel(career: Career, p: PlayerData): HTMLElement {
+    const dev = p.dev;
+    if (!dev) return panel('Profile', h('div', { class: 'small', text: 'No development profile on this player.' }));
+    const arch = archetype(dev.archetype);
+    const tier = tierFor(p.potential, levelPar(career.level));
+    return panel('Profile',
+      h('div', { class: 'row row--wrap', style: 'gap:6px' },
+        arch ? h('span', { class: 'pill pill--accent', text: arch.label }) : null,
+        h('span', { class: 'pill', text: CURVES[dev.curve].label }),
+        h('span', { class: 'pill', text: TIERS[tier].label })),
+      arch ? h('div', { class: 'small', text: arch.blurb }) : null,
+      h('div', { class: 'tiny', text: CURVES[dev.curve].blurb }),
+      h('div', { class: 'tiny', text: potentialText(p) }));
+  }
+
+  /**
+   * A season-long commitment to one player. It costs Coach Points, it
+   * concentrates his growth, and it suppresses everything outside it.
+   */
+  private projectPanel(app: App, career: Career, p: PlayerData): HTMLElement {
+    const box = h('div', { class: 'stack' });
+    const redraw = () => {
+      clear(box);
+      const active = project(p.project);
+      const spent = committedCost(career.roster);
+      box.appendChild(h('div', {
+        class: 'tiny',
+        text: `${spent} CP committed to projects across the squad. A project runs for one offseason and then ends.`,
+      }));
+      if (active) {
+        box.appendChild(h('div', { class: 'small', style: 'color:var(--accent)', text: `${active.label} — ${active.blurb}` }));
+        box.appendChild(h('div', { class: 'tiny', text: active.tradeoff }));
+        box.appendChild(h('button', {
+          class: 'btn btn--block',
+          text: `Cancel and refund ${active.cost} CP`,
+          on: {
+            click: () => {
+              career.coachingPoints += active.cost;
+              p.project = null;
+              saveCareer(career);
+              redraw();
+              app.toast('Project cancelled.');
+            },
+          },
+        }));
+        return;
+      }
+      for (const info of projectsFor(p).slice(0, 4)) {
+        const afford = career.coachingPoints >= info.cost;
+        box.appendChild(h('div', { class: 'row', style: 'gap:10px;align-items:center' },
+          h('div', { class: 'stack', style: 'gap:1px;flex:1 1 auto;min-width:0' },
+            h('div', { class: 'small', style: 'color:var(--text)', text: info.label }),
+            h('div', { class: 'tiny', text: info.blurb }),
+            h('div', { class: 'tiny', text: info.tradeoff })),
+          h('button', {
+            class: `btn btn--sm${afford ? ' btn--primary' : ''}`,
+            text: `${info.cost} CP`,
+            on: {
+              click: () => {
+                if (career.coachingPoints < info.cost) { app.toast('Not enough Coach Points.'); return; }
+                career.coachingPoints -= info.cost;
+                p.project = info.key;
+                saveCareer(career);
+                redraw();
+                app.toast(`${p.last} is on the ${info.label.toLowerCase()}.`);
+              },
+            },
+          })));
+      }
+      void PROJECTS;
+    };
+    redraw();
+    return panel('Development project', box);
+  }
+
+  /** What every offseason actually did to him. */
+  private historyPanel(p: PlayerData): HTMLElement | null {
+    const hist = p.dev?.history ?? [];
+    if (!hist.length) return null;
+    return panel('Development history',
+      ...hist.slice().reverse().map((y) => h('div', { class: 'row', style: 'justify-content:space-between;gap:10px' },
+        h('span', { class: 'small', text: `Year ${y.year} · ${y.note}` }),
+        h('span', {
+          class: 'num',
+          style: y.to > y.from ? 'color:var(--green)' : y.to < y.from ? 'color:var(--red)' : '',
+          text: `${y.from} → ${y.to}`,
+        }))));
   }
 }
 

@@ -1,5 +1,6 @@
 import { Rng } from '../core/rng';
 import type { TimeOfDay } from '../data/teams';
+import type { Region } from '../data/world/programs';
 
 /* ---------------------------------------------------------------------------
  * WEATHER
@@ -11,7 +12,8 @@ import type { TimeOfDay } from '../data/teams';
  *
  * Conditions are deterministic from the match seed, so a replayed fixture looks
  * the same, and the temperature is generated locally: no weather API, no key,
- * nothing to pay for.
+ * nothing to pay for. A game in the northeast in March is a different afternoon
+ * from one in Texas, so the REGION shifts both the sky and the thermometer.
  * ------------------------------------------------------------------------- */
 
 export type WeatherKind = 'sunny' | 'cloudy' | 'evening' | 'night' | 'rain';
@@ -56,18 +58,30 @@ const TABLE: Record<WeatherKind, Omit<Weather, 'tempF'>> = {
   },
 };
 
+/** How each part of the country plays in the spring: wetter, greyer, colder. */
+const CLIMATE: Record<Region, { wet: number; degrees: number }> = {
+  texas: { wet: 0, degrees: 0 },
+  south: { wet: 0.03, degrees: 4 },
+  west: { wet: -0.06, degrees: -2 },
+  midwest: { wet: 0.08, degrees: -10 },
+  'mid-atlantic': { wet: 0.07, degrees: -6 },
+  northeast: { wet: 0.11, degrees: -13 },
+};
+
 /** Time of day sets the light; the roll picks the sky on top of it. */
-export function weatherFor(seed: number, time: TimeOfDay = 'day'): Weather {
+export function weatherFor(seed: number, time: TimeOfDay = 'day', region: Region = 'texas'): Weather {
   const rng = new Rng(seed ^ 0x7a11ed);
   const roll = rng.next();
+  const climate = CLIMATE[region] ?? CLIMATE.texas;
+  const wet = climate.wet;
   let kind: WeatherKind;
-  if (time === 'night') kind = roll < 0.82 ? 'night' : 'rain';
-  else if (time === 'evening') kind = roll < 0.66 ? 'evening' : roll < 0.86 ? 'cloudy' : 'rain';
-  else kind = roll < 0.55 ? 'sunny' : roll < 0.84 ? 'cloudy' : 'rain';
+  if (time === 'night') kind = roll < 0.82 - wet ? 'night' : 'rain';
+  else if (time === 'evening') kind = roll < 0.66 ? 'evening' : roll < 0.86 - wet ? 'cloudy' : 'rain';
+  else kind = roll < 0.55 - wet * 0.5 ? 'sunny' : roll < 0.84 - wet ? 'cloudy' : 'rain';
 
   const base = TABLE[kind];
-  // North Texas spring: warm afternoons, cooler under the lights, rain is cool.
-  const warm = time === 'day' ? 74 : time === 'evening' ? 68 : 61;
+  // A spring afternoon, shifted by where in the country the game is played.
+  const warm = (time === 'day' ? 74 : time === 'evening' ? 68 : 61) + climate.degrees;
   const tempF = Math.round(warm + rng.range(-7, 9) - (kind === 'rain' ? 6 : 0) + (kind === 'sunny' ? 4 : 0));
   return { ...base, tempF };
 }

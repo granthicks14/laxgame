@@ -8,6 +8,7 @@ import {
 } from '../../league/career';
 import { saveCareer } from '../../state/saves';
 import { generateRoster } from '../../data/players';
+import { difficultyFor } from '../../data/levels';
 import { coachEffects } from '../../league/coaching';
 import type { Career, ScheduledGame } from '../../league/types';
 
@@ -16,7 +17,7 @@ export function buildSeasonMatch(career: Career, game: ScheduledGame, replays = 
   const you = effectiveTeam(career, career.teamId);
   const them = effectiveTeam(career, oppId);
   const isHome = userIsHome(career, game);
-  const oppRoster = generateRoster(them, `${career.seed}:${career.year}:${oppId}`);
+  const oppRoster = generateRoster(them, `${career.seed}:${career.year}:${oppId}`, career.level);
   const yourRoster = rosterForMatch(career);
 
   const label = game.playoff
@@ -27,8 +28,10 @@ export function buildSeasonMatch(career: Career, game: ScheduledGame, replays = 
     homeTeam: isHome ? you : them,
     awayTeam: isHome ? them : you,
     humanSide: isHome ? 'home' : 'away',
-    difficulty: career.difficulty,
+    // Nobody plays a professional game on rookie AI: the level sets a floor.
+    difficulty: difficultyFor(career.level, career.difficulty),
     gameLength: career.gameLength,
+    level: career.level,
     seed: hashSeed(`${career.seed}:${career.year}:${game.id}`),
     contextLabel: label,
     homeRoster: isHome ? yourRoster : oppRoster,

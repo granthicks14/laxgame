@@ -11,7 +11,7 @@
  * can pin its own look in EMBLEM_OVERRIDES below.
  * ------------------------------------------------------------------------- */
 
-import type { TeamData, TeamIdentity } from './teams';
+import type { GameTeam, TeamIdentity } from './teams';
 
 export type EmblemShape = 'shield' | 'circle' | 'star' | 'diamond' | 'banner' | 'hex';
 export type EmblemMotif = 'none' | 'chevron' | 'bar' | 'stripe' | 'cross';
@@ -57,14 +57,14 @@ function hash(s: string): number {
 }
 
 /** Initials for the mark: two letters at most, so it stays legible at 12px. */
-function glyphFor(team: TeamData): string {
+function glyphFor(team: GameTeam): string {
   const words = team.short.replace(/[^A-Za-z' ]/g, '').split(/\s+/).filter(Boolean);
   if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
   const w = words[0] ?? team.abbr;
   return w.slice(0, 2).toUpperCase();
 }
 
-export function emblemFor(team: TeamData): Emblem {
+export function emblemFor(team: GameTeam): Emblem {
   const h = hash(team.id);
   const preferred = IDENTITY_SHAPE[team.identity];
   const base: Emblem = {

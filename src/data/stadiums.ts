@@ -10,7 +10,7 @@
  * These are STYLISED retro venues, not reproductions of real stadiums.
  * ------------------------------------------------------------------------- */
 
-import type { TeamData, TimeOfDay } from './teams';
+import type { GameTeam, TimeOfDay } from './teams';
 
 export type StadiumStyle =
   /** Seating down both sides, press box, towers: the Friday-night look. */
@@ -62,7 +62,7 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-export function stadiumFor(team: TeamData): StadiumConfig {
+export function stadiumFor(team: GameTeam): StadiumConfig {
   const f = team.homeField;
   const h = hash(team.id);
   const bit = (n: number) => ((h >>> n) & 1) === 1;

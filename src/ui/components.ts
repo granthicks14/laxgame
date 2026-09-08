@@ -1,6 +1,6 @@
 import { h } from './dom';
 import type { App } from './App';
-import type { TeamData, TeamRatings } from '../data/teams';
+import type { GameTeam, TeamData, TeamRatings } from '../data/teams';
 import { DIFFICULTY_WORDS, coachingDifficulty } from '../data/teams';
 
 export function topbar(app: App, title: string, sub?: string, onBack?: () => void): HTMLElement {
@@ -25,7 +25,7 @@ export function scrollArea(...children: (Node | null | false)[]): HTMLElement {
   return h('div', { class: 'scroll' }, h('div', { class: 'wrapper stack' }, ...children));
 }
 
-export function teamBadge(team: TeamData, size: 'sm' | 'md' | 'lg' = 'md'): HTMLElement {
+export function teamBadge(team: GameTeam, size: 'sm' | 'md' | 'lg' = 'md'): HTMLElement {
   const cls = size === 'sm' ? 'badge badge--sm' : size === 'lg' ? 'badge badge--lg' : 'badge';
   return h('div', {
     class: cls,

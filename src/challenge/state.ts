@@ -1,0 +1,381 @@
+/* ---------------------------------------------------------------------------
+ * THE CHALLENGE CAREER
+ * ---------------------------------------------------------------------------
+ * One coach, one lifetime, nine rungs. This file is the machinery that decides
+ * what happens to him at the end of every season:
+ *
+ *   REPUTATION   what the sport thinks of you. Built by winning, and by winning
+ *                more than the roster you were given should have won. It is the
+ *                only thing that decides which jobs you are offered.
+ *   EXPECTATION  what THIS programme wants, adjusted for the mess you inherited.
+ *                Beating it cools you off; missing it heats you up.
+ *   HEAT         how close you are to being sacked. Three bad years and you are
+ *                out — but never in your first season, because nobody is fired
+ *                for a squad somebody else built.
+ *   OFFERS       winning the championship gets you interviews, not a promotion.
+ *                You choose from what you are actually offered, and the best
+ *                job available is usually the one with the worst situation.
+ *
+ * Failure is real and it is survivable. Getting fired drops you a rung and
+ * costs you the recruits you were chasing. Failing to find any job at all costs
+ * you a year of your career. Two of those in a row and it is over — which is
+ * the only way this mode ends other than the PLL.
+ * ------------------------------------------------------------------------- */
+
+import type { Rng } from '../core/rng';
+import { clamp } from '../core/math';
+import { STAGES, FINAL_STAGE, stageAt, type Stage } from './ladder';
+import { SITUATIONS, situationFor, type SituationKey } from './situations';
+
+export interface Expectation {
+  /** Win percentage the programme considers acceptable. */
+  winPct: number;
+  /** True when nothing but a championship will do. */
+  title: boolean;
+  text: string;
+}
+
+export interface JobOffer {
+  teamId: string;
+  teamName: string;
+  teamShort: string;
+  stageIndex: number;
+  prestige: number;
+  situation: SituationKey;
+  expectation: Expectation;
+  /** One line on why this job is open. */
+  note: string;
+}
+
+export type SeasonOutcome = 'stay' | 'promoted' | 'fired' | 'unemployed' | 'complete';
+
+export interface ChallengeStep {
+  year: number;
+  stageKey: string;
+  teamShort: string;
+  wins: number;
+  losses: number;
+  finish: string;
+  champion: boolean;
+  outcome: SeasonOutcome;
+}
+
+export type OfferKind = 'promotion' | 'demotion' | 'rehire';
+
+export interface ChallengeState {
+  stageIndex: number;
+  /** Seasons coached, including ones spent out of work. */
+  totalYears: number;
+  /** 0..100. */
+  reputation: number;
+  situation: SituationKey;
+  /** Seasons at the current programme. */
+  tenure: number;
+  expectation: Expectation;
+  /** 0..3. Three and the programme moves on. */
+  heat: number;
+  /** Pending decision. Null when there is nothing to decide. */
+  offers: JobOffer[] | null;
+  offerKind: OfferKind | null;
+  /** Set the season you are sacked, cleared when you take a job. */
+  fired: boolean;
+  /** Seasons in a row spent without a job. Two ends the career. */
+  strikes: number;
+  /** Championships won, by stage key. */
+  titles: Record<string, number>;
+  steps: ChallengeStep[];
+  /** Set when the PLL is won, or when the career ends badly. */
+  complete: boolean;
+  endedReason: string | null;
+}
+
+/* ------------------------------------------------------------ expectations */
+
+/**
+ * What a programme wants. A strong programme at a high rung wants a title; a
+ * broken one at the bottom wants signs of life. The situation you inherited is
+ * a genuine allowance, which is what keeps this hard rather than unfair.
+ */
+export function expectationFor(
+  stage: Stage, prestige: number, situation: SituationKey, reputation: number,
+): Expectation {
+  const relief = SITUATIONS[situation].expectationRelief;
+  // A big reputation raises what people want from you. Success has a cost.
+  const fame = clamp((reputation - 50) / 100, -0.06, 0.08);
+  const strength = clamp((prestige - 55) / 90, -0.12, 0.18);
+  const winPct = clamp(stage.parWinPct + strength + fame - relief, 0.2, 0.78);
+  const title = prestige >= 85 && stage.parWinPct >= 0.5;
+  const text = title
+    ? 'Win the championship. Anything else is a failed season.'
+    : winPct >= 0.62 ? 'Compete for the title and win most weeks.'
+      : winPct >= 0.5 ? 'A winning record, and be in the playoff picture.'
+        : winPct >= 0.38 ? 'Show progress. Do not get embarrassed.'
+          : 'Keep the programme alive and develop the young players.';
+  return { winPct: Math.round(winPct * 100) / 100, title, text };
+}
+
+export function newChallengeState(
+  stageIndex: number, situation: SituationKey, expectation: Expectation,
+): ChallengeState {
+  return {
+    stageIndex,
+    totalYears: 0,
+    reputation: 22,
+    situation,
+    tenure: 0,
+    expectation,
+    heat: 0,
+    offers: null,
+    offerKind: null,
+    fired: false,
+    strikes: 0,
+    titles: {},
+    steps: [],
+    complete: false,
+    endedReason: null,
+  };
+}
+
+/* -------------------------------------------------------------- the season */
+
+export interface SeasonInput {
+  wins: number;
+  losses: number;
+  champion: boolean;
+  finish: string;
+  teamShort: string;
+  /** Where the programme was expected to finish, 0..1 of the table. */
+  prestige: number;
+}
+
+export interface SeasonVerdict {
+  outcome: SeasonOutcome;
+  /** Lines the end-of-season screen shows, in order. */
+  messages: string[];
+  reputationDelta: number;
+}
+
+/** Reputation a title is worth at each rung. Winning the PLL is a career. */
+function titleValue(stageIndex: number): number {
+  return 10 + stageIndex * 2.6;
+}
+
+/**
+ * Grades the season, moves reputation and heat, and decides what happens next.
+ * The caller then generates offers if the verdict calls for them.
+ */
+export function evaluateSeason(state: ChallengeState, input: SeasonInput): SeasonVerdict {
+  const stage = stageAt(state.stageIndex);
+  const games = Math.max(1, input.wins + input.losses);
+  const pct = input.wins / games;
+  const gap = pct - state.expectation.winPct;
+  const messages: string[] = [];
+
+  state.totalYears++;
+  state.tenure++;
+
+  // Reputation: winning matters, but beating what you were given matters more.
+  let rep = gap * 26;
+  if (input.champion) rep += titleValue(state.stageIndex);
+  if (state.expectation.title && !input.champion) rep -= 4;
+  rep -= 1.2; // the sport forgets you if you do nothing
+  state.reputation = clamp(state.reputation + rep, 0, 100);
+
+  // Heat.
+  const badly = gap < -0.14;
+  const well = gap >= 0 || input.champion;
+  if (input.champion) state.heat = 0;
+  else if (well) state.heat = Math.max(0, state.heat - 1);
+  else if (badly && state.tenure > 1) state.heat++;
+
+  if (input.champion) {
+    state.titles[stage.key] = (state.titles[stage.key] ?? 0) + 1;
+    messages.push(`${stage.requirement.replace('Win the', 'You won the').replace('Win a', 'You won a')}.`);
+  } else if (gap >= 0.1) {
+    messages.push('You got more out of this roster than anybody expected.');
+  } else if (badly) {
+    messages.push(`The programme wanted ${Math.round(state.expectation.winPct * 100)}% and got ${Math.round(pct * 100)}%.`);
+  }
+
+  let outcome: SeasonOutcome = 'stay';
+
+  if (input.champion && state.stageIndex >= FINAL_STAGE) {
+    state.complete = true;
+    state.endedReason = 'You won the Premier Lacrosse League.';
+    outcome = 'complete';
+    messages.push('There is nothing above this. The climb is over.');
+  } else if (input.champion) {
+    outcome = 'promoted';
+    messages.push('The phone has started ringing.');
+  } else if (state.heat >= 3) {
+    outcome = 'fired';
+    state.fired = true;
+    state.heat = 0;
+    state.tenure = 0;
+    state.reputation = clamp(state.reputation - 8, 0, 100);
+    messages.push('You have been let go.');
+  } else if (state.heat === 2) {
+    messages.push('One more season like that and you will be out.');
+  }
+
+  state.steps.push({
+    year: state.totalYears,
+    stageKey: stage.key,
+    teamShort: input.teamShort,
+    wins: input.wins,
+    losses: input.losses,
+    finish: input.finish,
+    champion: input.champion,
+    outcome,
+  });
+
+  return { outcome, messages, reputationDelta: Math.round(rep * 10) / 10 };
+}
+
+/* ----------------------------------------------------------------- offers */
+
+export interface Programme {
+  id: string;
+  name: string;
+  short: string;
+  prestige: number;
+}
+
+/**
+ * The jobs actually on the table. Reputation is the gate: a coach nobody has
+ * heard of gets the worst programme at the next rung and is grateful for it.
+ * There are always at least two, and they are always different bets — the best
+ * programme in the list is reliably the one in the deepest trouble.
+ */
+export function generateOffers(
+  state: ChallengeState, kind: OfferKind, pool: Programme[], rng: Rng, count = 3,
+): JobOffer[] {
+  const targetStage = kind === 'promotion'
+    ? Math.min(FINAL_STAGE, state.stageIndex + 1)
+    : kind === 'demotion' ? Math.max(0, state.stageIndex - 1) : state.stageIndex;
+  const stage = stageAt(targetStage);
+
+  // Reputation decides WHERE IN THE POOL you can shop, not an absolute rating —
+  // a pool of six Class D schools and a pool of seventy D-I programmes have to
+  // behave the same way. A coach nobody knows shops at the bottom; a coach with
+  // a name has the whole market open to him.
+  const sorted = [...pool].sort((a, b) => a.prestige - b.prestige);
+  const rep = clamp(state.reputation / 100, 0, 1) + (kind === 'promotion' ? 0.12 : -0.06);
+  const top = clamp(0.3 + rep * 0.8, 0.22, 1);
+  const bottom = clamp(top - 0.5, 0, 0.85);
+  const last = Math.max(0, sorted.length - 1);
+  const lo = Math.floor(bottom * last);
+  const hi = Math.max(lo, Math.ceil(top * last));
+  const window = sorted.slice(lo, hi + 1);
+  const picked = rng.shuffle([...window]).slice(0, count);
+  if (!picked.length && sorted.length) picked.push(sorted[0]);
+
+  return picked.map((p) => {
+    const situation = situationFor(p.prestige, rng);
+    return {
+      teamId: p.id,
+      teamName: p.name,
+      teamShort: p.short,
+      stageIndex: targetStage,
+      prestige: Math.round(p.prestige),
+      situation,
+      expectation: expectationFor(stage, p.prestige, situation, state.reputation),
+      note: SITUATIONS[situation].blurb,
+    };
+  }).sort((a, b) => b.prestige - a.prestige);
+}
+
+/** Applies an accepted offer. The career continues; the job does not. */
+export function acceptOffer(state: ChallengeState, offer: JobOffer): void {
+  state.stageIndex = offer.stageIndex;
+  state.situation = offer.situation;
+  state.expectation = offer.expectation;
+  state.tenure = 0;
+  state.heat = 0;
+  state.fired = false;
+  state.strikes = 0;
+  state.offers = null;
+  state.offerKind = null;
+}
+
+/** Turning everything down. A year out of the game is a real cost. */
+export function declineAll(state: ChallengeState): void {
+  state.offers = null;
+  state.offerKind = null;
+  if (state.fired) {
+    state.strikes++;
+    state.totalYears++;
+    if (state.strikes >= 2) {
+      state.complete = true;
+      state.endedReason = 'Two years out of the game. Nobody is calling any more.';
+    }
+  }
+}
+
+/* ---------------------------------------------------------------- legacy */
+
+export interface Legacy {
+  score: number;
+  title: string;
+  lines: { label: string; value: string; points: number }[];
+}
+
+/**
+ * The number the whole career adds up to. Championships are weighted by how
+ * hard they were to win, so a PLL title is worth several high school ones, and
+ * a coach who climbed the whole ladder outranks one who won Class D nine times.
+ */
+export function legacyScore(state: ChallengeState, extra: { gems: number; developed: number } = { gems: 0, developed: 0 }): Legacy {
+  const lines: Legacy['lines'] = [];
+  let score = 0;
+
+  let titles = 0;
+  let titlePoints = 0;
+  for (const stage of STAGES) {
+    const n = state.titles[stage.key] ?? 0;
+    if (!n) continue;
+    titles += n;
+    titlePoints += n * (12 + STAGES.indexOf(stage) * 9);
+  }
+  score += titlePoints;
+  lines.push({ label: 'Championships', value: `${titles}`, points: Math.round(titlePoints) });
+
+  const climb = state.stageIndex * 26;
+  score += climb;
+  lines.push({ label: 'Highest level reached', value: stageAt(state.stageIndex).short, points: climb });
+
+  const rep = Math.round(state.reputation * 1.6);
+  score += rep;
+  lines.push({ label: 'Reputation', value: `${Math.round(state.reputation)}`, points: rep });
+
+  const wins = state.steps.reduce((n, s) => n + s.wins, 0);
+  const winPoints = Math.round(wins * 0.5);
+  score += winPoints;
+  lines.push({ label: 'Career wins', value: `${wins}`, points: winPoints });
+
+  const years = Math.round(state.totalYears * 1.2);
+  score += years;
+  lines.push({ label: 'Seasons coached', value: `${state.totalYears}`, points: years });
+
+  if (extra.gems) {
+    const gp = extra.gems * 14;
+    score += gp;
+    lines.push({ label: 'Overlooked players you found', value: `${extra.gems}`, points: gp });
+  }
+  if (extra.developed) {
+    const dp = extra.developed * 6;
+    score += dp;
+    lines.push({ label: 'Players developed into stars', value: `${extra.developed}`, points: dp });
+  }
+
+  // Calibrated against simulated careers: a coach who climbs to Division I and
+  // wins there is a Legend; Immortal means the ladder was finished.
+  const title = score >= 1500 ? 'Immortal'
+    : score >= 1100 ? 'Legend'
+      : score >= 800 ? 'Great'
+        : score >= 500 ? 'Respected'
+          : score >= 280 ? 'Established'
+            : score >= 110 ? 'Journeyman' : 'Footnote';
+
+  return { score: Math.round(score), title, lines };
+}
