@@ -128,6 +128,7 @@ export class BracketScreen implements Screen {
     const body = h('div', { class: 'stack' });
     const render = () => {
       clear(body);
+      body.appendChild(standingPanel(career));
       // Rounds are revealed one at a time so a coach who has been knocked out
       // can still watch the tournament play itself out.
       const revealed = Math.max(1, Math.min(rounds.length, career.postseason?.revealed || 0));
@@ -174,8 +175,9 @@ export class BracketScreen implements Screen {
       // Redrawn with the bracket, because the bracket is redrawn every time a
       // round is played out and this is the only way back to the season.
       if (onBack) {
+        const alive = !career.eliminated && !career.seasonComplete;
         body.appendChild(h('button', {
-          class: 'btn btn--block',
+          class: `btn btn--block${alive ? ' btn--primary' : ''}`,
           style: 'min-height:48px',
           text: 'Continue to the season',
           on: { click: onBack },
@@ -222,6 +224,42 @@ export class BracketScreen implements Screen {
       h('span', { class: 'num', style: 'width:14px;color:var(--muted)', text: seedOf(home.id) }),
     );
   }
+}
+
+/**
+ * Where the coach stands in this bracket, in one line he does not have to work
+ * out from the rows underneath: his seed, who he plays next, or that his season
+ * is over and the tournament is not.
+ */
+function standingPanel(career: Career): HTMLElement {
+  const status = postseasonStatus(career);
+  const fmt = seasonFormat(career);
+  const team = userTeam(career);
+  const opponent = status?.nextOpponentId ? effectiveTeam(career, status.nextOpponentId) : null;
+  const champId = champion(career);
+
+  const line = !status?.qualified
+    ? `${team.short} did not make the field. The bracket plays out without them.`
+    : career.eliminated
+      ? `${team.short} are out. The tournament is not — follow it to a champion.`
+      : opponent
+        ? `${team.short} play ${opponent.name} next, for a place in the ${fmt.titleName}.`
+        : champId === career.teamId
+          ? `${team.short} won the ${fmt.titleName}.`
+          : 'Waiting on the next round.';
+
+  return panel(fmt.titleName,
+    h('div', { class: 'row row--wrap', style: 'gap:6px' },
+      status && status.qualified && status.seed > 0
+        ? h('span', { class: 'pill pill--accent', text: `${ordinal(status.seed)} seed of ${status.field}` })
+        : null,
+      h('span', {
+        class: career.eliminated || !status?.qualified ? 'pill pill--red' : 'pill pill--green',
+        text: !status?.qualified ? 'Missed the field'
+          : career.eliminated ? 'Eliminated' : status.roundName || 'In the bracket',
+      }),
+      h('span', { class: 'pill', text: recordText(career.standings[career.teamId]) })),
+    h('div', { class: 'small', text: line }));
 }
 
 /**
