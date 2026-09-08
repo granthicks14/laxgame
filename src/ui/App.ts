@@ -1,6 +1,7 @@
 import { audio } from '../audio/Audio';
 import { h } from './dom';
 import { loadSettings, saveSettings, type Settings } from '../state/settings';
+import { loadKeybinds, saveKeybinds, type Keybinds } from '../state/keybinds';
 
 export interface Screen {
   el: HTMLElement;
@@ -20,6 +21,8 @@ interface Entry {
 export class App {
   readonly root: HTMLElement;
   settings: Settings;
+  /** Key bindings live alongside settings so every screen can read them. */
+  keybinds: Keybinds;
   private stack: Entry[] = [];
   private toastTimer: number | null = null;
   /** True while a screen's constructor is running: it is not on the stack yet,
@@ -29,6 +32,7 @@ export class App {
   constructor(root: HTMLElement) {
     this.root = root;
     this.settings = loadSettings();
+    this.keybinds = loadKeybinds();
     this.applySettings();
     // Any first gesture unlocks audio (browsers require this).
     const unlock = () => {
@@ -44,6 +48,15 @@ export class App {
     audio.setVolumes(this.settings.sfxVolume, this.settings.musicVolume);
     audio.enabled = this.settings.sfxVolume > 0 || this.settings.musicVolume > 0;
   }
+
+  /** Persists a new binding set and tells anything listening (a live game). */
+  setKeybinds(binds: Keybinds): void {
+    this.keybinds = binds;
+    saveKeybinds(binds);
+    this.onKeybindsChanged?.(binds);
+  }
+
+  onKeybindsChanged: ((binds: Keybinds) => void) | null = null;
 
   updateSettings(patch: Partial<Settings>): void {
     this.settings = { ...this.settings, ...patch };

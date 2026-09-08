@@ -1,22 +1,9 @@
 import { clamp } from '../core/math';
 import type { InputState } from '../match/types';
+import { DEFAULT_KEYBINDS, type Keybinds } from '../state/keybinds';
 
-export type ButtonId = 'action' | 'shoot' | 'dodge' | 'switch';
-export const BUTTON_IDS: ButtonId[] = ['action', 'shoot', 'dodge', 'switch'];
-
-const KEY_MOVE: Record<string, [number, number]> = {
-  KeyW: [0, -1], ArrowUp: [0, -1],
-  KeyS: [0, 1], ArrowDown: [0, 1],
-  KeyA: [-1, 0], ArrowLeft: [-1, 0],
-  KeyD: [1, 0], ArrowRight: [1, 0],
-};
-
-const KEY_ACTION = new Set(['Space']);
-const KEY_SHOOT = new Set(['KeyF', 'KeyK', 'KeyL']);
-const KEY_DODGE = new Set(['KeyE', 'KeyJ']);
-const KEY_SWITCH = new Set(['Tab', 'KeyQ']);
-const KEY_SPRINT = new Set(['ShiftLeft', 'ShiftRight']);
-const KEY_PAUSE = new Set(['Escape', 'KeyP']);
+export type ButtonId = 'action' | 'shoot' | 'dodge' | 'switch' | 'screen';
+export const BUTTON_IDS: ButtonId[] = ['action', 'shoot', 'dodge', 'switch', 'screen'];
 
 /** Pixel radius of full stick deflection. */
 const STICK_RADIUS = 58;
@@ -61,16 +48,28 @@ type PointerRole = 'stick' | ButtonId;
  * ========================================================================= */
 export class InputManager {
   private keys = new Set<string>();
+
+  /** Live bindings. Rebinding while a game is running takes effect at once. */
+  private binds: Keybinds = DEFAULT_KEYBINDS;
+  private moveKeys = new Map<string, [number, number]>();
+  private actionKeys = new Set<string>();
+  private shootKeys = new Set<string>();
+  private dodgeKeys = new Set<string>();
+  private switchKeys = new Set<string>();
+  private screenKeys = new Set<string>();
+  private sprintKeys = new Set<string>();
+  private pauseKeys = new Set<string>();
   private pendingAction = false;
   private pendingDodge = false;
   private pendingSwitch = false;
+  private pendingScreen = false;
   private pendingShootRelease = false;
   private shootHeldKeyboard = false;
 
   /** Which pointer is driving each role. A role with no pointer is not held. */
   private pointerRoles = new Map<number, PointerRole>();
   private buttonPointer: Record<ButtonId, number | null> = {
-    action: null, shoot: null, dodge: null, switch: null,
+    action: null, shoot: null, dodge: null, switch: null, screen: null,
   };
   private stickPointer: number | null = null;
 
@@ -103,6 +102,29 @@ export class InputManager {
   private hContextMenu = (e: Event) => e.preventDefault();
 
   /* ------------------------------------------------------------- lifecycle */
+
+  /** Point the manager at a binding set. Safe to call mid-game. */
+  setBindings(binds: Keybinds): void {
+    this.binds = binds;
+    this.moveKeys.clear();
+    for (const k of binds.moveUp) this.moveKeys.set(k, [0, -1]);
+    for (const k of binds.moveDown) this.moveKeys.set(k, [0, 1]);
+    for (const k of binds.moveLeft) this.moveKeys.set(k, [-1, 0]);
+    for (const k of binds.moveRight) this.moveKeys.set(k, [1, 0]);
+    this.actionKeys = new Set(binds.pass);
+    this.shootKeys = new Set(binds.shoot);
+    this.dodgeKeys = new Set(binds.dodge);
+    this.switchKeys = new Set(binds.switch);
+    this.screenKeys = new Set(binds.screen);
+    this.sprintKeys = new Set(binds.sprint);
+    this.pauseKeys = new Set(binds.pause);
+    // A key that has just been rebound must not stay logically held.
+    this.keys.clear();
+  }
+
+  get bindings(): Keybinds {
+    return this.binds;
+  }
 
   attach(surface?: HTMLElement): void {
     this.surface = surface ?? null;
@@ -176,6 +198,7 @@ export class InputManager {
     this.pendingAction = false;
     this.pendingDodge = false;
     this.pendingSwitch = false;
+    this.pendingScreen = false;
     this.pendingShootRelease = false;
     this.shootHeldKeyboard = false;
 
@@ -301,6 +324,7 @@ export class InputManager {
     if (id === 'action') this.pendingAction = true;
     if (id === 'dodge') this.pendingDodge = true;
     if (id === 'switch') this.pendingSwitch = true;
+    if (id === 'screen') this.pendingScreen = true;
   }
 
   private releaseButton(id: ButtonId): void {
@@ -319,13 +343,14 @@ export class InputManager {
 
   private onKeyDown(e: KeyboardEvent): void {
     if (this.isTypingTarget(e)) return;
-    if (KEY_PAUSE.has(e.code)) {
+    if (this.pauseKeys.has(e.code)) {
       e.preventDefault();
       this.onPause?.();
       return;
     }
-    const known = KEY_MOVE[e.code] || KEY_ACTION.has(e.code) || KEY_SHOOT.has(e.code)
-      || KEY_DODGE.has(e.code) || KEY_SWITCH.has(e.code) || KEY_SPRINT.has(e.code);
+    const known = this.moveKeys.has(e.code) || this.actionKeys.has(e.code) || this.shootKeys.has(e.code)
+      || this.dodgeKeys.has(e.code) || this.switchKeys.has(e.code) || this.screenKeys.has(e.code)
+      || this.sprintKeys.has(e.code);
     if (known) {
       e.preventDefault();
       this.usedKeyboard = true;
@@ -333,16 +358,17 @@ export class InputManager {
     if (e.repeat || this.suspended) return;
 
     this.keys.add(e.code);
-    if (KEY_ACTION.has(e.code)) this.pendingAction = true;
-    if (KEY_DODGE.has(e.code)) this.pendingDodge = true;
-    if (KEY_SWITCH.has(e.code)) this.pendingSwitch = true;
-    if (KEY_SHOOT.has(e.code)) this.shootHeldKeyboard = true;
+    if (this.actionKeys.has(e.code)) this.pendingAction = true;
+    if (this.dodgeKeys.has(e.code)) this.pendingDodge = true;
+    if (this.switchKeys.has(e.code)) this.pendingSwitch = true;
+    if (this.screenKeys.has(e.code)) this.pendingScreen = true;
+    if (this.shootKeys.has(e.code)) this.shootHeldKeyboard = true;
   }
 
   private onKeyUp(e: KeyboardEvent): void {
     this.keys.delete(e.code);
-    if (KEY_SHOOT.has(e.code)) {
-      const stillHeld = [...KEY_SHOOT].some((k) => this.keys.has(k));
+    if (this.shootKeys.has(e.code)) {
+      const stillHeld = [...this.shootKeys].some((k) => this.keys.has(k));
       if (!stillHeld && this.shootHeldKeyboard) {
         this.shootHeldKeyboard = false;
         this.pendingShootRelease = true;
@@ -356,7 +382,7 @@ export class InputManager {
     let mx = 0;
     let my = 0;
     for (const code of this.keys) {
-      const v = KEY_MOVE[code];
+      const v = this.moveKeys.get(code);
       if (v) { mx += v[0]; my += v[1]; }
     }
     const mag = Math.hypot(mx, my);
@@ -378,17 +404,19 @@ export class InputManager {
       this.pendingAction = false;
       this.pendingDodge = false;
       this.pendingSwitch = false;
+      this.pendingScreen = false;
       this.pendingShootRelease = false;
       return {
         moveX: 0, moveY: 0, sprint: false, actionPressed: false,
-        shootHeld: false, shootReleased: false, dodgePressed: false, switchPressed: false,
+        shootHeld: false, shootReleased: false, dodgePressed: false,
+        switchPressed: false, screenPressed: false,
       };
     }
 
     const kb = this.keyboardMove();
     let mx = kb.x;
     let my = kb.y;
-    let sprint = [...KEY_SPRINT].some((k) => this.keys.has(k));
+    let sprint = [...this.sprintKeys].some((k) => this.keys.has(k));
 
     if (this.stick.active) {
       const mag = Math.hypot(this.stick.x, this.stick.y);
@@ -412,11 +440,13 @@ export class InputManager {
       shootReleased: this.pendingShootRelease,
       dodgePressed: this.pendingDodge,
       switchPressed: this.pendingSwitch,
+      screenPressed: this.pendingScreen,
     };
 
     this.pendingAction = false;
     this.pendingDodge = false;
     this.pendingSwitch = false;
+    this.pendingScreen = false;
     this.pendingShootRelease = false;
     return state;
   }

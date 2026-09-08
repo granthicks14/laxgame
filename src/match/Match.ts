@@ -206,6 +206,7 @@ export class Match {
       windup: 0, windupIsPass: false, pickupLock: 0,
       aiThink: this.rng.range(0, 0.25), aiTargetX: FIELD.centerX, aiTargetY: FIELD.centerY,
       aiCut: 0, aiMark: 0, aiSliding: false, aiIntent: 'idle',
+      screenTimer: 0, screenHold: 0,
       animPhase: this.rng.range(0, 6), animPose: 'idle', poseTimer: 0, flash: 0,
       stat: emptyStats(),
     };
@@ -283,7 +284,11 @@ export class Match {
     return this.phase === 'final';
   }
   /** True when the AI, not the human, is driving this player. */
+  /** True while the match is being fast-forwarded: both benches are on AI. */
+  autopilot = false;
+
   aiControls(p: MatchPlayer): boolean {
+    if (this.autopilot) return true;
     if (!this.setups[p.side].human) return true;
     return this.controlled[p.side] !== p;
   }
@@ -299,7 +304,12 @@ export class Match {
 
   // ---------------------------------------------------------------- phases
 
+  private clearScreens(): void {
+    for (const p of this.players) { p.screenTimer = 0; p.screenHold = 0; }
+  }
+
   private resetToFaceoffPositions(): void {
+    this.clearScreens();
     // Everything below teleports players, so any footage from before this point
     // would play back as a jump cut.
     this.replay.clear();
@@ -504,7 +514,52 @@ export class Match {
 
   /** True when there is enough footage to be worth showing. */
   private canReplay(): boolean {
+    if (this.autopilot) return false;
     return (this.cfg.replays ?? true) && !this.isPractice && this.replay.seconds > 1.4;
+  }
+
+  /* ------------------------------------------------------ quarter simulation
+   * Fast-forwarding runs the real engine, not a dice roll: the same AI, the
+   * same ratings, the same tactics and difficulty, continuing from the exact
+   * state on the field. The only differences are that nobody is holding a
+   * controller and the presentation is muted.
+   * ---------------------------------------------------------------------- */
+
+  /**
+   * Plays out the rest of the current quarter with both teams on AI. Returns
+   * what happened, so the caller can show it. Never runs longer than one
+   * quarter plus a break; a stuck sim ends rather than hanging the tab.
+   */
+  simulateQuarter(): { homeGoals: number; awayGoals: number; endedGame: boolean; quarter: number } {
+    const startQuarter = this.quarter;
+    const startOt = this.overtimePeriod;
+    const before = { home: this.score.home, away: this.score.away };
+    const wasMuted = this.events.muted;
+
+    this.autopilot = true;
+    this.events.muted = true;
+    this.replay.clear();
+    if (this.phase === 'goal' || this.phase === 'replay') this.finishReplay();
+
+    const step = 1 / 60;
+    // Cap on wall-clock work: a quarter plus a generous margin for restarts.
+    const maxSteps = Math.ceil((this.cfg.quarterSeconds + 90) / step);
+    let steps = 0;
+    while (steps++ < maxSteps) {
+      if (this.phase === 'final') break;
+      if (this.quarter !== startQuarter || this.overtimePeriod !== startOt) break;
+      this.update(step);
+    }
+
+    this.autopilot = false;
+    this.events.muted = wasMuted;
+    this.replay.clear();
+    return {
+      homeGoals: this.score.home - before.home,
+      awayGoals: this.score.away - before.away,
+      endedGame: this.phase === 'final',
+      quarter: startQuarter,
+    };
   }
 
   private startReplay(): void {
@@ -631,15 +686,21 @@ export class Match {
     }
 
     // Human control
-    if (this.humanSide) {
+    if (this.humanSide && !this.autopilot) {
       this.applyHumanInput(this.humanSide, input, dt);
     }
 
-    // AI + movement
+    if (this.screenCd.home > 0) this.screenCd.home -= dt;
+    if (this.screenCd.away > 0) this.screenCd.away -= dt;
+
+    // AI + movement. A player on his way to set a screen is running an errand
+    // for the carrier, so his own AI stands down until it is finished.
     for (const p of this.players) {
       this.tickTimers(p, dt);
       if (p.slot === 'G') {
         updateGoalie(this, p, dt);
+      } else if (this.updateScreener(p, dt)) {
+        continue;
       } else if (this.aiControls(p)) {
         updateAI(this, p, dt);
       }
@@ -709,7 +770,8 @@ export class Match {
     if (p.slot === 'G') s *= 0.72;
     if (this.ball.carrier === p) s *= 0.94; // carrying costs a little
     const fatigue = p.stamina < SIM.lowStaminaThreshold ? 0.78 + (p.stamina / SIM.lowStaminaThreshold) * 0.22 : 1;
-    return s * fatigue;
+    // Fighting through a screen costs a defender a step, not the play.
+    return s * fatigue * this.screenDrag(p);
   }
 
   private accelOf(p: MatchPlayer): number {
@@ -1635,11 +1697,145 @@ export class Match {
       if (input.dodgePressed) {
         this.doDodge(p, input.moveX, input.moveY);
       }
+      if (input.screenPressed) {
+        this.callScreen(p);
+      }
     } else {
       if (input.actionPressed) this.doCheck(p);
       if (input.dodgePressed) this.doDodge(p, input.moveX, input.moveY);
       if (input.shootReleased || input.shootHeld) p.windup = 0;
     }
+  }
+
+  /* ----------------------------------------------------------------- screens
+   * A screen is the one bit of team play a single controlled player cannot do
+   * alone: call for it and the best-placed team-mate comes over, plants himself
+   * on the ball defender's side, and holds for a moment. It buys a step, not a
+   * goal — the defender is slowed, never frozen, and the cooldown stops it being
+   * mashed.
+   * ---------------------------------------------------------------------- */
+
+  /** Seconds between screen calls for one team. */
+  static readonly SCREEN_COOLDOWN = 6;
+  /** How long a screener holds the pick once planted. */
+  static readonly SCREEN_HOLD = 2.2;
+
+  screenCd: Record<Side, number> = { home: 0, away: 0 };
+
+  /** Who, if anyone, is currently setting a screen for this side. */
+  screenerOf(side: Side): MatchPlayer | null {
+    return this.teams[side].find((p) => p.screenTimer > 0 || p.screenHold > 0) ?? null;
+  }
+
+  /** Requests a screen for the carrier. Returns false when it cannot be set. */
+  callScreen(carrier: MatchPlayer): boolean {
+    const side = carrier.side;
+    if (this.ball.carrier !== carrier) return false;
+    if (this.screenCd[side] > 0) return false;
+    if (this.screenerOf(side)) return false;
+
+    const marker = this.nearestDefender(carrier);
+    // Pick the team-mate who can get there soonest without being the one man
+    // holding the far side of the field open.
+    const spot = this.screenSpot(carrier, marker);
+    let best: MatchPlayer | null = null;
+    let bestScore = Infinity;
+    for (const mate of this.teammatesOf(carrier)) {
+      // teammatesOf() is the whole squad, so the carrier has to be excluded
+      // explicitly — a man cannot set a screen for himself.
+      if (mate === carrier || mate.slot === 'G' || mate.stun > 0) continue;
+      const t = this.timeToReach(mate, spot.x, spot.y);
+      if (t > 2.6) continue;
+      const score = t + (mate.pos === 'A' ? 0 : 0.15);
+      if (score < bestScore) { bestScore = score; best = mate; }
+    }
+    if (!best) {
+      this.setBanner('NOBODY CLOSE ENOUGH', 'normal', 0.9);
+      return false;
+    }
+
+    best.screenTimer = 2.4;
+    best.screenHold = 0;
+    best.flash = 0.4;
+    this.screenCd[side] = Match.SCREEN_COOLDOWN;
+    if (side === this.humanSide) this.setBanner('SCREEN CALLED', 'normal', 1.0);
+    return true;
+  }
+
+  /** Where the screener should plant: beside the carrier, on the marker's side. */
+  screenSpot(carrier: MatchPlayer, marker: MatchPlayer | null): { x: number; y: number } {
+    const goal = attackingGoal(carrier.side);
+    // Default to the goal side if nobody is marking, so the pick still opens a
+    // driving lane rather than putting a body in the carrier's way.
+    let dx = marker ? marker.x - carrier.x : goal.x - carrier.x;
+    let dy = marker ? marker.y - carrier.y : goal.y - carrier.y;
+    const m = Math.hypot(dx, dy) || 1;
+    dx /= m; dy /= m;
+    // Stand off the carrier's shoulder: close enough to wall off the defender,
+    // far enough that the two never occupy the same yard.
+    const off = 2.1;
+    return {
+      x: clamp(carrier.x + dx * off, 1, FIELD.length - 1),
+      y: clamp(carrier.y + dy * off, 1, FIELD.width - 1),
+    };
+  }
+
+  nearestDefender(carrier: MatchPlayer): MatchPlayer | null {
+    let best: MatchPlayer | null = null;
+    let bestD = Infinity;
+    for (const o of this.opponentsOf(carrier)) {
+      if (o.slot === 'G') continue;
+      const d = dist(o.x, o.y, carrier.x, carrier.y);
+      if (d < bestD) { bestD = d; best = o; }
+    }
+    return bestD <= 9 ? best : null;
+  }
+
+  /** Runs one screener for a frame. Returns true if it took over their movement. */
+  updateScreener(p: MatchPlayer, dt: number): boolean {
+    if (p.screenTimer <= 0 && p.screenHold <= 0) return false;
+    const carrier = this.ball.carrier;
+    if (!carrier || carrier.side !== p.side || carrier === p) {
+      p.screenTimer = 0;
+      p.screenHold = 0;
+      return false;
+    }
+    const spot = this.screenSpot(carrier, this.nearestDefender(carrier));
+    const d = dist(p.x, p.y, spot.x, spot.y);
+
+    if (p.screenHold > 0) {
+      p.screenHold -= dt;
+      // Planted: hold the spot, do not chase.
+      if (d > 3.4) { this.setMove(p, 0, 0); return true; }
+      const k = clamp(d / 1.2, 0, 1);
+      this.setMove(p, ((spot.x - p.x) / (d || 1)) * k, ((spot.y - p.y) / (d || 1)) * k);
+      return true;
+    }
+
+    p.screenTimer -= dt;
+    if (d < 1.0) {
+      p.screenHold = Match.SCREEN_HOLD;
+      p.screenTimer = 0;
+      if (p.side === this.humanSide) this.setBanner('SCREEN SET', 'normal', 0.8);
+      return true;
+    }
+    if (p.screenTimer <= 0) return false;
+    const nx = (spot.x - p.x) / (d || 1);
+    const ny = (spot.y - p.y) / (d || 1);
+    this.setMove(p, nx, ny, d > 4);
+    return true;
+  }
+
+  /** A defender pushing through a planted screen is slowed, never stopped. */
+  screenDrag(p: MatchPlayer): number {
+    const carrier = this.ball.carrier;
+    if (!carrier || carrier.side === p.side) return 1;
+    const screener = this.screenerOf(carrier.side);
+    if (!screener || screener.screenHold <= 0) return 1;
+    const d = dist(p.x, p.y, screener.x, screener.y);
+    if (d > 2.2) return 1;
+    // Strongest right on the body, fading to nothing at arm's length.
+    return 0.55 + 0.45 * clamp((d - 0.9) / 1.3, 0, 1);
   }
 
   /* ------------------------------------------------------- player selection

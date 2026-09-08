@@ -46,6 +46,10 @@ export interface MatchPlayer {
   aiMark: number;
   aiSliding: boolean;
   aiIntent: 'idle' | 'drive' | 'pass' | 'shoot' | 'reset';
+  /** >0 while this player is on their way to set a screen for the carrier. */
+  screenTimer: number;
+  /** >0 while planted in the screen, holding the pick. */
+  screenHold: number;
 
   // --- animation ---
   animPhase: number;
@@ -70,11 +74,14 @@ export interface InputState {
   shootReleased: boolean;
   dodgePressed: boolean;
   switchPressed: boolean;
+  /** Edge-triggered: ask a team-mate to come and set a screen. */
+  screenPressed: boolean;
 }
 
 export const neutralInput = (): InputState => ({
   moveX: 0, moveY: 0, sprint: false, actionPressed: false,
-  shootHeld: false, shootReleased: false, dodgePressed: false, switchPressed: false,
+  shootHeld: false, shootReleased: false, dodgePressed: false,
+  switchPressed: false, screenPressed: false,
 });
 
 export type BallState = 'carried' | 'pass' | 'shot' | 'loose';

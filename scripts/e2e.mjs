@@ -184,10 +184,17 @@ async function practice(browser) {
       break;
     }
     if (s.stage === 'sweep') {
+      // A player anticipates the marker; a polling loop cannot, so lead the
+      // press by roughly one round trip. Without this the check measures the
+      // harness's latency rather than whether the drill can be won.
       const mid = (s.z0 + s.z1) / 2;
-      if (Math.abs(s.marker - mid) < (s.z1 - s.z0) / 3) await page.keyboard.press('Space');
+      const lead = 0.03;
+      const predicted = s.marker + lead;
+      if (predicted >= mid - (s.z1 - s.z0) / 6 && predicted <= mid + (s.z1 - s.z0) / 6) {
+        await page.keyboard.press('Space');
+      }
     }
-    await page.waitForTimeout(14);
+    await page.waitForTimeout(6);
   }
   await ctx.close();
 }
@@ -207,7 +214,7 @@ async function mobile(browser) {
       rotated: window.loneStarLax?.renderer.cam.rotate,
     }));
     check(`${name}: touch controls active, no horizontal overflow`,
-      info.touch && info.buttons === 4 && !info.overflow,
+      info.touch && info.buttons === 5 && !info.overflow,
       `rotated camera: ${info.rotated}`);
     await ctx.close();
   }

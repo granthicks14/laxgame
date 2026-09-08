@@ -1,9 +1,10 @@
 import type { Match } from '../../match/Match';
 import type { InputState } from '../../match/types';
+import { bindingText, DEFAULT_KEYBINDS, type Keybinds } from '../../state/keybinds';
 
 interface Step {
   id: string;
-  prompt: (touch: boolean) => string;
+  prompt: (touch: boolean, binds: Keybinds) => string;
   /** Returns true once the step is satisfied. */
   check: (ctx: StepContext) => boolean;
   /** Optional minimum time on screen so prompts do not flash past. */
@@ -22,28 +23,28 @@ interface StepContext {
 const STEPS: Step[] = [
   {
     id: 'move',
-    prompt: (t) => (t ? 'Drag anywhere on the left to move your player' : 'Move with W A S D or the arrow keys'),
+    prompt: (t, b) => (t ? 'Drag anywhere on the left to move your player' : `Move with ${bindingText(b, 'moveUp')} ${bindingText(b, 'moveLeft')} ${bindingText(b, 'moveDown')} ${bindingText(b, 'moveRight')}`),
     check: (c) => c.distanceMoved > 14,
     minTime: 1.2,
   },
   {
     id: 'sprint',
-    prompt: (t) => (t ? 'Push the stick all the way out to sprint' : 'Hold SHIFT to sprint — it drains stamina'),
+    prompt: (t, b) => (t ? 'Push the stick all the way out to sprint' : `Hold ${bindingText(b, 'sprint')} to sprint — it drains stamina`),
     check: (c) => c.sprintTime > 1.1,
   },
   {
     id: 'pass',
-    prompt: (t) => (t ? 'With the ball, aim with the stick and tap PASS' : 'With the ball, aim with your movement keys and press SPACE to pass'),
+    prompt: (t, b) => (t ? 'With the ball, aim with the stick and tap PASS' : `With the ball, aim with your movement keys and press ${bindingText(b, 'pass')} to pass`),
     check: (c) => c.flags.has('pass'),
   },
   {
     id: 'dodge',
-    prompt: (t) => (t ? 'Tap DODGE to burst past a defender' : 'Press E to dodge — a burst of speed that beats your man'),
+    prompt: (t, b) => (t ? 'Tap DODGE to burst past a defender' : `Press ${bindingText(b, 'dodge')} to dodge — a burst of speed that beats your man`),
     check: (c) => c.flags.has('dodge'),
   },
   {
     id: 'shoot',
-    prompt: (t) => (t ? 'Hold SHOOT to charge, release to fire' : 'Hold F to charge a shot, release to fire. Aim picks the corner'),
+    prompt: (t, b) => (t ? 'Hold SHOOT to charge, release to fire' : `Hold ${bindingText(b, 'shoot')} to charge a shot, release to fire. Aim picks the corner`),
     check: (c) => c.flags.has('shot'),
   },
   {
@@ -53,7 +54,7 @@ const STEPS: Step[] = [
   },
   {
     id: 'check',
-    prompt: (t) => (t ? 'Lose the ball? Get close and tap CHECK' : 'On defence, get close and press SPACE to throw a check'),
+    prompt: (t, b) => (t ? 'Lose the ball? Get close and tap CHECK' : `On defence, get close and press ${bindingText(b, 'pass')} to throw a check`),
     check: (c) => c.flags.has('check'),
   },
 ];
@@ -66,10 +67,12 @@ export class Tutorial {
   private ctx: StepContext;
   private done = false;
   readonly touch: boolean;
+  private binds: Keybinds;
   onFinished: (() => void) | null = null;
 
-  constructor(match: Match, touch: boolean) {
+  constructor(match: Match, touch: boolean, binds: Keybinds = DEFAULT_KEYBINDS) {
     this.touch = touch;
+    this.binds = binds;
     this.ctx = { match, input: null as never, dt: 0, distanceMoved: 0, sprintTime: 0, flags: new Set() };
     const human = match.humanSide ?? 'home';
     match.events.on('pass', ({ side }) => { if (side === human) this.ctx.flags.add('pass'); });
@@ -108,7 +111,7 @@ export class Tutorial {
   get prompt(): string | null {
     if (this.done) return 'That is everything. Go win a district title.';
     const step = STEPS[this.index];
-    return step ? step.prompt(this.touch) : null;
+    return step ? step.prompt(this.touch, this.binds) : null;
   }
 
   get progress(): string {

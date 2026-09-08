@@ -26,8 +26,15 @@ const signature = () => page.evaluate(() => {
   if (!el) return 'none';
   const title = document.querySelector('.topbar__title')?.textContent ?? '';
   const buttons = [...document.querySelectorAll('button')].map((b) => b.textContent?.trim()).join('|');
-  const on = [...document.querySelectorAll('.is-on, .is-selected')].map((b) => b.textContent?.trim()).join('|');
-  return `${el.className}::${title}::${buttons.length}::${buttons.slice(0, 300)}::${on}`;
+  const on = [...document.querySelectorAll('.is-on, .is-selected, .is-listening')].map((b) => b.textContent?.trim()).join('|');
+  // Hash the whole button text rather than a prefix: a change far down a long
+  // screen (the keybind list, say) is still a change.
+  let hash = 2166136261;
+  for (let i = 0; i < buttons.length; i++) {
+    hash ^= buttons.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${el.className}::${title}::${buttons.length}::${hash >>> 0}::${on}`;
 });
 
 const settle = (ms = 380) => page.waitForTimeout(ms);

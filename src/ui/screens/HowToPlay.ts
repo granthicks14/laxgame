@@ -5,16 +5,22 @@ import { getTeam } from '../../data/teams';
 import { quickPrefs } from '../../state/session';
 import { makeMatchConfig } from '../../league/matchSetup';
 import { GameScreen } from './GameScreen';
+import { bindingText, type Keybinds } from '../../state/keybinds';
 
-const KEYS: [string, string][] = [
-  ['W A S D / Arrows', 'Move the player you control'],
-  ['SHIFT', 'Sprint (burns stamina)'],
-  ['SPACE', 'Pass with the ball · Check without it · Clamp at the faceoff'],
-  ['F (hold)', 'Charge a shot, release to fire. Push toward the side of the cage you want'],
-  ['E', 'Dodge — a short burst that beats your defender'],
-  ['TAB', 'Switch to another defender'],
-  ['ESC / P', 'Pause'],
-];
+/** Built from the live bindings, so this screen can never describe keys the
+ *  player has since changed. */
+function keyRows(binds: Keybinds): [string, string][] {
+  return [
+    [`${bindingText(binds, 'moveUp')} ${bindingText(binds, 'moveLeft')} ${bindingText(binds, 'moveDown')} ${bindingText(binds, 'moveRight')}`, 'Move the player you control'],
+    [bindingText(binds, 'sprint'), 'Sprint (burns stamina)'],
+    [bindingText(binds, 'pass'), 'Pass with the ball · Check without it · Clamp at the faceoff'],
+    [`${bindingText(binds, 'shoot')} (hold)`, 'Charge a shot, release to fire. Push toward the side of the cage you want'],
+    [bindingText(binds, 'dodge'), 'Dodge — a short burst that beats your defender'],
+    [bindingText(binds, 'screen'), 'Call a team-mate over to set a screen for you'],
+    [bindingText(binds, 'switch'), 'Switch to another defender'],
+    [bindingText(binds, 'pause'), 'Pause — settings, controls and live stats'],
+  ];
+}
 
 const TOUCH: [string, string][] = [
   ['Left half drag', 'Move. Push to the outer edge to sprint'],
@@ -22,6 +28,7 @@ const TOUCH: [string, string][] = [
   ['SHOOT', 'Hold to charge; steer toward a post to pick your corner, then release'],
   ['DODGE', 'Burst past your man'],
   ['SWITCH', 'Take control of a different defender'],
+  ['SCREEN', 'Call a team-mate over to set a pick, then drive off his shoulder'],
 ];
 
 const SHOTS: [string, string][] = [
@@ -62,7 +69,7 @@ export class HowToPlayScreen implements Screen {
             on: { click: () => startTutorial(app) },
           }),
           h('div', { class: 'small', text: 'A live scrimmage that walks you through movement, passing, dodging, shooting and checking.' }),
-          panel('Keyboard', rows(KEYS)),
+          panel('Keyboard', rows(keyRows(app.keybinds))),
           panel('Touch', rows(TOUCH)),
           panel('Shot types', rows(SHOTS)),
           panel('Rules that matter', rows(RULES)),

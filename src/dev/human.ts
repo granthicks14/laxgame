@@ -28,7 +28,8 @@ const NAIVE: Skill = { shootRange: 14, aim: 0, dodge: 0.1, pass: 0.1 };
 
 const blank = (): InputState => ({
   moveX: 0, moveY: 0, sprint: false, actionPressed: false,
-  shootHeld: false, shootReleased: false, dodgePressed: false, switchPressed: false,
+  shootHeld: false, shootReleased: false, dodgePressed: false,
+  switchPressed: false, screenPressed: false,
 });
 
 function policy(m: Match, side: Side, skill: Skill, charging: { on: boolean }): InputState {

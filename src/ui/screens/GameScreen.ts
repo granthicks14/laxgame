@@ -11,6 +11,10 @@ import { shortName } from '../../data/players';
 import type { MatchPlayer } from '../../match/types';
 import { Tutorial } from './tutorial';
 import { pauseIcon } from '../icons';
+import { keyLabel } from '../../state/keybinds';
+import { keybindEditor } from '../keybindEditor';
+import { fieldRow, segmented } from '../components';
+import { DIFFICULTIES } from '../../data/difficulty';
 import { stadiumFor, STYLE_LABEL } from '../../data/stadiums';
 import { emblemFor } from '../../data/emblems';
 import { drawEmblem } from '../../render/emblem';
@@ -28,6 +32,8 @@ export interface GameScreenOptions {
 }
 
 const FIXED_DT = 1 / 60;
+
+type PauseTab = 'menu' | 'controls' | 'settings' | 'stats' | 'sim';
 
 export class GameScreen implements Screen {
   el: HTMLElement;
@@ -59,6 +65,7 @@ export class GameScreen implements Screen {
   private elFoZone!: HTMLElement;
   private elFoMarker!: HTMLElement;
   private elFoLabel!: HTMLElement;
+  private elFoHint!: HTMLElement;
   private elShotFeed!: HTMLElement;
   private elReplayFx!: HTMLElement;
   private elReplaySkip!: HTMLElement;
@@ -66,11 +73,15 @@ export class GameScreen implements Screen {
   private replayShown = false;
   /** True while the pregame card is up: the world renders, the clock does not run. */
   private introHold = false;
+  private pauseTab: PauseTab = 'menu';
+  private lastSim: ReturnType<Match['simulateQuarter']> | null = null;
   private shotFeedTimer = 0;
   private elTouch!: HTMLElement;
   private elStick!: HTMLElement;
   private elStickNub!: HTMLElement;
   private elActionBtn!: HTMLElement;
+  private elScreenBtn!: HTMLElement;
+  private elHints!: HTMLElement;
   private overlay: HTMLElement | null = null;
 
   private stickShown = false;
@@ -96,13 +107,19 @@ export class GameScreen implements Screen {
     this.renderer.prepare(this.match);
 
     if (opts.tutorial) {
-      this.tutorial = new Tutorial(this.match, this.touchMode);
+      this.tutorial = new Tutorial(this.match, this.touchMode, app.keybinds);
       this.elCoach = h('div', { class: 'ticker', style: 'bottom:auto;top:calc(var(--safe-t) + 68px);border-color:var(--accent);color:var(--text)' });
       this.el.appendChild(this.elCoach);
     }
 
+    this.input.setBindings(app.keybinds);
     this.input.attach(this.el);
     this.input.onPause = () => this.togglePause();
+    // Rebinding from the pause menu takes effect immediately, mid-game.
+    app.onKeybindsChanged = (binds) => {
+      this.input.setBindings(binds);
+      this.refreshHints();
+    };
     this.wireEvents();
 
     audio.unlock();
@@ -159,9 +176,9 @@ export class GameScreen implements Screen {
     this.elFaceoff = h('div', { class: 'fo', style: 'display:none' },
       this.elFoLabel,
       h('div', { class: 'fo__bar' }, this.elFoZone, this.elFoMarker),
-      h('div', {
+      this.elFoHint = h('div', {
         class: 'fo__hint',
-        text: this.touchMode ? 'TAP CLAMP INSIDE THE GREEN' : 'PRESS SPACE INSIDE THE GREEN',
+        text: this.faceoffHint(),
       }),
     );
 
@@ -182,8 +199,10 @@ export class GameScreen implements Screen {
     this.elStickNub = h('div', { class: 'stick__nub' });
     this.elStick = h('div', { class: 'stick' }, this.elStickNub);
     this.elActionBtn = this.touchButton('action', 'Pass');
+    this.elScreenBtn = this.touchButton('screen', 'Screen');
     this.elTouch = h('div', { class: `touch${this.touchMode ? '' : ' is-off'}` },
       this.elStick,
+      this.elScreenBtn,
       h('div', { class: 'tbtns' },
         this.touchButton('switch', 'Switch'),
         this.touchButton('shoot', 'Shoot'),
@@ -192,11 +211,9 @@ export class GameScreen implements Screen {
       ),
     );
 
-    const hints = this.app.settings.showHints && !this.touchMode
-      ? h('div', { class: 'hint-strip' },
-        key('WASD', 'Move'), key('SHIFT', 'Sprint'), key('SPACE', 'Pass / Check'),
-        key('F', 'Shoot (hold)'), key('E', 'Dodge'), key('TAB', 'Switch'))
-      : null;
+    this.elHints = h('div', { class: 'hint-strip' });
+    const hints = this.app.settings.showHints && !this.touchMode ? this.elHints : null;
+    this.refreshHints();
 
     return h('div', { class: 'game' },
       this.canvas,
@@ -626,51 +643,240 @@ export class GameScreen implements Screen {
     this.input.releaseAll();
   }
 
+  private faceoffHint(): string {
+    return this.touchMode
+      ? 'TAP CLAMP INSIDE THE GREEN'
+      : `PRESS ${keyLabel(this.app.keybinds.pass[0]).toUpperCase()} INSIDE THE GREEN`;
+  }
+
+  /** Redraws the on-screen key hints from the live bindings. */
+  private refreshHints(): void {
+    if (this.elFoHint) this.elFoHint.textContent = this.faceoffHint();
+    if (!this.elHints) return;
+    const b = this.app.keybinds;
+    clear(this.elHints);
+    const pairs: [string, string][] = [
+      [`${keyLabel(b.moveUp[0])}${keyLabel(b.moveLeft[0])}${keyLabel(b.moveDown[0])}${keyLabel(b.moveRight[0])}`, 'Move'],
+      [keyLabel(b.sprint[0]), 'Sprint'],
+      [keyLabel(b.pass[0]), 'Pass / Check'],
+      [keyLabel(b.shoot[0]), 'Shoot'],
+      [keyLabel(b.dodge[0]), 'Dodge'],
+      [keyLabel(b.screen[0]), 'Screen'],
+      [keyLabel(b.switch[0]), 'Switch'],
+    ];
+    for (const [k, label] of pairs) this.elHints.appendChild(key(k, label));
+  }
+
   private openPause(): void {
     // Drop everything that is held so nothing carries across the pause.
     this.input.suspended = true;
     this.input.releaseAll();
+    const body = h('div', { class: 'panel__body stack' });
+    const card = h('div', { class: 'overlay__card panel' },
+      h('div', { class: 'panel__head', text: 'Paused' }), body);
+    this.overlay = h('div', { class: 'overlay' }, card);
+    this.el.appendChild(this.overlay);
+    this.pauseTab = 'menu';
+    this.lastSim = null;
+    this.renderPause(body);
+  }
+
+  /** The pause menu is a small router: every tab renders into the same card, so
+   *  a player never has to leave a game to find out how to play it. */
+  private renderPause(body: HTMLElement): void {
+    clear(body);
+    const cfg = this.opts.config;
+    const go = (tab: PauseTab) => { this.pauseTab = tab; this.renderPause(body); };
+
+    if (this.pauseTab !== 'menu') {
+      body.appendChild(h('button', {
+        class: 'btn btn--block', text: '\u2190 Back',
+        on: { click: () => go('menu') },
+      }));
+      body.appendChild(h('div', { class: 'divider' }));
+    }
+
+    switch (this.pauseTab) {
+      case 'menu': this.pauseMenu(body, go); break;
+      case 'controls': this.pauseControls(body); break;
+      case 'settings': this.pauseSettings(body); break;
+      case 'stats': this.pauseStats(body); break;
+      case 'sim': this.pauseSimulate(body, go); break;
+    }
+
+    if (this.pauseTab === 'menu') {
+      body.appendChild(h('div', { class: 'tiny', text: `${cfg.away.team.name} at ${cfg.home.team.name} \u00b7 ${this.venueLine()}` }));
+    }
+  }
+
+  private pauseMenu(body: HTMLElement, go: (t: PauseTab) => void): void {
     const cfg = this.opts.config;
     const lengthLabel = cfg.practice
       ? cfg.practice.goal
       : `${GAME_LENGTHS[lengthKeyFor(cfg.quarterSeconds)].label} game`;
+    body.appendChild(h('div', { class: 'small', text: `${DIFFICULTIES[cfg.difficulty].label} \u00b7 ${lengthLabel}` }));
+    body.appendChild(h('div', { class: 'divider' }));
 
-    this.overlay = h('div', { class: 'overlay' },
-      h('div', { class: 'overlay__card panel' },
-        h('div', { class: 'panel__head', text: 'Paused' }),
-        h('div', { class: 'panel__body stack' },
-          h('div', { class: 'small', text: `${cfg.away.team.name} at ${cfg.home.team.name} · ${lengthLabel}` }),
-          h('div', { class: 'tiny', text: this.venueLine() }),
-          h('div', { class: 'divider' }),
-          h('div', { class: 'eyebrow', text: 'Controls' }),
-          this.touchMode
-            ? h('div', { class: 'small' },
-              h('div', { text: 'Drag anywhere on the left to move. Push to the edge to sprint.' }),
-              h('div', { text: 'PASS doubles as CHECK on defence and CLAMP at the faceoff.' }),
-              h('div', { text: 'Hold SHOOT to charge, release to fire.' }))
-            : h('div', { class: 'small' },
-              h('div', { text: 'WASD / Arrows — move · SHIFT — sprint' }),
-              h('div', { text: 'SPACE — pass, check, and clamp the faceoff' }),
-              h('div', { text: 'F — hold to charge a shot, release to fire' }),
-              h('div', { text: 'E — dodge · TAB — switch player · ESC — pause' })),
-          h('div', { class: 'divider' }),
-          h('button', {
-            class: 'btn btn--primary btn--block', text: 'Resume',
-            on: { click: () => this.togglePause() },
-          }),
-          h('button', {
-            class: 'btn btn--block', text: 'Quit game',
-            on: {
-              click: () => {
-                this.running = false;
-                this.opts.onQuit();
-              },
-            },
-          }),
-        ),
-      ),
-    );
-    this.el.appendChild(this.overlay);
+    body.appendChild(h('button', {
+      class: 'btn btn--primary btn--block', text: 'Resume',
+      on: { click: () => this.togglePause() },
+    }));
+    if (!cfg.practice && !this.finished) {
+      body.appendChild(h('button', {
+        class: 'btn btn--block', text: 'Simulate a quarter',
+        on: { click: () => go('sim') },
+      }));
+    }
+    body.appendChild(h('button', {
+      class: 'btn btn--block', text: 'Game settings', on: { click: () => go('settings') },
+    }));
+    body.appendChild(h('button', {
+      class: 'btn btn--block', text: 'Controls', on: { click: () => go('controls') },
+    }));
+    body.appendChild(h('button', {
+      class: 'btn btn--block', text: 'Game stats', on: { click: () => go('stats') },
+    }));
+    body.appendChild(h('button', {
+      class: 'btn btn--block', text: 'Quit game',
+      on: {
+        click: () => {
+          this.running = false;
+          this.opts.onQuit();
+        },
+      },
+    }));
+  }
+
+  /** Live bindings, rebindable in place. What you change here applies at once. */
+  private pauseControls(body: HTMLElement): void {
+    body.appendChild(h('div', { class: 'eyebrow', text: 'Touch' }));
+    body.appendChild(h('div', { class: 'small' },
+      h('div', { text: 'Drag anywhere on the left to move. Push to the edge to sprint.' }),
+      h('div', { text: 'PASS doubles as CHECK on defence and CLAMP at the faceoff.' }),
+      h('div', { text: 'Hold SHOOT to charge, release to fire. SCREEN calls a team-mate over.' })));
+    body.appendChild(h('div', { class: 'divider' }));
+    body.appendChild(h('div', { class: 'eyebrow', text: 'Keyboard' }));
+    body.appendChild(keybindEditor(this.app, () => this.refreshHints()));
+  }
+
+  private pauseSettings(body: HTMLElement): void {
+    const app = this.app;
+    body.appendChild(fieldRow('Goal replays', 'Play a short highlight after each goal.',
+      segmented(
+        [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
+        app.settings.goalReplays ? 'on' : 'off',
+        (v) => app.updateSettings({ goalReplays: v === 'on' }),
+      )));
+    body.appendChild(fieldRow('On-screen hints', 'Show the key strip during play.',
+      segmented(
+        [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
+        app.settings.showHints ? 'on' : 'off',
+        (v) => {
+          app.updateSettings({ showHints: v === 'on' });
+          this.elHints.style.display = v === 'on' && !this.touchMode ? '' : 'none';
+        },
+      )));
+    body.appendChild(volumeRow('Sound', app.settings.sfxVolume, (v) => app.updateSettings({ sfxVolume: v })));
+    body.appendChild(volumeRow('Music', app.settings.musicVolume, (v) => app.updateSettings({ musicVolume: v })));
+    body.appendChild(h('div', { class: 'divider' }));
+    body.appendChild(h('div', { class: 'tiny', text: 'Difficulty and game length are fixed once a game has started, so a result always means the same thing.' }));
+  }
+
+  private pauseStats(body: HTMLElement): void {
+    const m = this.match;
+    const cfg = this.opts.config;
+    const row = (label: string, hv: string, av: string) => h('div', { class: 'pstat' },
+      h('span', { class: 'pstat__v num', text: hv }),
+      h('span', { class: 'pstat__k', text: label }),
+      h('span', { class: 'pstat__v num', text: av }));
+    const h1 = m.stats.home;
+    const a1 = m.stats.away;
+    const pct = (n: number, d: number) => (d > 0 ? `${Math.round((n / d) * 100)}%` : '\u2014');
+
+    body.appendChild(h('div', { class: 'row', style: 'justify-content:space-between' },
+      h('span', { class: 'eyebrow', text: cfg.home.team.abbr }),
+      h('span', { class: 'eyebrow', text: `Q${m.quarter} \u00b7 ${m.clockText()}` }),
+      h('span', { class: 'eyebrow', text: cfg.away.team.abbr })));
+    body.appendChild(row('Goals', String(m.score.home), String(m.score.away)));
+    body.appendChild(row('Shots', String(h1.shots), String(a1.shots)));
+    body.appendChild(row('On goal', String(h1.shotsOnGoal), String(a1.shotsOnGoal)));
+    body.appendChild(row('Shooting', pct(h1.goals, h1.shots), pct(a1.goals, a1.shots)));
+    body.appendChild(row('Saves', String(h1.saves), String(a1.saves)));
+    body.appendChild(row('Ground balls', String(h1.groundBalls), String(a1.groundBalls)));
+    body.appendChild(row('Faceoffs', `${h1.faceoffWins}/${h1.faceoffTakes}`, `${a1.faceoffWins}/${a1.faceoffTakes}`));
+    body.appendChild(row('Turnovers', String(h1.turnovers), String(a1.turnovers)));
+    body.appendChild(row('Checks', String(h1.checks), String(a1.checks)));
+
+    const scorers = m.scoring.slice(-6).reverse();
+    body.appendChild(h('div', { class: 'divider' }));
+    body.appendChild(h('div', { class: 'eyebrow', text: 'Scoring' }));
+    if (!scorers.length) body.appendChild(h('div', { class: 'tiny', text: 'No goals yet.' }));
+    for (const g of scorers) {
+      body.appendChild(h('div', { class: 'tiny', text: `Q${g.quarter} \u00b7 ${cfg[g.side].team.abbr} \u00b7 ${g.scorerName}${g.assistName ? ` (${g.assistName})` : ''}` }));
+    }
+  }
+
+  /** Fast-forward: play the rest of a quarter out on AI, then hand it back. */
+  private pauseSimulate(body: HTMLElement, go: (t: PauseTab) => void): void {
+    const cfg = this.opts.config;
+    const m = this.match;
+    const line = `${cfg.home.team.abbr} ${m.score.home} \u2014 ${m.score.away} ${cfg.away.team.abbr}`;
+    const last = this.lastSim;
+
+    if (last) {
+      body.appendChild(h('div', { class: 'eyebrow', text: `Quarter ${last.quarter} simulated` }));
+      body.appendChild(h('div', { class: 'small', text: `${cfg.home.team.abbr} ${last.homeGoals} \u2014 ${last.awayGoals} ${cfg.away.team.abbr} in the quarter` }));
+    } else {
+      body.appendChild(h('div', { class: 'eyebrow', text: `Quarter ${m.quarter}` }));
+    }
+    body.appendChild(h('div', { class: 'display', style: 'font-size:24px', text: line }));
+
+    if (last?.endedGame) {
+      body.appendChild(h('div', { class: 'small', text: 'That was the last of it.' }));
+      body.appendChild(h('button', {
+        class: 'btn btn--primary btn--block', text: 'See the final',
+        on: {
+          click: () => {
+            this.togglePause();
+            this.finish();
+          },
+        },
+      }));
+      return;
+    }
+
+    body.appendChild(h('div', {
+      class: 'small',
+      text: last
+        ? 'Jump back in, or hand them the next one as well.'
+        : 'Your bench takes over for the rest of this quarter. Ratings, tactics and difficulty all still apply \u2014 it is the same game, just played without you.',
+    }));
+
+    if (last) {
+      body.appendChild(h('button', {
+        class: 'btn btn--primary btn--block', text: `Play quarter ${m.quarter}`,
+        on: { click: () => this.togglePause() },
+      }));
+    }
+    body.appendChild(h('button', {
+      class: last ? 'btn btn--block' : 'btn btn--primary btn--block',
+      text: last ? `Simulate quarter ${m.quarter} too` : `Simulate quarter ${m.quarter}`,
+      on: {
+        click: () => {
+          this.lastSim = this.match.simulateQuarter();
+          // The clock and score moved a long way in one go; resync the HUD and
+          // drop the accumulated frame time so play resumes cleanly.
+          this.acc = 0;
+          this.last = performance.now();
+          this.lastScore = { home: -1, away: -1 };
+          this.updateHud(0);
+          this.renderPause(body);
+        },
+      },
+    }));
+    body.appendChild(h('button', {
+      class: 'btn btn--block', text: 'Back to menu', on: { click: () => go('menu') },
+    }));
   }
 
   /* ---------------------------------------------------------------- finish */
@@ -695,6 +901,7 @@ export class GameScreen implements Screen {
   }
 
   destroy(): void {
+    if (this.app.onKeybindsChanged) this.app.onKeybindsChanged = null;
     this.elGoalCard = null;
     this.running = false;
     cancelAnimationFrame(this.raf);
@@ -710,6 +917,13 @@ export class GameScreen implements Screen {
       delete w.loneStarLax;
     }
   }
+}
+
+function volumeRow(label: string, value: number, onInput: (v: number) => void): HTMLElement {
+  return fieldRow(label, null, h('input', {
+    type: 'range', min: '0', max: '100', step: '5', value: String(Math.round(value * 100)),
+    on: { input: (e: Event) => onInput(Number((e.target as HTMLInputElement).value) / 100) },
+  }));
 }
 
 function key(k: string, label: string): HTMLElement {

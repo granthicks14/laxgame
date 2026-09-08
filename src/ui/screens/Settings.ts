@@ -6,6 +6,7 @@ import { GAME_LENGTHS, type GameLengthKey } from '../../data/constants';
 import { audio } from '../../audio/Audio';
 import { deleteCareer, hasCareer } from '../../state/saves';
 import { storageIsPersistent } from '../../core/storage';
+import { keybindEditor } from '../keybindEditor';
 
 export class SettingsScreen implements Screen {
   el: HTMLElement;
@@ -70,6 +71,10 @@ export class SettingsScreen implements Screen {
                 s.showHints ? 'on' : 'off',
                 (v) => app.updateSettings({ showHints: v === 'on' }),
               ))),
+
+          panel('Keyboard',
+            h('div', { class: 'small', text: 'Movement sits under the left hand, actions under the right. Change any of it — the game and the pause menu both follow whatever you set.' }),
+            keybindEditor(app)),
 
           panel('Audio',
             fieldRow('Sound effects', null, slider(s.sfxVolume, (v) => {
