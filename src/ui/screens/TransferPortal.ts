@@ -5,8 +5,9 @@ import { screenEl, topbar, panel, emptyPanel, teamBadge } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
 import { pitchTo, programSnapshot } from '../../league/career';
 import {
-  MAX_PITCHES, REASON_TEXT, interestIn, transferEstimate, type TransferCandidate,
+  REASON_TEXT, interestIn, marketFor, transferEstimate, type TransferCandidate,
 } from '../../league/transfers';
+import { MODE_LABEL } from '../../league/modes';
 import { GRADE_LABEL, starTier } from '../../data/players';
 import { POSITION_LABEL } from '../../data/constants';
 import { getTeam } from '../../data/teams';
@@ -14,9 +15,13 @@ import { tryWorldTeam } from '../../data/world';
 import type { Career } from '../../league/types';
 
 /**
- * The transfer window. Every player here left a real situation on a real depth
- * chart, and every one of them is weighing your programme against the rest of
- * the district. You get three pitches — that is what makes it a decision.
+ * The transfer window, whatever the level calls it: player movement at a high
+ * school, the portal at a college, free agency in the professional game. Every
+ * player here left a real situation on a real depth chart, and every one of
+ * them is weighing your programme against everywhere else that wants him.
+ *
+ * It works in every career save. The mode is only ever used to load the right
+ * one — see league/modes.ts.
  */
 export class TransferPortalScreen implements Screen {
   el: HTMLElement;
@@ -27,12 +32,13 @@ export class TransferPortalScreen implements Screen {
       this.el = screenEl(topbar(app, 'Transfers'), h('div', { class: 'scroll' },
         h('div', { class: 'wrapper' }, emptyPanel(
           'No programme yet',
-          `There is no ${mode} save on this device.`,
+          `There is no ${MODE_LABEL[mode]} save on this device.`,
           [{ label: 'Back', primary: true, onClick: () => app.pop() }],
         ))));
       return;
     }
 
+    const info = marketFor(career.level);
     const body = h('div', { class: 'wrapper stack' });
     const sub = h('div', { class: 'topbar__sub', text: `${career.pitchesLeft} left` });
 
@@ -40,19 +46,38 @@ export class TransferPortalScreen implements Screen {
       clear(body);
       sub.textContent = `${career.pitchesLeft} left`;
 
+      // Players you LOST are shown whether or not the window has anyone in it:
+      // that half of the portal is the half a coach needs to see.
+      const losses = career.portalOut ?? [];
+      if (losses.length) {
+        body.appendChild(panel('Left your programme',
+          ...losses.map((d) => h('div', { class: 'row', style: 'gap:8px' },
+            h('span', { class: 'pill pill--red', text: d.pos }),
+            h('span', { style: 'flex:1 1 auto;min-width:0', text: d.name }),
+            h('span', { class: 'tiny', text: REASON_TEXT[d.reason] }),
+            h('span', { class: 'num', text: String(d.overall) }))),
+          h('div', {
+            class: 'tiny',
+            text: 'Team culture in the coach\'s office is what keeps these players. '
+              + 'A programme nobody wants to leave does not lose them.',
+          })));
+      }
+
       if (!career.market.length) {
         body.appendChild(emptyPanel(
           'The window is shut',
-          'Nobody is on the market right now. The portal opens in the offseason, once the season has been put to bed.',
+          `Nobody is available right now. ${info.title} opens in the offseason, once the season has been put to bed.`,
           [{ label: 'Back', primary: true, onClick: () => app.pop() }],
         ));
         return;
       }
 
+      body.appendChild(h('div', { class: 'small', text: info.blurb }));
       body.appendChild(h('div', {
-        class: 'small',
-        text: `You can make ${MAX_PITCHES} pitches a window. A player weighs the role he would have here `
-          + 'against everywhere else that wants him, so the honest question is whether he would actually play.',
+        class: 'tiny',
+        text: `${info.pitches} ${info.pitchesWord} a window. A player weighs the role he would have here `
+          + 'against everywhere else that wants him, so the honest question is whether he would actually play. '
+          + 'Ratings are your own estimate — scouts narrow them.',
       }));
 
       for (const c of career.market) body.appendChild(this.card(app, career, c, render));
@@ -64,7 +89,7 @@ export class TransferPortalScreen implements Screen {
           class: 'btn btn--icon btn--ghost', ariaLabel: 'Back', text: '←',
           on: { click: () => app.pop() },
         }),
-        h('div', { class: 'topbar__title', text: 'Transfers' }),
+        h('div', { class: 'topbar__title', text: info.title }),
         sub),
       h('div', { class: 'scroll' }, body),
     );
@@ -72,6 +97,7 @@ export class TransferPortalScreen implements Screen {
   }
 
   private card(app: App, career: Career, c: TransferCandidate, render: () => void): HTMLElement {
+    const info = marketFor(career.level);
     const from = tryWorldTeam(c.fromTeamId) ?? getTeam(c.fromTeamId);
     const { score, factors } = interestIn(c, programSnapshot(career));
     // The star mark is your OPINION of him, so it comes off the estimate too.
@@ -136,7 +162,7 @@ export class TransferPortalScreen implements Screen {
         text: closed
           ? 'Nothing more to say'
           : career.pitchesLeft <= 0
-            ? 'No pitches left this window'
+            ? `No ${info.pitchesWord} left this window`
             : c.status === 'considering' ? 'Go back to him' : 'Make your pitch',
         on: {
           click: () => {

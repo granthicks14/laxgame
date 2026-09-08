@@ -17,6 +17,9 @@ import { audio } from '../../audio/Audio';
 import { trophyIcon } from '../icons';
 import { LADDER_LABEL, type Movement, type MovementReport } from '../../league/promotion';
 import { LEVELS } from '../../data/levels';
+import { isCareerMode } from '../../league/modes';
+import { marketFor } from '../../league/transfers';
+import { RecruitingScreen } from './Recruiting';
 import { staffSummary } from '../../league/coaching';
 import { TransferPortalScreen } from './TransferPortal';
 import { CoachOfficeScreen } from './CoachOffice';
@@ -80,7 +83,7 @@ export class SeasonSummaryScreen implements Screen {
           },
         }));
       }
-    } else if (career.mode === 'dynasty') {
+    } else if (isCareerMode(career.mode)) {
       actions.push(h('button', {
         class: 'btn btn--primary btn--block',
         style: 'min-height:54px;font-size:18px',
@@ -238,12 +241,18 @@ export class OffseasonScreen implements Screen {
             h('span', { class: 'tiny', text: GRADE_LABEL[g.grade] }),
             h('span', { class: 'num', text: String(g.overall) })))),
 
-          panel('Transfer window',
-            h('div', { class: 'small', text: `${career.market.length} players are looking for a new programme. You have ${career.pitchesLeft} pitches.` }),
+          this.portalPanel(app, career, report),
+
+          panel('Recruiting',
+            h('div', {
+              class: 'small',
+              text: 'A new class is open. Scouts work it all season, and the players you sign '
+                + 'arrive on the roster a year from now.',
+            }),
             h('button', {
               class: 'btn btn--block',
-              text: 'Open the transfer portal',
-              on: { click: () => app.push((a) => new TransferPortalScreen(a, 'dynasty')) },
+              text: 'Recruiting board',
+              on: { click: () => app.push((a) => new RecruitingScreen(a, career.mode)) },
             })),
 
           panel("Coach's office",
@@ -251,14 +260,14 @@ export class OffseasonScreen implements Screen {
             h('button', {
               class: 'btn btn--block',
               text: `Spend coaching points (${career.coachingPoints} CP)`,
-              on: { click: () => app.push((a) => new CoachOfficeScreen(a, 'dynasty')) },
+              on: { click: () => app.push((a) => new CoachOfficeScreen(a, career.mode)) },
             })),
 
           h('button', {
             class: 'btn btn--primary btn--block',
             style: 'min-height:54px;font-size:18px',
             text: 'Start the season',
-            on: { click: () => app.replace((a) => new SeasonHubScreen(a, 'dynasty')) },
+            on: { click: () => app.replace((a) => new SeasonHubScreen(a, career.mode)) },
           }),
         )),
     );
@@ -293,6 +302,35 @@ export class OffseasonScreen implements Screen {
   }
 
   /** Promotion and relegation, with the reason for every move. */
+  /**
+   * The window, called whatever this level calls it, and both directions of it:
+   * who is available, and who walked out of your own door.
+   */
+  private portalPanel(app: App, career: Career, report: OffseasonReport): HTMLElement {
+    const info = marketFor(career.level);
+    const lost = report.portalOut;
+    return panel(info.title,
+      h('div', {
+        class: 'small',
+        text: `${career.market.length} available. You have ${career.pitchesLeft} ${info.pitchesWord}.`,
+      }),
+      lost.length
+        ? h('div', { class: 'stack', style: 'gap:2px' },
+          h('div', { class: 'small', style: 'color:var(--red)', text: `${lost.length} of your own players left:` }),
+          ...lost.map((d) => h('div', {
+            class: 'tiny',
+            text: `${d.name} (${d.pos}, ${d.overall}) → ${d.toTeamName}`,
+          })))
+        : career.level !== 'hs'
+          ? h('div', { class: 'tiny', style: 'color:var(--green)', text: 'Nobody left your programme.' })
+          : null,
+      h('button', {
+        class: 'btn btn--block',
+        text: `Open ${info.title.toLowerCase()}`,
+        on: { click: () => app.push((a) => new TransferPortalScreen(a, career.mode)) },
+      }));
+  }
+
   /** How the class you spent the season working actually turned out. */
   private recruitingPanel(career: Career): HTMLElement | null {
     const summary = recruitingSummary(career);

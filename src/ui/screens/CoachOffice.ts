@@ -1,6 +1,7 @@
 import { h, clear } from '../dom';
 import type { App, Screen } from '../App';
 import type { CareerMode } from '../../league/types';
+import { MODE_LABEL } from '../../league/modes';
 import { screenEl, topbar, panel, emptyPanel } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
 import { syncUserTeamRatings, userTeam } from '../../league/career';
@@ -24,7 +25,7 @@ export class CoachOfficeScreen implements Screen {
       this.el = screenEl(topbar(app, 'Coach'), h('div', { class: 'scroll' },
         h('div', { class: 'wrapper' }, emptyPanel(
           'No programme yet',
-          `There is no ${mode} save on this device, so there is no staff to build.`,
+          `There is no ${MODE_LABEL[mode]} save on this device, so there is no staff to build.`,
           [{ label: 'Back', primary: true, onClick: () => app.pop() }],
         ))));
       return;

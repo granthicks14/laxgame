@@ -383,3 +383,76 @@ save stays small and the tables never drift. Rosters are cached per season
 because player IDs are not seeded: accumulating stats against one copy of a
 roster and reading them back off another silently produces an empty
 leaderboard.
+
+## Modes — `src/league/modes.ts`
+
+Three modes, two questions.
+
+```ts
+isCareerMode(mode)   // dynasty OR challenge — a save that runs across seasons
+isClimbMode(mode)    // challenge only — the coach's job can change
+```
+
+**Never write `mode === 'dynasty'` to gate a system.** Dynasty and Challenge are
+the same career engine; Challenge only adds the ladder on top. Gating on the
+literal string is what broke the transfer window in Challenge Mode: the
+offseason screen opened `TransferPortalScreen(app, 'dynasty')`, which loaded a
+different save — or none at all.
+
+`npm run modes` drives a full season and offseason in Dynasty (high school),
+Challenge (high school) and Challenge (Division I) and asserts that all 35
+career systems produced a real result in each. Run it after touching anything in
+`src/league/`. It is what caught the offseason emptying the squad it was about
+to refill.
+
+## Player movement — `marketFor(level)` in `src/league/transfers.ts`
+
+The same machinery, called what each level actually calls it:
+
+| Level | Window | Approaches | Pool | Your own players can leave |
+| --- | --- | --- | --- | --- |
+| High school | Player movement | 3 | 8 | no |
+| D-III / D-II | Transfer portal | 4 | 12 | yes |
+| D-I | Transfer portal | 5 | 14 | yes |
+| Semi-pro | Free agency | 4 | 10 | yes |
+| PLL | Free agency | 3 | 8 | yes |
+
+High school is deliberately identical to what it always was, because Dynasty
+balance depends on it. `runOutgoing` is the other half of a portal: players with
+years left and no path to the field leave, and the culture track in the coach's
+office is what keeps them.
+
+`runOutgoing` must return a **copy** of the roster even when nothing happens.
+Returning the caller's own array let the offseason empty the squad it was about
+to refill from.
+
+## Scoring — `src/league/simulate.ts`
+
+A possession model, not a formula: possessions → shots → shot quality → the
+goalie. The box score is produced by those steps, so saves are always shots on
+goal minus goals and faceoffs are always goals plus period starts. Nothing is
+invented afterwards, and nothing can disagree with the scoreboard.
+
+`LEVEL_PROFILE` holds each level's target rates **at regulation**. The game's
+quarters are much shorter than a real match, so everything scales with the
+career's game length: at Long quarters a Division I game lands where a real one
+does, and shorter settings scale played and simulated games down together.
+
+Two traps, both of which produced nonsense the first time:
+
+- **Team ratings are within-level.** A team's `goalie` of 78 at Division I is
+  not an absolute 78. Measuring a keeper against the level's *attribute band*
+  made every college goalie look eleven points below average and save percentage
+  collapsed to 39%. `levelPar` uses the measured **mean team rating** at the
+  level, published by `data/world.ts`.
+- **A good look is relative too.** In the match engine, `parEase` in
+  `match/ai.ts` moves the shot-selection bar with the level. Without it, better
+  defences did not concede fewer goals — they stopped the game being played.
+
+Run `npm run scoring` after any change. It reports goals, shots, shooting and
+save percentages, possessions, overtime and blowout rates per level, checks
+every box score against its scoreline, and runs the matchup cases (elite offence
+against a weak defence, two elite defences, one elite keeper, an extreme
+mismatch, fast break against a packed defence, rain and wind).
+`npm run levels` does the same through the real match engine, which is how you
+tell whether played and simulated games still agree.

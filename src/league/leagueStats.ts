@@ -16,6 +16,8 @@ import { Rng } from '../core/rng';
 import { generateRoster, type PlayerData } from '../data/players';
 import type { Position } from '../data/constants';
 import { getTeam } from '../data/teams';
+import { simulateFixture } from './fixture';
+import type { SimTeamBox } from './simulate';
 import { tryWorldTeam } from '../data/world';
 import type { Career, ScheduledGame } from './types';
 
@@ -100,11 +102,13 @@ interface Accum {
 const blank = (): Accum => ({ goals: 0, assists: 0, shots: 0, saves: 0, groundBalls: 0, games: 0 });
 
 /**
- * Shares one team's goals in one game out of among its players. Seeded from the
- * game id, so the same fixture always produces the same box score.
+ * Shares one team's ACTUAL box score out among its players. The totals come
+ * from the simulation, so a player's line always adds up to the team's line and
+ * the team's line always adds up to the scoreboard. Seeded from the game id, so
+ * the same fixture always produces the same box score after a reload.
  */
 function distribute(
-  rng: Rng, roster: PlayerData[], goals: number, against: number, acc: Map<string, Accum>,
+  rng: Rng, roster: PlayerData[], box: SimTeamBox, acc: Map<string, Accum>,
 ): void {
   const get = (id: string) => {
     let a = acc.get(id);
@@ -112,34 +116,32 @@ function distribute(
     return a;
   };
   for (const p of roster) get(p.id).games++;
+  const field = roster.filter((p) => p.pos !== 'G');
+  if (!field.length) return;
 
-  for (let i = 0; i < goals; i++) {
-    const scorer = weightedPick(rng, roster, SCORE_WEIGHT);
+  for (let i = 0; i < box.goals; i++) {
+    const scorer = weightedPick(rng, field, SCORE_WEIGHT);
     get(scorer.id).goals++;
-    get(scorer.id).shots += 1;
+    get(scorer.id).shots++;
     // Most goals are assisted; a solo dodge is not.
     if (rng.next() < 0.58) {
-      const helper = weightedPick(rng, roster.filter((p) => p.id !== scorer.id), ASSIST_WEIGHT);
-      get(helper.id).assists++;
+      const others = field.filter((p) => p.id !== scorer.id);
+      if (others.length) get(weightedPick(rng, others, ASSIST_WEIGHT).id).assists++;
     }
   }
 
-  // Shots and ground balls scale off scoring at the rates the engine produces.
-  const extraShots = Math.round(goals * 2.2 + rng.range(0, 6));
-  for (let i = 0; i < extraShots; i++) {
-    get(weightedPick(rng, roster, SCORE_WEIGHT).id).shots++;
+  // The shots that did not go in, shared out the same way.
+  const missed = Math.max(0, box.shots - box.goals);
+  for (let i = 0; i < missed; i++) {
+    get(weightedPick(rng, field, SCORE_WEIGHT).id).shots++;
   }
-  const gbs = Math.round(14 + rng.range(0, 10));
-  for (let i = 0; i < gbs; i++) {
+  for (let i = 0; i < box.groundBalls; i++) {
     get(weightedPick(rng, roster, ASSIST_WEIGHT).id).groundBalls++;
   }
 
-  // The keeper faces the other team's shots and stops the ones that missed.
+  // The keeper's saves are the team's saves. There is nothing to invent.
   const keeper = roster.find((p) => p.pos === 'G');
-  if (keeper) {
-    const faced = Math.round(against * 3.1 + rng.range(0, 4));
-    get(keeper.id).saves += Math.max(0, faced - against);
-  }
+  if (keeper) get(keeper.id).saves += box.saves;
 }
 
 /** Every player's line for the current season, league-wide. */
@@ -152,12 +154,15 @@ export function leagueStatLines(career: Career): StatLine[] {
       const teamId = side === 'home' ? g.homeId : g.awayId;
       // The user's own team keeps the real numbers it recorded on the field.
       if (teamId === career.teamId) continue;
-      const goals = side === 'home' ? g.homeScore : g.awayScore;
-      const against = side === 'home' ? g.awayScore : g.homeScore;
+      // Re-run the fixture to recover its box score. The simulation is
+      // deterministic, so this is the same game that produced the scoreline —
+      // no box score has to be stored, and none can drift out of step with it.
+      const sim = simulateFixture(career, g);
+      const box = side === 'home' ? sim.home : sim.away;
       const roster = seasonRoster(career, teamId);
       let table = acc.get(teamId);
       if (!table) { table = new Map(); acc.set(teamId, table); }
-      distribute(new Rng(`${career.seed}:${g.id}:${side}`), roster, goals, against, table);
+      distribute(new Rng(`${career.seed}:${g.id}:${side}`), roster, box, table);
     }
   }
 
@@ -260,12 +265,12 @@ export function teamSeasonStats(career: Career, teamId: string): TeamSeasonStats
 
 /** Records a simulated user game onto the user's own roster, so a season the
  *  player partly simulated still has a complete stat line. */
-export function recordSimulatedUserGame(career: Career, game: ScheduledGame): void {
-  const isHome = game.homeId === career.teamId;
-  const goals = isHome ? game.homeScore : game.awayScore;
-  const against = isHome ? game.awayScore : game.homeScore;
+export function recordSimulatedUserGame(
+  career: Career, game: ScheduledGame, mine: SimTeamBox, theirs: SimTeamBox,
+): void {
   const table = new Map<string, Accum>();
-  distribute(new Rng(`${career.seed}:${game.id}:user`), career.roster, goals, against, table);
+  distribute(new Rng(`${career.seed}:${game.id}:user`), career.roster, mine, table);
+  void theirs;
   for (const p of career.roster) {
     const a = table.get(p.id);
     if (!a) continue;

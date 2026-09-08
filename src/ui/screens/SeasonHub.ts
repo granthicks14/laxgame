@@ -25,6 +25,8 @@ import { stageAt } from '../../challenge/ladder';
 import { SITUATIONS } from '../../challenge/situations';
 import { classGrade } from '../../scouting/recruiting';
 import { newsFeed } from '../../league/news';
+import { MODE_LABEL, isCareerMode } from '../../league/modes';
+import { marketFor } from '../../league/transfers';
 
 export class SeasonHubScreen implements Screen {
   el: HTMLElement;
@@ -33,12 +35,12 @@ export class SeasonHubScreen implements Screen {
     const career = loadCareer(mode);
     if (!career) {
       this.el = screenEl(
-        topbar(app, mode === 'dynasty' ? 'Dynasty' : 'Season'),
+        topbar(app, MODE_LABEL[mode]),
         h('div', { class: 'scroll' }, h('div', { class: 'wrapper' }, emptyPanel(
           'No save in this mode',
           'That career is not on this device — it may have been deleted, or saved in a different browser.',
           [{
-            label: `Start a new ${mode}`,
+            label: `Start a new ${MODE_LABEL[mode].toLowerCase()}`,
             primary: true,
             onClick: () => app.replace((a) => new CareerEntryScreen(a, mode)),
           }],
@@ -65,7 +67,7 @@ export class SeasonHubScreen implements Screen {
           game ? this.nextGame(app, career, game) : this.playoffWait(career),
           this.focusPanel(app, career),
           this.officePanel(app, career, mode),
-          this.recruitingPanel(app, career, mode),
+          isCareerMode(mode) ? this.recruitingPanel(app, career, mode) : null,
           career.challenge ? this.challengePanel(app, career) : null,
           this.newsPanel(career),
           h('div', { class: 'row row--wrap' },
@@ -90,6 +92,7 @@ export class SeasonHubScreen implements Screen {
   /** The coach's office, and the transfer window when it is open. */
   private officePanel(app: App, career: Career, mode: CareerMode): HTMLElement {
     const open = career.market.length > 0 && career.pitchesLeft > 0;
+    const info = marketFor(career.level);
     return panel("Coach's office",
       h('div', { class: 'small', text: staffSummary(career.staff) }),
       h('div', { class: 'row row--wrap' },
@@ -97,11 +100,13 @@ export class SeasonHubScreen implements Screen {
           class: 'btn', text: `Staff · ${career.coachingPoints} CP`,
           on: { click: () => app.push((a) => new CoachOfficeScreen(a, mode)) },
         }),
-        h('button', {
-          class: `btn${open ? ' btn--primary' : ''}`,
-          text: open ? `Transfers · ${career.pitchesLeft} left` : 'Transfers',
-          on: { click: () => app.push((a) => new TransferPortalScreen(a, mode)) },
-        })),
+        isCareerMode(mode)
+          ? h('button', {
+            class: `btn${open ? ' btn--primary' : ''}`,
+            text: open ? `${info.title} · ${career.pitchesLeft} left` : info.title,
+            on: { click: () => app.push((a) => new TransferPortalScreen(a, mode)) },
+          })
+          : null),
       career.level === 'hs'
         ? h('div', {
           class: 'tiny',

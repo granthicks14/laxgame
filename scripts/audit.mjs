@@ -26,7 +26,12 @@ const signature = () => page.evaluate(() => {
   if (!el) return 'none';
   const title = document.querySelector('.topbar__title')?.textContent ?? '';
   const buttons = [...document.querySelectorAll('button')].map((b) => b.textContent?.trim()).join('|');
-  const on = [...document.querySelectorAll('.is-on, .is-selected, .is-listening')].map((b) => b.textContent?.trim()).join('|');
+  // Which option is selected in each segmented control, BY INDEX. Text alone is
+  // ambiguous once two controls on a screen both offer "On" and "Off".
+  const on = [...document.querySelectorAll('.seg')]
+    .map((g) => [...g.children].findIndex((c) => c.classList.contains('is-on')))
+    .join(',')
+    + '::' + [...document.querySelectorAll('.is-selected, .is-listening')].map((b) => b.textContent?.trim()).join('|');
   // Hash the whole button text rather than a prefix: a change far down a long
   // screen (the keybind list, say) is still a change.
   let hash = 2166136261;
@@ -34,7 +39,10 @@ const signature = () => page.evaluate(() => {
     hash ^= buttons.charCodeAt(i);
     hash = Math.imul(hash, 16777619);
   }
-  return `${el.className}::${title}::${buttons.length}::${hash >>> 0}::${on}`;
+  // Text length catches a change the button list alone cannot see: two toggles
+  // whose options are both "On"/"Off" produce an identical `on` string.
+  const textLen = (el.textContent ?? '').length;
+  return `${el.className}::${title}::${buttons.length}::${hash >>> 0}::${on}::${textLen}`;
 });
 
 const settle = (ms = 380) => page.waitForTimeout(ms);
@@ -85,7 +93,11 @@ async function sweep(label, skip = /Quit game|Delete|Start a new|Run it back|Fin
     await btn.click({ timeout: 4000 }).catch(() => {});
     await settle(320);
     const sigAfter = await signature();
-    if (sigBefore === sigAfter && !alreadyOn) dead.push(`${label} → "${text}"`);
+    // Selecting an option that is now active is a real outcome even when the
+    // rest of the screen does not move — a settings toggle that was already in
+    // that position is not a dead control.
+    const nowOn = ((await btn.getAttribute('class').catch(() => '')) ?? '').includes('is-on');
+    if (sigBefore === sigAfter && !alreadyOn && !nowOn) dead.push(`${label} → "${text}"`);
 
     // If the click navigated away, step back so the rest of this screen's
     // controls still get swept.
@@ -129,46 +141,70 @@ for (const [label, fn] of routes) {
   await fn();
 }
 
-// ---- a live career: hub, team, player, schedule, standings
+// ---- a live career: hub, team, player, schedule, standings.
+// Dynasty, not Season: transfers, recruiting and the offseason belong to the
+// career engine, and a one-off Season save correctly does not carry them.
 await backToMenu();
-await page.locator('.menu-btn__label').filter({ hasText: 'Season' }).first().click();
+await page.locator('.menu-btn__label').filter({ hasText: 'Dynasty' }).first().click();
 await settle();
-const start = page.getByRole('button', { name: /Start season/i });
-if (await start.count()) { await start.click(); await settle(500); }
-await sweep('Season hub', /Play game|Simulate this game|Quit game|Start a new career|Continue/i);
+const start = page.getByRole('button', { name: /Take this job|Start dynasty/i });
+if (await start.count()) { await start.click(); await settle(600); }
+await sweep('Career hub', /Play game|Simulate this game|Quit game|Start a new|Continue/i);
 
 // Sweeping may have wandered; make sure we are back on the hub.
 await backToMenu();
-await page.locator('.menu-btn__label').filter({ hasText: 'Season' }).first().click();
+await page.locator('.menu-btn__label').filter({ hasText: 'Dynasty' }).first().click();
 await settle();
 const cont = page.getByRole('button', { name: /^Continue$/i });
 if (await cont.count()) { await cont.click(); await settle(500); }
 
-/** Navigates back to the season hub from wherever we ended up. */
+/** Navigates back to the career hub from wherever we ended up. */
 async function toHub() {
-  for (let i = 0; i < 6; i++) {
-    if (await page.getByRole('button', { name: /^Play game$/i }).count()) return true;
-    const back = page.locator('.topbar button').first();
-    if (await back.count()) { await back.click().catch(() => {}); await settle(340); continue; }
-    break;
+  // ALWAYS from a hard reload. Sweeping clicks every control on a screen,
+  // including back arrows and empty-state buttons, so by the end of one the app
+  // can be anywhere — and "is there a Play game button?" is true on the one-off
+  // Season hub too, which is how a whole career sweep once ran against the
+  // wrong save.
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  const ps = page.getByText('Press Start');
+  if (await ps.count()) { await ps.click().catch(() => {}); await settle(400); }
+  const item = page.locator('.menu-btn__label').filter({ hasText: 'Dynasty' }).first();
+  if (!(await item.count())) return false;
+  await item.click().catch(() => {});
+  await settle(450);
+  const cont = page.getByRole('button', { name: /^Continue$/i }).first();
+  if (await cont.count()) { await cont.click().catch(() => {}); await settle(700); }
+  else {
+    const start = page.getByRole('button', { name: /Take this job|Start dynasty/i }).first();
+    if (await start.count()) { await start.click().catch(() => {}); await settle(800); }
   }
-  await backToMenu();
-  await page.locator('.menu-btn__label').filter({ hasText: 'Season' }).first().click();
-  await settle();
-  const c = page.getByRole('button', { name: /^Continue$/i });
-  if (await c.count()) { await c.click(); await settle(500); }
-  return await page.getByRole('button', { name: /^Play game$/i }).count() > 0;
+  return (await page.getByRole('button', { name: /^Play game$/i }).count()) > 0
+    && (await page.locator('button.btn', { hasText: 'Recruiting board' }).count()) > 0;
+}
+
+/**
+ * Navigates to the career hub and opens one of its buttons in a single step.
+ * Doing the lookup inside the navigation retry is the only reliable way: the
+ * hub the previous sweep left behind is not necessarily the one we want.
+ */
+async function openFromHub(name) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (!(await toHub())) continue;
+    const b = page.locator('button.btn', { hasText: name }).first();
+    if (!(await b.count())) continue;
+    await b.click().catch(() => {});
+    await settle(450);
+    return true;
+  }
+  return false;
 }
 
 for (const [name, label] of [
   ['Team', 'Team screen'], ['Schedule', 'Schedule'], ['Standings', 'Standings'],
-  ['Statistics', 'Statistics'], ['Staff', "Coach's office"], ['Transfers', 'Transfer portal'],
-  ['Recruiting board', 'Recruiting board'],
+  ['Statistics', 'Statistics'], ['Staff', "Coach's office"],
+  ['Player movement', 'Transfer window'], ['Recruiting board', 'Recruiting board'],
 ]) {
-  await toHub();
-  const b = page.locator('button.btn', { hasText: name }).first();
-  if (await b.count()) {
-    await b.click(); await settle(400);
+  if (await openFromHub(name)) {
     if (name === 'Recruiting board') {
       // The prospect page and the scout market are both a click deeper. Do them
       // before sweeping the board itself, because sweeping clicks the back
@@ -209,7 +245,7 @@ for (const [name, label] of [
     const back = page.locator('.topbar button').first();
     if (await back.count()) { await back.click(); await settle(320); }
   } else {
-    errors.push(`season hub is missing the ${name} button`);
+    errors.push(`career hub is missing the ${name} button`);
   }
 }
 

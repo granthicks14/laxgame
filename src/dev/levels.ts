@@ -42,11 +42,13 @@ for (const level of LEVEL_ORDER) {
   const pool = mid.length >= 2 ? mid : sorted;
 
   let goals = 0; let shots = 0; let sog = 0; let saves = 0; let fo = 0; let foTot = 0;
+  let played = 0;
   for (let i = 0; i < GAMES; i++) {
     const home = pool[i % pool.length];
     const away = pool[(i + 1 + Math.floor(pool.length / 2)) % pool.length];
     if (home.id === away.id) continue;
     const m = run(home, away, level, 8000 + i * 131);
+    played++;
     goals += m.score.home + m.score.away;
     shots += m.stats.home.shots + m.stats.away.shots;
     sog += m.stats.home.shotsOnGoal + m.stats.away.shotsOnGoal;
@@ -54,7 +56,7 @@ for (const level of LEVEL_ORDER) {
     fo += m.stats.home.faceoffWins;
     foTot += m.stats.home.faceoffWins + m.stats.away.faceoffWins;
   }
-  const per = (n: number) => (n / GAMES).toFixed(1);
+  const per = (n: number) => (n / Math.max(1, played)).toFixed(1);
   const pc = (a: number, b: number) => (b ? `${((a / b) * 100).toFixed(0)}%` : '—');
   console.log(
     `${LEVELS[level].short.padEnd(8)}  ${per(goals).padStart(5)} tot  `

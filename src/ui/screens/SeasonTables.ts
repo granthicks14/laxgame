@@ -8,6 +8,8 @@ import {
   seasonFormat, standingsSorted, userIsHome, winPct,
 } from '../../league/career';
 import { divisionName } from './divisionName';
+import { simulateFixture } from '../../league/fixture';
+import { simulationBreakdown } from '../../league/simulate';
 import type { Bracket } from '../../world/season';
 import type { Career, PlayoffRound, ScheduledGame } from '../../league/types';
 
@@ -80,11 +82,20 @@ export class ScheduleScreen implements Screen {
     const career = res;
     const games = career.schedule.filter((g) => g.featured);
 
+    const showSim = app.settings.simDetails;
+
     this.el = screenEl(
       topbar(app, 'Schedule', `Year ${career.year}`),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
-          ...games.map((g) => this.row(career, g)),
+          showSim
+            ? h('div', {
+              class: 'tiny',
+              text: 'Simulation details are on. Each played game shows the possessions, shots, '
+                + 'saves and faceoffs behind its scoreline. Turn it off in Settings.',
+            })
+            : null,
+          ...games.map((g) => this.row(career, g, showSim)),
           career.schedule.some((g) => g.playoff)
             ? this.bracket(career)
             : null,
@@ -92,7 +103,7 @@ export class ScheduleScreen implements Screen {
     );
   }
 
-  private row(career: Career, g: ScheduledGame): HTMLElement {
+  private row(career: Career, g: ScheduledGame, showSim = false): HTMLElement {
     const opp = effectiveTeam(career, opponentOf(career, g));
     const isHome = userIsHome(career, g);
     const you = isHome ? g.homeScore : g.awayScore;
@@ -111,7 +122,29 @@ export class ScheduleScreen implements Screen {
         g.played
           ? h('div', { class: `num ${cls}`, style: 'font-size:15px' }, `${won ? 'W' : 'L'} ${you}-${them}`)
           : h('span', { class: 'pill', text: 'Upcoming' }),
-      ));
+      ),
+      // The debug view, off unless the coach turned it on in Settings. It shows
+      // how the simulation reached this scoreline, which is the only practical
+      // way to tell a bad model from a bad afternoon.
+      showSim && g.played ? this.simDetail(career, g) : null);
+  }
+
+  private simDetail(career: Career, g: ScheduledGame): HTMLElement {
+    const sim = simulateFixture(career, g);
+    const rows = simulationBreakdown(sim);
+    const matches = sim.homeScore === g.homeScore && sim.awayScore === g.awayScore;
+    return h('div', {
+      class: 'panel__body',
+      style: 'padding:0 12px 10px;border-top:1px solid var(--line-soft)',
+    },
+      ...rows.map((l) => h('div', { class: 'tiny num', style: 'white-space:pre', text: l })),
+      matches
+        ? null
+        : h('div', {
+          class: 'tiny',
+          style: 'color:var(--accent)',
+          text: `You played this one: the model would have made it ${sim.homeScore}-${sim.awayScore}.`,
+        }));
   }
 
   private bracket(career: Career): HTMLElement {

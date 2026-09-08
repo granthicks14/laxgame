@@ -160,6 +160,48 @@ if (after && !after.challenge.offers?.length && after.challenge.totalYears === 1
     after.roster.some((p) => (p.dev?.history?.length ?? 0) > 0));
 }
 
+/* --------------------------------- the offseason systems, in Challenge Mode */
+
+// This is the bug this suite exists for: the offseason used to open the
+// transfer window against the DYNASTY save, so a Challenge coach was shown
+// somebody else's programme or an empty screen.
+{
+  const s = await save();
+  if (s && !s.challenge.offers?.length && !s.challenge.complete) {
+    const before = (await page.locator('.wrapper').innerText()).toLowerCase();
+    check('the offseason names the level\'s own transfer window',
+      /player movement|transfer portal|free agency/.test(before));
+    check('the offseason offers recruiting too', before.includes('recruiting board'));
+
+    const opened = await clickText(/Open (player movement|transfer portal|free agency)/i);
+    check('the transfer window opens from the offseason', opened);
+    const portal = (await page.locator('.wrapper').innerText()).toLowerCase();
+    check('it is THIS career\'s window, not another save\'s',
+      !portal.includes('no programme yet') && !portal.includes('there is no dynasty save'));
+    await settle(400);
+    const cards = await page.getByRole('button', { name: /Make your pitch|Go back to him|Nothing more to say/i }).count();
+    check('players are available', s.market.length > 0 && cards > 0,
+      `${s.market.length} in the save, ${cards} on screen`);
+    check('approaches are available', (s.pitchesLeft ?? 0) > 0, `${s.pitchesLeft}`);
+
+    const pitched = await clickText(/Make your pitch|Go back to him/i);
+    const afterPitch = await save();
+    check('an approach can be made from Challenge Mode',
+      pitched ? afterPitch.pitchesLeft < s.pitchesLeft : true,
+      `${s.pitchesLeft} -> ${afterPitch.pitchesLeft}`);
+    await back();
+    await settle();
+
+    // The coach's office has to work here too.
+    const staff = await clickText(/Spend coaching points/i);
+    const officeText = (await page.locator('.wrapper').innerText()).toLowerCase();
+    check('the office opens on this career',
+      staff && !officeText.includes('no programme yet'),
+      staff ? 'opened' : 'button not found');
+    if (staff) { await back(); await settle(); }
+  }
+}
+
 /* ------------------------------------------------------------- the tracker */
 
 await page.goto(BASE, { waitUntil: 'networkidle' });

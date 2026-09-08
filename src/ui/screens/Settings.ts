@@ -1,3 +1,4 @@
+import { CAREER_MODES, MODE_LABEL } from '../../league/modes';
 import { h } from '../dom';
 import type { App, Screen } from '../App';
 import { screenEl, topbar, panel, segmented, fieldRow } from '../components';
@@ -51,6 +52,13 @@ export class SettingsScreen implements Screen {
                 [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
                 s.goalReplays ? 'on' : 'off',
                 (v) => app.updateSettings({ goalReplays: v === 'on' }),
+              )),
+            fieldRow('Simulation details',
+              'Show how a simulated result was reached: possessions, shots, saves and faceoffs.',
+              segmented(
+                [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
+                s.simDetails ? 'on' : 'off',
+                (v) => app.updateSettings({ simDetails: v === 'on' }),
               )),
             h('div', { class: 'tiny', text: 'These are defaults for new games. A career keeps the settings it was created with.' })),
 
@@ -117,19 +125,19 @@ export class SettingsScreen implements Screen {
                   },
                 },
               }),
-              h('button', {
-                class: 'btn btn--sm', text: 'Delete dynasty save',
-                disabled: !hasCareer('dynasty'),
+              ...CAREER_MODES.map((m) => h('button', {
+                class: 'btn btn--sm', text: `Delete ${MODE_LABEL[m].toLowerCase()} save`,
+                disabled: !hasCareer(m),
                 on: {
                   click: () => {
-                    if (window.confirm('Delete the saved dynasty? Every season of history goes with it.')) {
-                      deleteCareer('dynasty');
-                      app.toast('Dynasty save deleted');
+                    if (window.confirm(`Delete the saved ${MODE_LABEL[m].toLowerCase()}? Every season of history goes with it.`)) {
+                      deleteCareer(m);
+                      app.toast(`${MODE_LABEL[m]} save deleted`);
                       app.replace((a) => new SettingsScreen(a));
                     }
                   },
                 },
-              }))),
+              })))),
 
           h('div', { class: 'tiny', text: 'Lone Star Lax runs entirely in your browser. No accounts, no servers, no cost.' }),
         )),

@@ -15,7 +15,7 @@
 import { Rng } from '../core/rng';
 import { clamp } from '../core/math';
 import { LEVELS, bandFor, type Level } from './levels';
-import { setLevelSpan } from './levelSpan';
+import { setLevelSpan, type LevelSpan } from './levelSpan';
 import {
   ALL_CONFERENCES, PROGRAMS_BY_LEVEL, type ConferenceInfo, type ProgramRow, type Region,
 } from './world/programs';
@@ -204,16 +204,24 @@ const worldById = new Map(WORLD_TEAMS.map((t) => [t.id, t]));
 
 /* ------------------------------------------------------- the player scale */
 
-/** The range of team ratings that actually exists at each level. */
-const SPANS: Record<Level, { min: number; max: number }> = (() => {
-  const out = {} as Record<Level, { min: number; max: number }>;
+/** The range — and the average — of team ratings that exists at each level. */
+const SPANS: Record<Level, LevelSpan> = (() => {
+  const out = {} as Record<Level, LevelSpan>;
+  const totals = {} as Record<Level, { sum: number; n: number }>;
   for (const t of built) {
     const cur = out[t.level];
-    if (!cur) out[t.level] = { min: t.overall, max: t.overall };
-    else {
+    if (!cur) {
+      out[t.level] = { min: t.overall, max: t.overall, mean: t.overall };
+      totals[t.level] = { sum: t.overall, n: 1 };
+    } else {
       cur.min = Math.min(cur.min, t.overall);
       cur.max = Math.max(cur.max, t.overall);
+      totals[t.level].sum += t.overall;
+      totals[t.level].n++;
     }
+  }
+  for (const level of Object.keys(out) as Level[]) {
+    out[level].mean = totals[level].sum / totals[level].n;
   }
   return out;
 })();
@@ -222,8 +230,8 @@ const SPANS: Record<Level, { min: number; max: number }> = (() => {
 // without depending on the whole registry.
 for (const [level, span] of Object.entries(SPANS)) setLevelSpan(level as Level, span);
 
-export function levelSpan(level: Level): { min: number; max: number } {
-  return SPANS[level] ?? { min: 40, max: 95 };
+export function levelSpan(level: Level): LevelSpan {
+  return SPANS[level] ?? { min: 40, max: 95, mean: 68 };
 }
 
 /**

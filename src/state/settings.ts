@@ -14,6 +14,9 @@ export interface Settings {
   goalReplays: boolean;
   /** 'auto' picks touch controls on touch devices. */
   controls: 'auto' | 'touch' | 'keyboard';
+  /** Show how a simulated result was arrived at. Off by default: it is a tool
+   *  for working out why a scoreline looks wrong, not part of playing. */
+  simDetails: boolean;
 }
 
 const KEY = 'lsl.settings.v1';
@@ -28,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   seenTutorial: false,
   goalReplays: true,
   controls: 'auto',
+  simDetails: false,
 };
 
 export function loadSettings(): Settings {

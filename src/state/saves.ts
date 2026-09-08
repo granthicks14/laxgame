@@ -28,6 +28,7 @@ function migrateCareer(raw: unknown): unknown {
   if (!c.classOverrides) c.classOverrides = {};
   if (c.lastMovement === undefined) c.lastMovement = null;
   if (!Array.isArray(c.market)) c.market = [];
+  if (!Array.isArray(c.portalOut)) c.portalOut = [];
   if (typeof c.pitchesLeft !== 'number') c.pitchesLeft = 0;
   if (!Array.isArray(c.lastDevelopment)) c.lastDevelopment = [];
 

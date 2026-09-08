@@ -175,7 +175,7 @@ if (await clickText(/See all .* moves/)) {
 // Transfer window.
 check('a transfer market opened', off.market.length > 0, `${off.market.length} players`);
 check('pitches are limited', off.pitchesLeft > 0 && off.pitchesLeft <= 3, `${off.pitchesLeft}`);
-if (await clickText(/Open the transfer portal/)) {
+if (await clickText(/Open (player movement|transfer portal|free agency)/i)) {
   const cards = await page.locator('.interest').count();
   check('the portal shows interest for each player', cards === off.market.length,
     `${cards} of ${off.market.length}`);

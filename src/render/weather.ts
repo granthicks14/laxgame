@@ -1,4 +1,5 @@
 import { Rng } from '../core/rng';
+import { clamp } from '../core/math';
 import type { TimeOfDay } from '../data/teams';
 import type { Region } from '../data/world/programs';
 
@@ -26,6 +27,8 @@ export interface Weather {
   alpha: number;
   /** Falling rain, drawn as streaks. 0 = none. */
   rain: number;
+  /** 0 = still, 1 = a gale. Long passes and outside shots suffer. */
+  wind: number;
   /** Multiplies the light on the pitch. 1 = midday. */
   light: number;
   /** Stadium lights are on and pooling on the grass. */
@@ -41,6 +44,7 @@ const BASE = {
   tint: null as string | null,
   alpha: 0,
   rain: 0,
+  wind: 0,
   light: 1,
   lights: false,
   passAccuracy: 1,
@@ -83,7 +87,14 @@ export function weatherFor(seed: number, time: TimeOfDay = 'day', region: Region
   // A spring afternoon, shifted by where in the country the game is played.
   const warm = (time === 'day' ? 74 : time === 'evening' ? 68 : 61) + climate.degrees;
   const tempF = Math.round(warm + rng.range(-7, 9) - (kind === 'rain' ? 6 : 0) + (kind === 'sunny' ? 4 : 0));
-  return { ...base, tempF };
+  // Wind is its own roll: it comes with rain more often than not, and an open
+  // ground in the midwest gets more of it than a sheltered one in the south.
+  const gust = clamp(
+    rng.range(0, 0.55) + (kind === 'rain' ? 0.3 : 0) + wet * 1.4,
+    0, 1,
+  );
+  const label = gust > 0.72 ? `${base.label}, windy` : base.label;
+  return { ...base, wind: gust, label, tempF };
 }
 
 export const TIME_LABEL: Record<TimeOfDay, string> = {

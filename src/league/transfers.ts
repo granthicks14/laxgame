@@ -120,6 +120,80 @@ const MARKET_SIZE = 8;
 /** Pitches available per offseason. Scarcity is what makes this a decision. */
 export const MAX_PITCHES = 3;
 
+/* ------------------------------------------------------- level awareness */
+
+/**
+ * The same machinery, called what it is actually called at each level.
+ *
+ * A high school does not have a transfer portal; a college does, and it is the
+ * single biggest roster tool a college coach has. A professional club signs
+ * free agents. The mechanics that differ are the ones that genuinely differ:
+ * how many players are available, how many approaches you get, how much you
+ * already know about them, and whether your OWN players can walk.
+ *
+ * High school is left exactly as it was, because Dynasty balance depends on it.
+ */
+export type MarketKind = 'school' | 'portal' | 'signing' | 'freeagency';
+
+export interface MarketInfo {
+  kind: MarketKind;
+  title: string;
+  /** What one approach is called. */
+  pitchWord: string;
+  pitchesWord: string;
+  blurb: string;
+  pitches: number;
+  size: number;
+  /** Whether your own players can leave for somewhere else. */
+  outgoing: boolean;
+  /** How well a coach knows a player he has NOT played against, 0..100. */
+  baseKnowledge: number;
+}
+
+export function marketFor(level: Level): MarketInfo {
+  switch (level) {
+    case 'hs':
+      return {
+        kind: 'school',
+        title: 'Player movement',
+        pitchWord: 'approach', pitchesWord: 'approaches',
+        blurb: 'Players change schools for a reason: a coach, a role, a team that wins. '
+          + 'You get three conversations a year and they are the only ones you get.',
+        pitches: 3, size: 8, outgoing: false, baseKnowledge: 34,
+      };
+    case 'd3':
+    case 'd2':
+    case 'd1':
+      return {
+        kind: 'portal',
+        title: 'Transfer portal',
+        pitchWord: 'contact', pitchesWord: 'contacts',
+        blurb: 'The portal is open. Every programme in the country can see the same names, '
+          + 'and the ones worth having are gone in days. Your own players can enter it too.',
+        pitches: level === 'd1' ? 5 : 4,
+        size: level === 'd1' ? 14 : 12,
+        outgoing: true,
+        baseKnowledge: 26,
+      };
+    case 'semipro':
+      return {
+        kind: 'signing',
+        title: 'Free agency',
+        pitchWord: 'offer', pitchesWord: 'offers',
+        blurb: 'Contracts are up. Finished players with day jobs, choosing where the drive is worth it.',
+        pitches: 4, size: 10, outgoing: true, baseKnowledge: 40,
+      };
+    case 'pll':
+      return {
+        kind: 'freeagency',
+        title: 'Free agency',
+        pitchWord: 'offer', pitchesWord: 'offers',
+        blurb: 'A short list of the best players alive, out of contract, with every club calling.',
+        pitches: 3, size: 8, outgoing: true, baseKnowledge: 52,
+      };
+  }
+}
+
 /**
  * Builds the market. Candidates come from real squads in the league, generated
  * exactly as those teams generate them, so a transfer is a player who genuinely
@@ -138,6 +212,7 @@ export function buildMarket(
   level: Level = 'hs',
   knowledge: MarketKnowledge = { playedIds: [], scouts: 0 },
 ): TransferCandidate[] {
+  const info = marketFor(level);
   const rng = new Rng(`${seed}:market:${year}`);
   const pool: TransferCandidate[] = [];
 
@@ -181,7 +256,7 @@ export function buildMarket(
   for (const c of pool) {
     const seen = knowledge.playedIds.includes(c.fromTeamId);
     c.known = clamp(
-      (seen ? 82 : 34) + knowledge.scouts * 9 + rng.range(-6, 6),
+      (seen ? 82 : info.baseKnowledge) + knowledge.scouts * 9 + rng.range(-6, 6),
       0, 100,
     );
   }
@@ -189,22 +264,106 @@ export function buildMarket(
   // Best stories first, then a cut, so the market is short and interesting.
   // Positions are capped roughly in proportion to a squad: a window where every
   // available player is a backup goalie is not a market, it is a list.
-  const POS_CAP: Record<Position, number> = { A: 2, M: 3, D: 2, G: 1, FO: 1 };
+  // Scaled to the size of the window: a college portal carries more of every
+  // position than a high school does.
+  const capScale = info.size / MARKET_SIZE;
+  const cap = (n: number) => Math.max(1, Math.round(n * capScale));
+  const POS_CAP: Record<Position, number> = {
+    A: cap(2), M: cap(3), D: cap(2), G: cap(1), FO: cap(1),
+  };
   pool.sort((a, b) => weight(b) - weight(a));
   const picked: TransferCandidate[] = [];
   const perTeam = new Map<string, number>();
   const perPos = new Map<Position, number>();
   for (const c of pool) {
     const n = perTeam.get(c.fromTeamId) ?? 0;
-    if (n >= 2) continue;
+    if (n >= (info.kind === 'portal' ? 3 : 2)) continue;
     const pn = perPos.get(c.player.pos) ?? 0;
     if (pn >= POS_CAP[c.player.pos]) continue;
     perTeam.set(c.fromTeamId, n + 1);
     perPos.set(c.player.pos, pn + 1);
     picked.push(c);
-    if (picked.length >= MARKET_SIZE) break;
+    if (picked.length >= info.size) break;
   }
   return picked;
+}
+
+/* ------------------------------------------------------------- outgoing */
+
+export interface PortalDeparture {
+  name: string;
+  pos: Position;
+  overall: number;
+  grade: number;
+  reason: TransferReason;
+  /** Where he went. */
+  toTeamId: string | null;
+  toTeamName: string;
+}
+
+export interface OutgoingResult {
+  stayed: PlayerData[];
+  left: PortalDeparture[];
+}
+
+/**
+ * Your own squad, in a level where the portal exists. A player who is buried,
+ * losing, or being developed by nobody has somewhere else to go — and a
+ * programme with a strong culture keeps him.
+ *
+ * This is the other half of the portal, and it is the half that hurts.
+ */
+export function runOutgoing(
+  roster: PlayerData[], level: Level, rng: Rng,
+  ctx: { wins: number; losses: number; retention: number; rivals: GameTeam[] },
+): OutgoingResult {
+  const info = marketFor(level);
+  // A COPY, always. Returning the caller's own array let career.ts empty the
+  // squad it was about to refill from it, which wiped every high school roster
+  // once a year and replaced it with freshmen.
+  if (!info.outgoing) return { stayed: [...roster], left: [] };
+
+  const byPos = new Map<Position, PlayerData[]>();
+  for (const p of sortDepthChart(roster)) {
+    const list = byPos.get(p.pos) ?? [];
+    list.push(p);
+    byPos.set(p.pos, list);
+  }
+
+  const losing = ctx.losses > ctx.wins + 1;
+  const stayed: PlayerData[] = [];
+  const left: PortalDeparture[] = [];
+
+  for (const [pos, list] of byPos) {
+    for (let depth = 0; depth < list.length; depth++) {
+      const p = list[depth];
+      const needed = NEEDED[pos] ?? 3;
+      // Seniors are leaving anyway; the ones who go are the ones with years
+      // left and no path to the field.
+      const buried = depth >= needed;
+      if (p.grade >= 12 || (!buried && !losing)) { stayed.push(p); continue; }
+
+      let chance = 0;
+      if (buried) chance += 0.16 + (depth - needed) * 0.05;
+      if (losing) chance += 0.07;
+      if (p.potential - p.overall > 8) chance += 0.05;
+      // Culture is the whole point of the culture track.
+      chance *= clamp(1 - ctx.retention * 0.65, 0.3, 1);
+      if (rng.next() > clamp(chance, 0, 0.45)) { stayed.push(p); continue; }
+
+      const to = ctx.rivals.length ? rng.pick(ctx.rivals) : null;
+      left.push({
+        name: `${p.first} ${p.last}`,
+        pos: p.pos,
+        overall: p.overall,
+        grade: p.grade,
+        reason: buried ? 'buried' : 'losing',
+        toTeamId: to?.id ?? null,
+        toTeamName: to?.short ?? 'another programme',
+      });
+    }
+  }
+  return { stayed: sortDepthChart(stayed), left };
 }
 
 function weight(c: TransferCandidate): number {

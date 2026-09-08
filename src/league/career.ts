@@ -9,10 +9,12 @@ import {
 } from '../data/teams';
 import { DEFAULT_TACTICS } from '../data/tactics';
 import { EMPTY_STAFF, coachEffects } from './coaching';
+import { isCareerMode } from './modes';
 import { DEV_LABEL, developPlayer } from './development';
 import { planMovement, type DivisionResult, type MovementReport } from './promotion';
 import {
-  MAX_PITCHES, buildMarket, pitch, type PitchResult, type ProgramSnapshot,
+  buildMarket, marketFor, pitch, runOutgoing,
+  type PitchResult, type PortalDeparture, type ProgramSnapshot,
 } from './transfers';
 import { ensureDevProfile, rosterShape } from '../data/players';
 import { LEVELS } from '../data/levels';
@@ -35,9 +37,9 @@ import { difficultyFor } from '../data/levels';
 import { STAR_OVERALL } from '../data/players';
 import { TRACK_ORDER } from './coaching';
 import { DIFFICULTIES, type DifficultyKey } from '../data/difficulty';
-import { GAME_LENGTHS, type GameLengthKey, type Position } from '../data/constants';
+import type { GameLengthKey, Position } from '../data/constants';
 import { buildSchedule, regularSeasonWeeks } from './schedule';
-import { simulateGame } from './simulate';
+import { simulateFixture } from './fixture';
 import { recordSimulatedUserGame } from './leagueStats';
 import {
   CAREER_VERSION, type Career, type CareerMode, type DevelopmentEntry,
@@ -109,6 +111,7 @@ export function createCareer(opts: NewCareerOptions): Career {
     lastMovement: null,
     market: [],
     pitchesLeft: 0,
+    portalOut: [],
     lastDevelopment: [],
     recruiting: null,
     challenge: null,
@@ -126,7 +129,8 @@ export function createCareer(opts: NewCareerOptions): Career {
   };
   startSeasonSchedule(career, seed);
   syncUserTeamRatings(career);
-  openRecruitingClass(career);
+  // A recruiting class only means something in a save that has a next year.
+  if (isCareerMode(career.mode)) openRecruitingClass(career);
   return career;
 }
 
@@ -174,6 +178,7 @@ export function recruitContext(career: Career): RecruitContext {
 
 /** One week of recruiting, run alongside the season. */
 export function tickRecruiting(career: Career): void {
+  if (!isCareerMode(career.mode)) return;
   if (!career.recruiting) openRecruitingClass(career);
   const state = career.recruiting!;
   if (state.closed) return;
@@ -370,20 +375,11 @@ function applyResult(career: Career, g: ScheduledGame, homeScore: number, awaySc
   else { h.ties++; a.ties++; }
 }
 
-/** Simulated games are scaled to the career's game length so a simmed result
- *  looks like one you could have played. */
-function lengthScale(career: Career): number {
-  return GAME_LENGTHS[career.gameLength].quarterSeconds / GAME_LENGTHS.short.quarterSeconds;
-}
-
 /** Play out every non-featured game up to and including `week`. */
 export function simulateThroughWeek(career: Career, week: number): void {
-  const scale = lengthScale(career);
   for (const g of career.schedule) {
     if (g.played || g.week > week || g.featured) continue;
-    const home = effectiveTeam(career, g.homeId);
-    const away = effectiveTeam(career, g.awayId);
-    const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}`, scale);
+    const r = simulateFixture(career, g);
     applyResult(career, g, r.homeScore, r.awayScore);
   }
 }
@@ -414,13 +410,15 @@ export function recordUserResult(career: Career, g: ScheduledGame, homeScore: nu
 
 /** Simulate the player's own game instead of playing it. */
 export function simulateUserGame(career: Career, g: ScheduledGame): void {
-  const home = effectiveTeam(career, g.homeId);
-  const away = effectiveTeam(career, g.awayId);
-  const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}:sim`, lengthScale(career));
+  const r = simulateFixture(career, g);
+  // The box score is produced BEFORE the result is recorded, because recording
+  // the result rolls the league forward and can start the next round.
+  const mine = g.homeId === career.teamId ? r.home : r.away;
+  const theirs = g.homeId === career.teamId ? r.away : r.home;
   recordUserResult(career, g, r.homeScore, r.awayScore);
-  // A simulated game still produced a box score: without this, a season the
-  // player partly simulated would show holes in its own statistics.
-  recordSimulatedUserGame(career, g);
+  // A simulated game still produced a real box score: without this, a season
+  // the player partly simulated would show holes in its own statistics.
+  recordSimulatedUserGame(career, g, mine, theirs);
   syncUserTeamRatings(career);
 }
 
@@ -625,9 +623,7 @@ function resolveNonFeatured(career: Career): void {
     let simmedAny = false;
     for (const g of pending) {
       if (g.featured && !career.eliminated) continue;
-      const home = effectiveTeam(career, g.homeId);
-      const away = effectiveTeam(career, g.awayId);
-      const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}`, lengthScale(career));
+      const r = simulateFixture(career, g);
       applyResult(career, g, r.homeScore, r.awayScore);
       simmedAny = true;
     }
@@ -767,6 +763,8 @@ export interface OffseasonReport {
   movement: MovementReport | null;
   /** Squad players who did not return, when a roster ran over its limit. */
   departed: { name: string; pos: string; overall: number }[];
+  /** Players who left through the portal, at levels that have one. */
+  portalOut: PortalDeparture[];
 }
 
 /** A squad this size covers every position twice over; beyond it, players who
@@ -846,7 +844,8 @@ export function runOffseason(career: Career): OffseasonReport {
   const shape = rosterShape(level);
   const cap = maxRoster(level);
   const report: OffseasonReport = {
-    graduated: [], improved: [], arrived: [], development: [], movement: null, departed: [],
+    graduated: [], improved: [], arrived: [], development: [], movement: null,
+    departed: [], portalOut: [],
   };
 
   // 1. Players whose time is up leave.
@@ -866,6 +865,27 @@ export function runOffseason(career: Career): OffseasonReport {
     } else {
       staying.push(p);
     }
+  }
+
+  // 1b. The portal takes its cut. At levels that have one, players with years
+  //     left and no path to the field leave — and a programme with a strong
+  //     culture keeps them. This runs before development, because a player who
+  //     has gone does not develop here.
+  {
+    const row = career.standings[career.teamId];
+    const rivals = (career.level === 'hs'
+      ? classMembers(career, career.classKey)
+      : teamsInConference(career.conferenceId)
+    ).filter((t) => t.id !== career.teamId);
+    const out = runOutgoing(staying, career.level, rng, {
+      wins: row?.wins ?? 0,
+      losses: row?.losses ?? 0,
+      retention: fx.retention,
+      rivals,
+    });
+    report.portalOut = out.left;
+    staying.length = 0;
+    staying.push(...out.stayed);
   }
 
   // 2. Development. Every returning player gets a real, explicable season of
@@ -1003,7 +1023,8 @@ export function runOffseason(career: Career): OffseasonReport {
     level,
     { playedIds: [...new Set(playedIds)], scouts: career.recruiting?.scouts.length ?? 0 },
   );
-  career.pitchesLeft = MAX_PITCHES;
+  career.portalOut = report.portalOut;
+  career.pitchesLeft = marketFor(level).pitches;
   openRecruitingClass(career);
   syncUserTeamRatings(career);
   return report;

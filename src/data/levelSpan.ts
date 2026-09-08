@@ -8,12 +8,21 @@
  */
 import type { Level } from './levels';
 
-const spans = new Map<Level, { min: number; max: number }>();
+export interface LevelSpan {
+  min: number;
+  max: number;
+  /** The AVERAGE team rating at this level, which is not the midpoint: most
+   *  levels carry more good programmes than bad ones. Anything that asks "is
+   *  this team better than its peers?" has to measure against the mean. */
+  mean: number;
+}
 
-export function setLevelSpan(level: Level, span: { min: number; max: number }): void {
+const spans = new Map<Level, LevelSpan>();
+
+export function setLevelSpan(level: Level, span: LevelSpan): void {
   spans.set(level, span);
 }
 
-export function levelSpanOf(level: Level): { min: number; max: number } {
-  return spans.get(level) ?? { min: 40, max: 95 };
+export function levelSpanOf(level: Level): LevelSpan {
+  return spans.get(level) ?? { min: 40, max: 95, mean: 68 };
 }

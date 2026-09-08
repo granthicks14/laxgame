@@ -2,6 +2,7 @@ import { h } from '../dom';
 import type { App, Screen } from '../App';
 import { audio } from '../../audio/Audio';
 import { MainMenuScreen } from './MainMenu';
+import { ALL_MODES, MODE_LABEL } from '../../league/modes';
 import { hasCareer } from '../../state/saves';
 
 export class TitleScreen implements Screen {
@@ -14,8 +15,8 @@ export class TitleScreen implements Screen {
       app.replace((a) => new MainMenuScreen(a));
     };
 
-    const continueMode: 'dynasty' | 'season' | null =
-      hasCareer('dynasty') ? 'dynasty' : hasCareer('season') ? 'season' : null;
+    // Every mode counts, not only the two the game shipped with.
+    const continueMode = ALL_MODES.find((m) => hasCareer(m)) ?? null;
 
     this.el = h('div', { class: 'screen' },
       h('div', { class: 'title-screen' },
@@ -33,7 +34,7 @@ export class TitleScreen implements Screen {
             on: { click: enter },
           }),
           continueMode
-            ? h('div', { class: 'center small', text: `${continueMode === 'dynasty' ? 'Dynasty' : 'Season'} save found — continue from the menu.` })
+            ? h('div', { class: 'center small', text: `${MODE_LABEL[continueMode]} save found — continue from the menu.` })
             : null),
         h('div', { class: 'title-foot' },
           h('div', { text: 'An original arcade lacrosse game. Not affiliated with or endorsed by the THSLL or any school.' })),

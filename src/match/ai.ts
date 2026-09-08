@@ -302,7 +302,19 @@ function carrierAI(m: Match, p: MatchPlayer, dt: number): void {
   // Patience decays as the shot clock runs down, so a possession always ends
   // in a shot rather than a stall.
   const urgency = clamp(m.shotClock / 22, 0.28, 1);
-  const shootThreshold = (d.shotGreed / Math.max(0.4, t.shotGreed)) * urgency;
+  // A "good look" is relative to the standard of the game. Against a defence
+  // where every man is quick and in position, the shot an offence has to take
+  // is worse than the one it would take in high school — and if the bar does
+  // not move with the level, a better defence stops the game being played at
+  // all rather than conceding fewer goals. High school sits at par, so this is
+  // exactly 1 there and Dynasty is unchanged.
+  // Calibrated so it cancels the DIFFICULTY FLOOR each level applies. Higher
+  // levels are meant to think better — react sooner, slide smarter, aim
+  // straighter — not to stop shooting. Without this the ladder is not even
+  // monotonic: Division I, whose floor is All-State, produced fewer goals than
+  // Division II, whose floor is Varsity.
+  const parEase = clamp(1 - (m.par - 66) / 100, 0.7, 1);
+  const shootThreshold = (d.shotGreed / Math.max(0.4, t.shotGreed)) * urgency * parEase;
   const clockPanic = m.shotClock < 7;
 
   // --- shoot?

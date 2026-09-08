@@ -9,7 +9,7 @@ import type { Bracket, PlayoffRound } from '../world/season';
 /** Challenge shares the season engine with Dynasty; it just never stops. */
 export type CareerMode = 'season' | 'dynasty' | 'challenge';
 import type { CoachStaff } from './coaching';
-import type { TransferCandidate } from './transfers';
+import type { PortalDeparture, TransferCandidate } from './transfers';
 import type { MovementReport } from './promotion';
 import type { RecruitingState } from '../scouting/recruiting';
 import type { ChallengeState } from '../challenge/state';
@@ -110,6 +110,8 @@ export interface Career {
   /** The open transfer market, live only during an offseason. */
   market: TransferCandidate[];
   pitchesLeft: number;
+  /** Players who left through the portal last offseason, for the record. */
+  portalOut: PortalDeparture[];
   /** Development report from the last offseason. */
   lastDevelopment: DevelopmentEntry[];
   /** The recruiting class currently being worked. Runs alongside the season. */

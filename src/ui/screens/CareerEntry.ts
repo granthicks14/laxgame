@@ -1,6 +1,7 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
 import type { CareerMode } from '../../league/types';
+import { MODE_SUBTITLE } from '../../league/modes';
 import { screenEl, topbar, panel, teamBadge, segmented, fieldRow } from '../components';
 import { getTeam } from '../../data/teams';
 import { DIFFICULTIES, DIFFICULTY_ORDER, type DifficultyKey } from '../../data/difficulty';
@@ -89,7 +90,7 @@ export class CareerEntryScreen implements Screen {
     };
 
     this.el = screenEl(
-      topbar(app, copy.title, mode === 'dynasty' ? 'Multi-season' : 'One season'),
+      topbar(app, copy.title, MODE_SUBTITLE[mode]),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
           h('div', { class: 'small', text: copy.blurb }),
