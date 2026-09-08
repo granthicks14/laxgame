@@ -11,6 +11,10 @@ import { shortName } from '../../data/players';
 import type { MatchPlayer } from '../../match/types';
 import { Tutorial } from './tutorial';
 import { pauseIcon } from '../icons';
+import { stadiumFor, STYLE_LABEL } from '../../data/stadiums';
+import { emblemFor } from '../../data/emblems';
+import { drawEmblem } from '../../render/emblem';
+import { TIME_LABEL } from '../../render/weather';
 
 export interface GameScreenOptions {
   config: MatchConfig;
@@ -60,6 +64,8 @@ export class GameScreen implements Screen {
   private elReplaySkip!: HTMLElement;
   private elReplaySlow!: HTMLElement;
   private replayShown = false;
+  /** True while the pregame card is up: the world renders, the clock does not run. */
+  private introHold = false;
   private shotFeedTimer = 0;
   private elTouch!: HTMLElement;
   private elStick!: HTMLElement;
@@ -315,7 +321,7 @@ export class GameScreen implements Screen {
     if (!Number.isFinite(delta) || delta < 0) delta = 0;
     delta = Math.min(delta, 0.25);
 
-    if (!this.paused && !this.finished) {
+    if (!this.paused && !this.finished && !this.introHold) {
       this.acc += delta;
       let steps = 0;
       while (this.acc >= FIXED_DT && steps < 5) {
@@ -525,25 +531,82 @@ export class GameScreen implements Screen {
     const rivalry = cfg.rivalry ?? areRivals(cfg.home.team.id, cfg.away.team.id);
     const label = cfg.contextLabel
       ?? (rivalry ? 'RIVALRY GAME' : cfg.practice ? cfg.practice.title : 'FACEOFF');
-    this.showBanner(label, rivalry || cfg.contextLabel ? 'big' : 'normal');
 
-    // Then the venue line, so you know where you are and what it looks like.
-    window.setTimeout(() => {
-      if (this.finished || !this.running) return;
+    if (cfg.practice) {
+      this.showBanner(label, 'normal');
+      return;
+    }
+
+    // A pregame card: who is playing, where, and in what conditions. It clears
+    // itself, and any input dismisses it early.
+    const card = this.pregameCard(label, rivalry);
+    this.el.appendChild(card);
+    this.introHold = true;
+    this.input.suspended = true;
+    const dismiss = () => {
+      if (!card.isConnected) return;
+      card.classList.add('is-out');
+      window.setTimeout(() => card.remove(), 260);
+      this.introHold = false;
+      this.input.suspended = this.paused || this.finished;
+      this.last = performance.now();
+      this.showBanner(label, rivalry ? 'big' : 'normal');
       this.elTicker.textContent = this.venueLine();
       this.elTicker.style.display = '';
-      this.tickerTimer = 3.2;
-    }, 1400);
+      this.tickerTimer = 3.0;
+    };
+    card.addEventListener('pointerdown', dismiss);
+    window.setTimeout(dismiss, 3400);
+  }
+
+  private pregameCard(label: string, rivalry: boolean): HTMLElement {
+    const cfg = this.opts.config;
+    const home = cfg.home.team;
+    const away = cfg.away.team;
+    const st = stadiumFor(home);
+    const weather = this.renderer.weather;
+
+    const mark = (team: typeof home) => {
+      const c = h('canvas', { class: 'pregame__mark' });
+      c.width = 96;
+      c.height = 96;
+      const ctx = c.getContext('2d');
+      if (ctx) drawEmblem(ctx, emblemFor(team), 48, 48, 42);
+      return c;
+    };
+
+    const row = (k: string, v: string) => h('div', { class: 'pregame__row' },
+      h('span', { class: 'pregame__k', text: k }),
+      h('span', { class: 'pregame__v', text: v }));
+
+    return h('div', { class: 'pregame' },
+      h('div', { class: 'pregame__inner' },
+        h('div', { class: `pregame__tag${rivalry ? ' is-hot' : ''}`, text: label }),
+        h('div', { class: 'pregame__teams' },
+          h('div', { class: 'pregame__team' }, mark(away),
+            h('div', { class: 'pregame__name', text: away.short.toUpperCase() }),
+            h('div', { class: 'pregame__sub', text: 'Visitor' })),
+          h('div', { class: 'pregame__at', text: 'AT' }),
+          h('div', { class: 'pregame__team' }, mark(home),
+            h('div', { class: 'pregame__name', text: home.short.toUpperCase() }),
+            h('div', { class: 'pregame__sub', text: 'Home' }))),
+        h('div', { class: 'pregame__meta' },
+          row('Venue', st.name),
+          row('Setting', STYLE_LABEL[st.style]),
+          row('Weather', weather ? weather.label : 'Clear'),
+          row('Temperature', weather ? `${weather.tempF}\u00b0F` : '72\u00b0F'),
+          row('Time', TIME_LABEL[home.homeField.time])),
+        h('div', { class: 'pregame__hint', text: 'Tap or wait to start' })),
+    );
   }
 
   private venueLine(): string {
     const cfg = this.opts.config;
-    const field = cfg.home.team.homeField;
+    const st = stadiumFor(cfg.home.team);
     const weather = this.renderer.weather;
-    const bits = [field.name.toUpperCase()];
-    if (weather && weather.kind !== 'clear') bits.push(weather.label);
-    else if (field.time === 'night') bits.push('Under the lights');
-    return bits.join('  ·  ');
+    const bits = [st.name.toUpperCase()];
+    if (weather) bits.push(`${weather.label}, ${weather.tempF}\u00b0F`);
+    return bits.join('  \u00b7  ');
   }
 
   /* ---------------------------------------------------------------- pause */

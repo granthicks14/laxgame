@@ -3,6 +3,7 @@ import {
   FIELD, SIM, attackingGoal, defendingGoal, attackDir, otherSide, type Side,
 } from '../data/constants';
 import { MARKING, slotWorld } from './formation';
+import { starTier } from '../data/players';
 import type { Match } from './Match';
 import type { MatchPlayer, SlotKey } from './types';
 
@@ -465,8 +466,15 @@ function defenseAI(m: Match, p: MatchPlayer, dt: number): void {
   const carrierToGoal = dist(carrier.x, carrier.y, own.x, own.y);
   const myToCarrier = dist(p.x, p.y, carrier.x, carrier.y);
 
-  const markDist = Math.min(tac.markDistance, d.markDistance);
-  const slideRange = Math.max(tac.slideTrigger, d.slideTrigger);
+  // Star awareness: a defence knows who it cannot let get going. A marked star
+  // is played a touch tighter and drawn help a touch sooner. Deliberately small
+  // — a star should still be worth having, just not free.
+  const star = starTier(carrier.data.overall);
+  const starTight = star === 2 ? 0.82 : star === 1 ? 0.9 : 1;
+  const starHelp = star === 2 ? 1.15 : star === 1 ? 1.07 : 1;
+
+  const markDist = Math.min(tac.markDistance, d.markDistance) * (onBall ? starTight : 1);
+  const slideRange = Math.max(tac.slideTrigger, d.slideTrigger) * starHelp;
 
   // --- on-ball defender: body up and look for a check.
   if (onBall) {

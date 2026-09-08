@@ -92,6 +92,27 @@ export function computeOverall(pos: Position, a: PlayerAttrs): number {
   return Math.round(sum / total);
 }
 
+/* --------------------------------------------------------------- superstars */
+
+/**
+ * Star tiers. Calibrated against the actual generated distribution (npm run
+ * ratings): across the league's 800 players, ~4.6% reach 86 and ~1% reach 90,
+ * so a star is roughly one per squad and an elite player is a handful in the
+ * whole district — rare enough that the mark means something.
+ */
+export const STAR_OVERALL = 86;
+export const ELITE_OVERALL = 90;
+
+export type StarTier = 0 | 1 | 2;
+
+export function starTier(overall: number): StarTier {
+  if (overall >= ELITE_OVERALL) return 2;
+  if (overall >= STAR_OVERALL) return 1;
+  return 0;
+}
+
+export const STAR_LABEL: Record<StarTier, string> = { 0: '', 1: 'Star', 2: 'Elite' };
+
 export function fullName(p: PlayerData): string {
   return `${p.first} ${p.last}`;
 }

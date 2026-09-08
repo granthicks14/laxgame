@@ -14,7 +14,8 @@
     "human": "esbuild src/dev/human.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-human.mjs --log-level=error && node node_modules/.cache/lsl-human.mjs",
     "ai-audit": "esbuild src/dev/ai-audit.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-ai.mjs --log-level=error && node node_modules/.cache/lsl-ai.mjs",
     "audit": "node scripts/audit.mjs",
-    "test:input": "node scripts/input-stress.mjs"
+    "test:input": "node scripts/input-stress.mjs",
+    "ratings": "esbuild src/dev/ratings.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-ratings.mjs --log-level=error && node node_modules/.cache/lsl-ratings.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

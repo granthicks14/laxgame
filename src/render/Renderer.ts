@@ -2,11 +2,12 @@ import { FIELD, attackingGoal, type Side } from '../data/constants';
 import { jerseyFor } from '../data/teams';
 import type { Match } from '../match/Match';
 import type { MatchPlayer } from '../match/types';
+import { starTier } from '../data/players';
 import { Camera } from './camera';
 import { Effects } from './effects';
 import { FieldLayer, venueTheme, type VenueTheme } from './field';
 import { drawBall, drawGoal, drawPlayer, type Jersey } from './sprites';
-import { weatherFor, type Weather } from './weather';
+import { drawRain, weatherFor, type Weather } from './weather';
 
 /** Optional presentation override, used by the goal replay. */
 export interface ViewOverride {
@@ -44,6 +45,7 @@ export class Renderer {
   private lastW = 0;
   private lastH = 0;
   private drawOrder: MatchPlayer[] = [];
+  private rainT = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -93,12 +95,12 @@ export class Renderer {
   prepare(match: Match): void {
     const homeTeam = match.setups.home.team;
     const awayTeam = match.setups.away.team;
-    this.theme = venueTheme(homeTeam.homeField);
+    this.weather = weatherFor(match.cfg.seed ?? match.rng.seed, homeTeam.homeField.time);
+    this.theme = venueTheme(homeTeam.homeField, this.weather);
     this.jerseys = {
       home: jerseyFor(homeTeam, true),
       away: jerseyFor(awayTeam, false),
     };
-    this.weather = weatherFor(match.cfg.seed ?? match.rng.seed);
     this.field.build(this.cam.ppy, this.theme, homeTeam, awayTeam, match.rng.seed);
     this.cam.snap(match.ball.x, match.ball.y);
   }
@@ -177,6 +179,7 @@ export class Renderer {
         charge: match.ball.carrier === p ? p.windup : 0,
         teamColor: match.setups[p.side].team.primary,
         dim: false,
+        star: starTier(p.data.overall),
       });
     }
 
@@ -196,6 +199,10 @@ export class Renderer {
       ctx.fillStyle = this.weather.tint;
       ctx.fillRect(0, 0, bw, bh);
       ctx.globalAlpha = 1;
+    }
+    if (this.weather?.rain) {
+      this.rainT += dt;
+      drawRain(ctx, bw, bh, this.rainT, this.weather.rain);
     }
 
     this.effects.drawFlash(ctx, bw, bh);

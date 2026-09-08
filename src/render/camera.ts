@@ -39,9 +39,10 @@ export class Camera {
   follow(tx: number, ty: number, dt: number, lead = 0, rate = 5.5): void {
     const halfX = this.viewYardsX / 2;
     const halfY = this.viewYardsY / 2;
-    // Only ever show a sliver of out-of-bounds: an empty green border reads as
-    // a bug, not as a stadium.
-    const pad = 2.5;
+    // How far past the boundary the camera may travel. The surround is a real
+    // venue — track, benches, stands, scoreboard — so letting play at a sideline
+    // show it is the point; going much further would just show empty ground.
+    const pad = 8;
     const minX = halfX - pad;
     const maxX = FIELD.length - halfX + pad;
     const minY = halfY - pad;

@@ -405,6 +405,24 @@ export const TEAMS: TeamData[] = [
     overall: 65, offense: 64, defense: 66, goalie: 68, attack: 63, midfield: 66, faceoff: 65, speed: 66, chemistry: 86,
   },
 
+  {
+    id: 'all-saints', name: "All Saints' Episcopal", short: 'All Saints', abbr: 'ASE', mascot: 'Saints',
+    classKey: 'c-west', placement: 'assumed', primary: '#5b2b8a', secondary: '#e6c34a', trim: '#ffffff',
+    identity: 'balanced',
+    description: 'A small Fort Worth programme that plays a tidy, patient game and rarely beats itself.',
+    homeField: { name: 'Saints Field', venue: 'school', time: 'evening', crowd: 0.5 },
+    rivals: ['fwcd', 'fort-worth'],
+    overall: 72, offense: 71, defense: 73, goalie: 74, attack: 70, midfield: 72, faceoff: 70, speed: 71, chemistry: 79,
+  },
+  {
+    id: 'fort-worth', name: 'Fort Worth Lacrosse', short: 'Fort Worth', abbr: 'FTW', mascot: 'Longhorns',
+    classKey: 'c-west', placement: 'assumed', primary: '#8c1d1d', secondary: '#d8cbb4', trim: '#ffffff',
+    identity: 'transition',
+    description: 'A city co-op drawn from several schools. Athletic, unpolished, and dangerous on the break.',
+    homeField: { name: 'Trinity Park Fields', venue: 'complex', time: 'day', crowd: 0.42 },
+    rivals: ['all-saints', 'fwcd'],
+    overall: 70, offense: 72, defense: 67, goalie: 69, attack: 71, midfield: 73, faceoff: 72, speed: 78, chemistry: 68,
+  },
   // ============================================================== CLASS D
   {
     id: 'john-paul-ii', name: 'John Paul II', short: 'John Paul II', abbr: 'JPII', mascot: 'Cardinals',
@@ -482,6 +500,32 @@ export const TEAMS: TeamData[] = [
   },
 ];
 /* eslint-enable max-len */
+
+/**
+ * SIXES. The district also runs a 6v6 short-field competition. This game
+ * simulates the ten-a-side field game, so these programmes are listed for
+ * completeness — the Teams screen shows them and says why they are not
+ * playable — rather than being dropped into a field-lacrosse league where they
+ * would misrepresent both the format and the teams.
+ *
+ * Source: public search results describing the 2026 North District. Not
+ * verified against thsll.org, which this project cannot reach.
+ */
+export const SIXES_PROGRAMS: string[] = [
+  'Allen 6s',
+  'Cumberland-Legacy Knights 6s',
+  'Flower Mound-Marcus 6s',
+  'Frisco-Lone Star 6s',
+  'Grapevine-Colleyville Heritage 6s',
+  'Hebron-TCA 6s',
+  'Hillcrest-Lake Highlands 6s',
+  'John Paul II 6s',
+  'Kaufman Lacrosse 6s',
+  'Kemp Lacrosse 6s',
+  'Plano East-Wylie 6s',
+  'Richardson 6s',
+  'Rockwall-Rockwall Heath 6s',
+];
 
 const byId = new Map(TEAMS.map((t) => [t.id, t]));
 

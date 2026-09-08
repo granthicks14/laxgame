@@ -44,6 +44,8 @@ export interface PlayerDrawOpts {
   charge: number;
   teamColor: string;
   dim: boolean;
+  /** 0 none, 1 star, 2 elite. Drawn as a small mark above the helmet. */
+  star?: 0 | 1 | 2;
 }
 
 export function drawPlayer(
@@ -61,7 +63,8 @@ export function drawPlayer(
 
   // A diving keeper stretches out — the save should be visible, not implied.
   const diving = p.animPose === 'dive';
-  const stretch = diving ? 1.45 : 1;
+  const keeper = p.pos === 'G';
+  const stretch = (diving ? 1.45 : 1) * (keeper ? 1.16 : 1);
   const bodyW = Math.max(3, r(u * 0.78 * stretch));
   const bodyH = Math.max(3, r(u * (down ? 0.42 : diving ? 0.58 : 0.72)));
   const legH = Math.max(2, r(u * (down ? 0.12 : diving ? 0.3 : 0.44)));
@@ -102,6 +105,14 @@ export function drawPlayer(
   // Shoulder pads
   ctx.fillStyle = shade(o.jersey.body, 0.18);
   ctx.fillRect(cx - r(bodyW / 2) - 1, bodyY, bodyW + 2, Math.max(1, r(u * 0.12)));
+  // Shorts in the trim colour separate the kit from the legs at a glance.
+  ctx.fillStyle = o.jersey.trim;
+  ctx.fillRect(cx - r(bodyW / 2), bodyY + bodyH - Math.max(1, r(bodyH * 0.2)), bodyW, Math.max(1, r(bodyH * 0.2)));
+  if (keeper) {
+    // Chest protector: the keeper should be identifiable without reading a number.
+    ctx.fillStyle = shade(o.jersey.body, 0.32);
+    ctx.fillRect(cx - r(bodyW * 0.3), bodyY + r(bodyH * 0.3), r(bodyW * 0.6), Math.max(1, r(bodyH * 0.34)));
+  }
 
   // Helmet
   ctx.fillStyle = o.jersey.helmet;
@@ -112,7 +123,7 @@ export function drawPlayer(
   ctx.fillRect(cx - r(headS / 2) + faceOff, headY + r(headS * 0.45), headS, Math.max(1, r(headS * 0.22)));
 
   // Stick
-  const stickLen = u * (diving ? 2.1 : 1.5);
+  const stickLen = u * (diving ? 2.1 : 1.5) * (keeper ? 1.12 : 1);
   const sa = p.facing - 1.15 + (p.animPose === 'wind' ? -0.5 : 0)
     + (p.animPose === 'throw' ? 0.9 : 0) + (diving ? 0.75 : 0);
   const hx = cx + Math.cos(sa) * stickLen * 0.55;
@@ -123,8 +134,12 @@ export function drawPlayer(
   ctx.moveTo(cx, bodyY + r(bodyH * 0.5));
   ctx.lineTo(hx, hy);
   ctx.stroke();
+  // Glove on the shaft, then the head — a keeper's is noticeably bigger.
+  ctx.fillStyle = shade(o.jersey.body, 0.4);
+  const gs = Math.max(1, r(u * 0.18));
+  ctx.fillRect(r(cx + (hx - cx) * 0.5 - gs / 2), r(bodyY + bodyH * 0.35 + (hy - bodyY - bodyH * 0.25) * 0.5 - gs / 2), gs, gs);
   ctx.fillStyle = o.jersey.accent;
-  const headW = Math.max(2, r(u * 0.32));
+  const headW = Math.max(2, r(u * (keeper ? 0.46 : 0.32)));
   ctx.fillRect(r(hx - headW / 2), r(hy - headW / 2), headW, headW);
 
   if (o.hasBall) {
@@ -156,6 +171,18 @@ export function drawPlayer(
     ctx.fillRect(cx - r(wdt / 4), my + th, Math.max(2, r(wdt / 2)), th);
   }
 
+  // Superstar mark: small, over the helmet, gently pulsing. It says "this one is
+  // special" without covering the player or the play.
+  if (o.star && (o.hasBall || o.controlled)) {
+    const t = performance.now() / 420;
+    const pulse = 0.75 + Math.sin(t) * 0.25;
+    const sy2 = headY - r(u * (o.controlled ? 1.0 : 0.55));
+    ctx.globalAlpha = 0.55 + pulse * 0.45;
+    drawStar(ctx, cx, sy2, u * 0.3 * pulse, o.star === 2 ? '#8fd8ff' : '#ffe14d');
+    if (o.star === 2) drawStar(ctx, cx + r(u * 0.42), sy2 + r(u * 0.1), u * 0.22 * pulse, '#8fd8ff');
+    ctx.globalAlpha = 1;
+  }
+
   // Charge ring while winding up a shot.
   if (o.charge > 0.02) {
     ctx.strokeStyle = o.charge > 0.75 ? '#ffe14d' : '#ffffff';
@@ -175,6 +202,29 @@ export function drawPlayer(
     ctx.fillStyle = p.stamina < 25 ? '#ff5a4d' : '#ffd24d';
     ctx.fillRect(bx, by, Math.max(1, r((w * p.stamina) / 100)), 1);
   }
+}
+
+function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, rad: number, color: string): void {
+  ctx.fillStyle = '#0c1116';
+  ctx.beginPath();
+  starPath(ctx, cx, cy, rad * 1.35);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  starPath(ctx, cx, cy, rad);
+  ctx.fill();
+}
+
+function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, rad: number): void {
+  for (let i = 0; i < 10; i++) {
+    const rr = i % 2 === 0 ? rad : rad * 0.45;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const x = cx + Math.cos(a) * rr;
+    const y = cy + Math.sin(a) * rr;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
 }
 
 export function drawBall(ctx: CanvasRenderingContext2D, cam: Camera, x: number, y: number, z: number): void {
