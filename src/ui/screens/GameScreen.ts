@@ -349,6 +349,11 @@ export class GameScreen implements Screen {
       if (steps === 5) this.acc = 0;
     }
 
+    // A quarter simulated from the pause menu runs with events muted, so a game
+    // that ends inside one never emits gameEnd. Ask the match directly rather
+    // than relying on the event: a finished game must always reach the final.
+    if (!this.finished && this.match.isFinal()) this.finish();
+
     // Final backstop against a stuck pointer: if the page is not visible,
     // nothing can legitimately still be held.
     this.input.sanityCheck();

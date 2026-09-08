@@ -2,7 +2,7 @@ import { h } from '../dom';
 import type { App, Screen } from '../App';
 import { screenEl, topbar, teamBadge, ratingGrid, difficultyPill, panel } from '../components';
 import {
-  TEAMS, CLASSES, CLASS_ORDER, IDENTITY_LABEL, getTeam, teamsInClass,
+  TEAMS, CLASSES, CLASS_ORDER, IDENTITY_LABEL, SIXES_PROGRAMS, getTeam, teamsInClass,
   type ClassKey, type TeamData,
 } from '../../data/teams';
 import { segmented } from '../components';
@@ -50,6 +50,15 @@ export class TeamSelectScreen implements Screen {
           tabs,
           blurb,
           list,
+          panel('Also in the district',
+            h('div', {
+              class: 'small',
+              text: 'The North District also runs a Sixes competition. That is a different game '
+                + '\u2014 six a side on a short field \u2014 and this one simulates the ten-a-side '
+                + 'field game, so these programmes are listed rather than played.',
+            }),
+            h('div', { class: 'row row--wrap', style: 'gap:6px' },
+              ...SIXES_PROGRAMS.map((name) => h('span', { class: 'pill', text: name })))),
           h('div', {
             class: 'tiny',
             text: 'Team list follows the THSLL North District. Ratings are gameplay values, '

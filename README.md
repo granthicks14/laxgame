@@ -190,6 +190,12 @@ after touching anything in `src/league/`.
 `npm run ratings` prints the league-wide overall distribution, which is what the
 star and elite thresholds are calibrated against.
 
+`npm run test:dynasty` drives a browser through two whole years — preseason
+staff and tactics, a played game, a simulated quarter, statistics, the playoffs,
+development, league movement and the transfer window — and checks that every
+stage actually did something. It is what caught a game simulated to its final
+whistle never reaching the post-game screen.
+
 `npm run test:e2e` drives a real browser through the title screen, a quick game,
 a full season and playoff bracket, a dynasty offseason, a save reload, the
 practice drills, phone and tablet layouts, and a frame-rate check. Playwright is

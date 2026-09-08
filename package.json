@@ -16,7 +16,8 @@
     "audit": "node scripts/audit.mjs",
     "test:input": "node scripts/input-stress.mjs",
     "ratings": "esbuild src/dev/ratings.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-ratings.mjs --log-level=error && node node_modules/.cache/lsl-ratings.mjs",
-    "dynasty": "esbuild src/dev/dynasty.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-dynasty.mjs --log-level=error && node node_modules/.cache/lsl-dynasty.mjs"
+    "dynasty": "esbuild src/dev/dynasty.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-dynasty.mjs --log-level=error && node node_modules/.cache/lsl-dynasty.mjs",
+    "test:dynasty": "node scripts/dynasty-flow.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
