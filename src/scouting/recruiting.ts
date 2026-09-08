@@ -189,6 +189,17 @@ export const BOARD_LABEL: Record<BoardTab, string> = {
   undrafted: 'Undrafted',
 };
 
+/** Short forms for the tab strip, so seven tabs fit on a phone. */
+export const BOARD_TAB: Record<BoardTab, string> = {
+  targets: 'Targets',
+  gems: 'Gems',
+  scouting: 'Scouted',
+  offers: 'Offers',
+  battles: 'Battles',
+  committed: 'Signed',
+  undrafted: 'Undrafted',
+};
+
 /** Tabs this level actually has. Only a draft produces undrafted players. */
 export function boardTabs(state: RecruitingState): BoardTab[] {
   const base: BoardTab[] = ['targets', 'gems', 'scouting', 'offers', 'battles', 'committed'];

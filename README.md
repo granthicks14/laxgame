@@ -284,6 +284,10 @@ whistle never reaching the post-game screen.
 taking the first job, hiring a scout, working a class, playing a season out, the
 end-of-season verdict, and the career tracker.
 
+`npm run test:responsive` walks the Challenge and recruiting screens at four
+widths from an iPhone SE up and fails on horizontal overflow, text under 10.5px
+or a touch target under 30px.
+
 `npm run test:e2e` drives a real browser through the title screen, a quick game,
 a full season and playoff bracket, a dynasty offseason, a save reload, the
 practice drills, phone and tablet layouts, and a frame-rate check. Playwright is

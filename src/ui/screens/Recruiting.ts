@@ -17,7 +17,7 @@ import { loadCareer, saveCareer } from '../../state/saves';
 import { recruitContext } from '../../league/career';
 import type { Career, CareerMode } from '../../league/types';
 import {
-  BOARD_LABEL, assignScout, board, boardTabs, classGrade, hireScout, interestFactors,
+  BOARD_LABEL, BOARD_TAB, assignScout, board, boardTabs, classGrade, hireScout, interestFactors,
   makeOffer, maxScouts, offerWord, releaseScout, signUndrafted, trackProspect,
   undrafted, withdrawOffer, type BoardTab,
 } from '../../scouting/recruiting';
@@ -67,7 +67,7 @@ export class RecruitingScreen implements Screen {
           this.summary(career),
           this.staffPanel(app, career),
           segmented(
-            boardTabs(state).map((t) => ({ value: t, label: BOARD_LABEL[t] })),
+            boardTabs(state).map((t) => ({ value: t, label: BOARD_TAB[t] })),
             this.tab,
             (v) => { this.tab = v; this.render(app, career); },
             true,
