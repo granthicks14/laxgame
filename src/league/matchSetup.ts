@@ -5,6 +5,7 @@ import type { TeamData } from '../data/teams';
 import { areRivals } from '../data/teams';
 import type { MatchConfig, PracticeConfig } from '../match/types';
 import { DEFAULT_TACTICS, type Tactics } from '../data/tactics';
+import type { CoachEffects } from './coaching';
 
 /** An AI team plays the way its scouting report says it plays. */
 export function tacticsFor(team: TeamData): Tactics {
@@ -31,6 +32,9 @@ export interface MatchSetupOptions {
   awayRoster?: PlayerData[];
   homeTactics?: Tactics;
   awayTactics?: Tactics;
+  /** Coaching quality, when a side has a programme behind it. */
+  homeCoaching?: CoachEffects;
+  awayCoaching?: CoachEffects;
   practice?: PracticeConfig;
   /** Show a highlight replay after each goal. Defaults to on. */
   replays?: boolean;
@@ -44,12 +48,14 @@ export function makeMatchConfig(o: MatchSetupOptions): MatchConfig {
       roster: o.homeRoster ?? generateRoster(o.homeTeam, `${seed}:h`),
       tactics: o.homeTactics ?? tacticsFor(o.homeTeam),
       human: o.humanSide === 'home',
+      coaching: o.homeCoaching,
     },
     away: {
       team: o.awayTeam,
       roster: o.awayRoster ?? generateRoster(o.awayTeam, `${seed}:a`),
       tactics: o.awayTactics ?? tacticsFor(o.awayTeam),
       human: o.humanSide === 'away',
+      coaching: o.awayCoaching,
     },
     difficulty: o.difficulty,
     quarterSeconds: GAME_LENGTHS[o.gameLength].quarterSeconds,

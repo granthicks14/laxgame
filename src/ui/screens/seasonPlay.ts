@@ -8,6 +8,7 @@ import {
 } from '../../league/career';
 import { saveCareer } from '../../state/saves';
 import { generateRoster } from '../../data/players';
+import { coachEffects } from '../../league/coaching';
 import type { Career, ScheduledGame } from '../../league/types';
 
 export function buildSeasonMatch(career: Career, game: ScheduledGame, replays = true) {
@@ -34,6 +35,9 @@ export function buildSeasonMatch(career: Career, game: ScheduledGame, replays = 
     awayRoster: isHome ? oppRoster : yourRoster,
     homeTactics: isHome ? career.tactics : tacticsFor(them),
     awayTactics: isHome ? tacticsFor(them) : career.tactics,
+    // Your staff coaches your side. The opposition coaches itself.
+    homeCoaching: isHome ? coachEffects(career.staff) : undefined,
+    awayCoaching: isHome ? undefined : coachEffects(career.staff),
     replays,
   });
 }

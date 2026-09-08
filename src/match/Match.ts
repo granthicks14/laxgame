@@ -9,10 +9,14 @@ import { DIFFICULTIES, type DifficultyProfile } from '../data/difficulty';
 import { OFFENSE_STYLES, DEFENSE_STYLES } from '../data/tactics';
 import { emptyStats, starters, faceoffMan, shortName, type PlayerData } from '../data/players';
 import { areRivals } from '../data/teams';
+import { coachEffects, EMPTY_STAFF, type CoachEffects } from '../league/coaching';
 import { FIELD_SLOTS, faceoffWorld } from './formation';
 import { createFaceoff, stepFaceoff, type FaceoffState } from './faceoff';
 import { Commentary } from './commentary';
 import { updateAI, updateGoalie, saveRadius } from './ai';
+
+/** A team with no programme behind it coaches to the baseline. */
+const NO_COACHING: CoachEffects = coachEffects(EMPTY_STAFF);
 import { ReplayBuffer } from './replay';
 import type {
   Ball, InputState, MatchConfig, MatchEvents, MatchPhase, MatchPlayer, ScoreEntry,
@@ -267,6 +271,12 @@ export class Match {
   possessionSide(): Side | null {
     return this.ball.carrier ? this.ball.carrier.side : null;
   }
+  /** What this side's coaching staff is worth, or nothing for a team with no
+   *  programme behind it (quick games, practice, the AI's opponents). */
+  coachingOf(side: Side): CoachEffects {
+    return this.setups[side].coaching ?? NO_COACHING;
+  }
+
   tacticsOf(side: Side) {
     return {
       off: OFFENSE_STYLES[this.setups[side].tactics.offense],
@@ -759,8 +769,11 @@ export class Match {
    *  sprint button is a real decision. Called from integrate(), where the
    *  player's actual intent for this frame is known. */
   private tickStamina(p: MatchPlayer, dt: number, sprinting: boolean): void {
-    if (sprinting) p.stamina -= SIM.sprintStaminaDrain * dt * (1 - p.data.attrs.stamina / 260);
-    else p.stamina += SIM.staminaRegen * dt * (0.6 + p.data.attrs.stamina / 200);
+    // Strength and conditioning shows up here: the same legs, more of them left
+    // in the fourth quarter.
+    const conditioning = this.coachingOf(p.side).staminaRate;
+    if (sprinting) p.stamina -= SIM.sprintStaminaDrain * dt * (1 - p.data.attrs.stamina / 260) / conditioning;
+    else p.stamina += SIM.staminaRegen * dt * (0.6 + p.data.attrs.stamina / 200) * conditioning;
     p.stamina = clamp(p.stamina, 0, 100);
   }
 

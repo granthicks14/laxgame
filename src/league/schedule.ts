@@ -9,9 +9,13 @@ const TARGET_GAMES = 12;
  * Circle-method round robin. Small classes play everyone twice so the season is
  * a real season rather than seven games; large classes play once.
  */
-export function buildSchedule(classKey: ClassKey, humanTeamId: string, seed: number): ScheduledGame[] {
+export function buildSchedule(
+  classKey: ClassKey, humanTeamId: string, seed: number, memberIds?: string[],
+): ScheduledGame[] {
   const rng = new Rng(seed);
-  const ids = rng.shuffle(teamsInClass(classKey).map((t) => t.id));
+  // Membership is passed in by a career, where promotion and relegation have
+  // moved teams around; the data file's class is only the starting point.
+  const ids = rng.shuffle(memberIds ?? teamsInClass(classKey).map((t) => t.id));
   const n = ids.length;
   const cycles = Math.max(1, Math.min(2, Math.round(TARGET_GAMES / Math.max(1, n - 1))));
   const list = [...ids];

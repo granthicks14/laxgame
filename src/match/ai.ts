@@ -189,12 +189,14 @@ function offenseAI(m: Match, p: MatchPlayer, dt: number): void {
 
   p.aiCut -= dt;
 
-  // Cutting: a hard dive to the crease when the lane is open.
+  // Cutting: a hard dive to the crease when the lane is open. A coached offence
+  // is fussier about what "open" means and times the dive better.
+  const iq = m.coachingOf(p.side).offenseIQ;
   if (p.aiCut <= 0) {
-    p.aiCut = m.rng.range(1.6, 4.2) / Math.max(0.35, t.cutRate);
-    const laneOpen = m.laneRisk(carrier.x, carrier.y, p.x, p.y, p.side) < 0.4;
+    p.aiCut = m.rng.range(1.6, 4.2) / Math.max(0.35, t.cutRate * (1 + iq * 0.25));
+    const laneOpen = m.laneRisk(carrier.x, carrier.y, p.x, p.y, p.side) < 0.4 - iq * 0.12;
     const spread = dist(p.x, p.y, carrier.x, carrier.y);
-    if (laneOpen && spread > 6 && spread < 26 && m.rng.next() < t.cutRate) {
+    if (laneOpen && spread > 6 && spread < 26 && m.rng.next() < t.cutRate * (1 + iq * 0.3)) {
       p.aiIntent = 'drive';
       p.poseTimer = 0;
       p.aiTargetX = goal.x - dir * m.rng.range(3.5, 7.5);
@@ -213,13 +215,16 @@ function offenseAI(m: Match, p: MatchPlayer, dt: number): void {
   }
 
   // Hold the set, sliding along the perimeter away from the ball for spacing.
-  const slot = offenseSlot(m, p);
+  // Coaching widens the spacing discipline and sharpens the step away from a
+  // defender who has crept in.
+  const slot = offenseSlot(m, p, 1 + iq * 0.12);
   const away = normalize(p.x - carrier.x, p.y - carrier.y);
   const nearest = nearestOpponent(m, p);
-  const evade = nearest && dist(p.x, p.y, nearest.x, nearest.y) < 2.4
-    ? { x: (p.x - nearest.x) * 0.4, y: (p.y - nearest.y) * 0.4 }
+  const evadeRange = 2.4 + iq * 0.9;
+  const evade = nearest && dist(p.x, p.y, nearest.x, nearest.y) < evadeRange
+    ? { x: (p.x - nearest.x) * (0.4 + iq * 0.25), y: (p.y - nearest.y) * (0.4 + iq * 0.25) }
     : { x: 0, y: 0 };
-  seek(m, p, slot.x + away.x * 1.2 + evade.x, slot.y + away.y * 1.2 + evade.y, false, 0.5);
+  seek(m, p, slot.x + away.x * (1.2 + iq * 0.5) + evade.x, slot.y + away.y * (1.2 + iq * 0.5) + evade.y, false, 0.5);
 }
 
 function nearestOpponent(m: Match, p: MatchPlayer): MatchPlayer | null {
@@ -473,8 +478,11 @@ function defenseAI(m: Match, p: MatchPlayer, dt: number): void {
   const starTight = star === 2 ? 0.82 : star === 1 ? 0.9 : 1;
   const starHelp = star === 2 ? 1.15 : star === 1 ? 1.07 : 1;
 
-  const markDist = Math.min(tac.markDistance, d.markDistance) * (onBall ? starTight : 1);
-  const slideRange = Math.max(tac.slideTrigger, d.slideTrigger) * starHelp;
+  // A coached defence slides on time and covers lanes; an uncoached one waits
+  // for the ball to come to it.
+  const dIQ = m.coachingOf(p.side).defenseIQ;
+  const markDist = Math.min(tac.markDistance, d.markDistance) * (onBall ? starTight : 1) * (1 - dIQ * 0.1);
+  const slideRange = Math.max(tac.slideTrigger, d.slideTrigger) * starHelp * (1 + dIQ * 0.14);
 
   // --- on-ball defender: body up and look for a check.
   if (onBall) {
@@ -502,7 +510,7 @@ function defenseAI(m: Match, p: MatchPlayer, dt: number): void {
     myToCarrier < slideRange * 1.15 &&
     rank(m, p, carrier.x, carrier.y) < 1;
 
-  if (shouldSlide && m.rng.next() < 0.35 + d.decisionQuality * 0.65) {
+  if (shouldSlide && m.rng.next() < clamp(0.35 + d.decisionQuality * 0.65 + dIQ * 0.2, 0, 0.98)) {
     p.aiSliding = true;
     seek(m, p, carrier.x, carrier.y, true, 0.3);
     if (dist(p.x, p.y, carrier.x, carrier.y) < SIM.checkRange && p.checkCd <= 0) {
@@ -528,7 +536,7 @@ function defenseAI(m: Match, p: MatchPlayer, dt: number): void {
 
   // Deny the passing lane if we are close to it.
   const laneD = pointSeg(p.x, p.y, carrier.x, carrier.y, mark.x, mark.y);
-  if (laneD < 3 && m.rng.next() < d.decisionQuality) {
+  if (laneD < 3 + dIQ && m.rng.next() < clamp(d.decisionQuality + dIQ * 0.25, 0, 0.98)) {
     const mid = { x: (carrier.x + mark.x) / 2, y: (carrier.y + mark.y) / 2 };
     tx = tx * 0.55 + mid.x * 0.45;
     ty = ty * 0.55 + mid.y * 0.45;

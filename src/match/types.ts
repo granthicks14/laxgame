@@ -2,6 +2,7 @@ import type { PlayerData, PlayerStats } from '../data/players';
 import type { Position, Side } from '../data/constants';
 import type { TeamData } from '../data/teams';
 import type { Tactics } from '../data/tactics';
+import type { CoachEffects } from '../league/coaching';
 import type { DifficultyKey } from '../data/difficulty';
 
 /** Where a player lines up in the 2-3-1 offensive set / matching defensive set. */
@@ -157,6 +158,10 @@ export interface TeamSetup {
   roster: PlayerData[];
   tactics: Tactics;
   human: boolean;
+  /** What this programme's coaching staff is worth. Raises the quality of the
+   *  side's DECISIONS — spacing, slide timing, passing choices — never its
+   *  players' ratings. Absent for teams with no career behind them. */
+  coaching?: CoachEffects;
 }
 
 export type PracticeKind = 'shoot' | 'defend' | 'faceoff' | 'clear' | 'free';

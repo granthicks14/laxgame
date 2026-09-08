@@ -771,6 +771,81 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 .overlay__card { width: min(460px, 100%); max-height: 100%; overflow: auto; }
 
+/* ---------------------------------------------------------------- dynasty */
+
+/* Coach's office: level pips */
+.pips { display: flex; gap: 4px; }
+.pip {
+  width: 14px; height: 8px;
+  background: var(--line);
+  border: 1px solid var(--line-soft);
+}
+.pip.is-on { background: var(--accent); border-color: var(--accent); }
+
+/* Transfer interest */
+.interest {
+  height: 8px;
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+  margin: 2px 0 6px;
+}
+.interest__fill { height: 100%; }
+
+/* League leaders */
+.leader {
+  display: grid;
+  grid-template-columns: 1.6rem auto 1fr auto 2.6rem;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.leader:last-child { border-bottom: none; }
+.leader.is-you { background: rgba(255, 197, 61, 0.09); }
+.leader__rank { color: var(--muted); font-size: 12px; }
+.leader__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leader__team { font-family: var(--display); font-size: 11px; letter-spacing: 0.1em; color: var(--muted); }
+.leader__val { text-align: right; }
+
+/* Promotion and relegation */
+.movement-hero {
+  font-family: var(--display);
+  font-size: 20px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  padding: 10px;
+  border: 2px solid;
+  animation: movement-pop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+.movement-hero--up { color: var(--green); border-color: var(--green); background: rgba(63, 189, 119, 0.12); }
+.movement-hero--down { color: var(--red); border-color: var(--red); background: rgba(232, 80, 58, 0.12); }
+@keyframes movement-pop {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+
+.movement {
+  display: grid;
+  grid-template-columns: 1.2rem auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--line-soft);
+  animation: movement-in 320ms ease-out both;
+}
+.movement:last-child { border-bottom: none; }
+.movement.is-you { background: rgba(255, 197, 61, 0.1); }
+.movement__arrow { font-size: 16px; text-align: center; }
+.movement--up .movement__arrow { color: var(--green); }
+.movement--down .movement__arrow { color: var(--red); }
+.movement__body { min-width: 0; }
+.movement__name { font-family: var(--display); letter-spacing: 0.04em; }
+.movement__to { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; white-space: nowrap; }
+@keyframes movement-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: none; }
+}
+
 /* --------------------------------------------------------------- keybinds */
 
 .kb-row {

@@ -5,16 +5,23 @@ import {
   ROSTER_SHAPE, type Grade, type PlayerData, type PlayerAttrs, type PlayerStats,
 } from '../data/players';
 import {
-  TEAMS, getTeam, teamsInClass, areRivals, type TeamData, type TeamRatings,
+  TEAMS, getTeam, teamsInClass, areRivals, type ClassKey, type TeamData, type TeamRatings,
 } from '../data/teams';
 import { DEFAULT_TACTICS } from '../data/tactics';
+import { EMPTY_STAFF, coachEffects } from './coaching';
+import { DEV_LABEL, developPlayer } from './development';
+import { planMovement, type DivisionResult, type MovementReport } from './promotion';
+import {
+  MAX_PITCHES, buildMarket, pitch, type PitchResult, type ProgramSnapshot,
+} from './transfers';
 import { DIFFICULTIES, type DifficultyKey } from '../data/difficulty';
 import { GAME_LENGTHS, type GameLengthKey } from '../data/constants';
 import { buildSchedule, regularSeasonWeeks } from './schedule';
 import { simulateGame } from './simulate';
+import { recordSimulatedUserGame } from './leagueStats';
 import {
-  CAREER_VERSION, type Career, type PlayoffRound, type ScheduledGame,
-  type StandingRow, type WeeklyFocus,
+  CAREER_VERSION, type Career, type DevelopmentEntry, type PlayoffRound,
+  type ScheduledGame, type StandingRow, type WeeklyFocus,
 } from './types';
 
 export const FOCUS_INFO: Record<WeeklyFocus, { label: string; blurb: string }> = {
@@ -57,12 +64,18 @@ export function createCareer(opts: NewCareerOptions): Career {
     gameLength: opts.gameLength,
     tactics: { ...DEFAULT_TACTICS },
     schedule: buildSchedule(team.classKey, team.id, seed),
-    standings: emptyStandings(team.classKey),
+    standings: initialStandings(team.classKey),
     ratingOverrides: {},
     roster: generateRoster(team, `${seed}:1`),
-    coachingPoints: 4,
+    coachingPoints: 12,
     focus: null,
     prestige: clamp(Math.round(team.overall * 0.6 + 20), 20, 92),
+    staff: { ...EMPTY_STAFF },
+    classOverrides: {},
+    lastMovement: null,
+    market: [],
+    pitchesLeft: 0,
+    lastDevelopment: [],
     history: [],
     alumni: [],
     championships: 0,
@@ -77,9 +90,18 @@ export function createCareer(opts: NewCareerOptions): Career {
   return career;
 }
 
-function emptyStandings(classKey: Career['classKey']): Record<string, StandingRow> {
+/** Standings for a brand-new career, before any promotion has happened. */
+function initialStandings(classKey: ClassKey): Record<string, StandingRow> {
   const rows: Record<string, StandingRow> = {};
   for (const t of teamsInClass(classKey)) {
+    rows[t.id] = { teamId: t.id, wins: 0, losses: 0, ties: 0, goalsFor: 0, goalsAgainst: 0 };
+  }
+  return rows;
+}
+
+function emptyStandings(career: Career, classKey: ClassKey): Record<string, StandingRow> {
+  const rows: Record<string, StandingRow> = {};
+  for (const t of classMembers(career, classKey)) {
     rows[t.id] = { teamId: t.id, wins: 0, losses: 0, ties: 0, goalsFor: 0, goalsAgainst: 0 };
   }
   return rows;
@@ -202,8 +224,12 @@ export function recordUserResult(career: Career, g: ScheduledGame, homeScore: nu
   const won = userIsHome(career, g) ? homeScore > awayScore : awayScore > homeScore;
   if (won) { career.careerWins++; } else { career.careerLosses++; }
 
+  // Coach Points are the currency of every choice in the office, so a season
+  // has to be worth roughly one upgrade, not five. Around twenty a year means
+  // a coach specialises for years before they can afford to be good at
+  // everything — which is the decision the office is for.
   const diff = DIFFICULTIES[career.difficulty];
-  let cp = 2 + (won ? 2 : 0) + (g.rivalry && won ? 1 : 0) + (g.playoff ? 2 : 0);
+  let cp = 1 + (won ? 1 : 0) + (g.rivalry && won ? 1 : 0) + (g.playoff ? 1 : 0);
   cp = Math.max(1, Math.round(cp * diff.rewardMultiplier));
   career.coachingPoints += cp;
   career.prestige = clamp(career.prestige + (won ? 0.8 : -0.6) + (g.playoff && won ? 1.5 : 0), 5, 100);
@@ -219,6 +245,10 @@ export function simulateUserGame(career: Career, g: ScheduledGame): void {
   const away = effectiveTeam(career, g.awayId);
   const r = simulateGame(home, away, `${career.seed}:${career.year}:${g.id}:sim`, lengthScale(career));
   recordUserResult(career, g, r.homeScore, r.awayScore);
+  // A simulated game still produced a box score: without this, a season the
+  // player partly simulated would show holes in its own statistics.
+  recordSimulatedUserGame(career, g);
+  syncUserTeamRatings(career);
 }
 
 /* ----------------------------------------------------------------- playoffs */
@@ -265,7 +295,7 @@ export function advancePhase(career: Career): void {
   if (anyRegularLeft) return;
 
   if (!career.playoffSeeds) {
-    const field = playoffFieldSize(teamsInClass(career.classKey).length);
+    const field = playoffFieldSize(classMembers(career, career.classKey).length);
     career.playoffSeeds = standingsSorted(career).slice(0, field).map((r) => r.teamId);
     createRound(career, roundLabel(field), career.playoffSeeds, regWeeks + 1);
     resolveNonFeatured(career);
@@ -446,12 +476,64 @@ export interface OffseasonReport {
   graduated: { name: string; pos: string; overall: number }[];
   improved: { name: string; pos: string; from: number; to: number }[];
   arrived: { name: string; pos: string; overall: number; grade: Grade }[];
+  development: DevelopmentEntry[];
+  movement: MovementReport | null;
+  /** Squad players who did not return, when a roster ran over its limit. */
+  departed: { name: string; pos: string; overall: number }[];
+}
+
+/** A squad this size covers every position twice over; beyond it, players who
+ *  would never see the field move on. */
+export const MAX_ROSTER = 24;
+
+/** Class as it stands in THIS career, after any promotion or relegation. */
+export function effectiveClass(career: Career, teamId: string): ClassKey {
+  return career.classOverrides[teamId] ?? getTeam(teamId).classKey;
+}
+
+/** Every team in a class, as this career has it. */
+export function classMembers(career: Career, key: ClassKey): TeamData[] {
+  return TEAMS.filter((t) => effectiveClass(career, t.id) === key)
+    .map((t) => effectiveTeam(career, t.id));
+}
+
+/** Final table for one division, used by the promotion rules. */
+function divisionResult(career: Career, key: ClassKey): DivisionResult {
+  const members = classMembers(career, key).map((t) => t.id);
+  if (key === career.classKey) {
+    const order = standingsSorted(career).map((r) => r.teamId).filter((id) => members.includes(id));
+    for (const id of members) if (!order.includes(id)) order.push(id);
+    return { key, order, champion: champion(career) };
+  }
+  // Divisions the player is not in are settled by a season simulation, so the
+  // whole district moves on the same rules rather than only the player's class.
+  const rng = new Rng(`${career.seed}:div:${key}:${career.year}`);
+  const table = members.map((id) => {
+    const t = effectiveTeam(career, id);
+    return { id, score: t.overall + rng.gauss(0, 5.5) };
+  });
+  table.sort((a, b) => b.score - a.score);
+  return { key, order: table.map((r) => r.id), champion: table[0]?.id ?? null };
+}
+
+/** Runs the district's promotion and relegation for the season just finished. */
+export function runMovement(career: Career): MovementReport {
+  const keys: ClassKey[] = ['a', 'b', 'c-east', 'c-west', 'd'];
+  const report = planMovement(keys.map((k) => divisionResult(career, k)), career.year);
+  for (const m of report.moves) career.classOverrides[m.teamId] = m.to;
+  const mine = report.moves.find((m) => m.teamId === career.teamId);
+  if (mine) career.classKey = mine.to;
+  career.lastMovement = report;
+  return report;
 }
 
 export function runOffseason(career: Career): OffseasonReport {
   const rng = new Rng(`${career.seed}:off:${career.year}`);
   const team = getTeam(career.teamId);
-  const report: OffseasonReport = { graduated: [], improved: [], arrived: [] };
+  const fx = coachEffects(career.staff);
+  const report: OffseasonReport = {
+    graduated: [], improved: [], arrived: [], development: [], movement: null, departed: [],
+  };
 
   // 1. Seniors leave.
   const staying: PlayerData[] = [];
@@ -472,34 +554,38 @@ export function runOffseason(career: Career): OffseasonReport {
     }
   }
 
-  // 2. Everyone else grows a year older and better.
-  const focusHistory = career.focus ? FOCUS_ATTRS[career.focus] : [];
+  // 2. Development. Every returning player gets a real, explicable season of
+  //    growth — or, occasionally, a step back.
+  const focusKeys = career.focus ? FOCUS_ATTRS[career.focus] : [];
   for (const p of staying) {
-    const before = p.overall;
     p.grade = (p.grade + 1) as Grade;
-    const room = Math.max(0, p.potential - p.overall);
-    const growth = clamp(p.xp / 55 + room * 0.22 + rng.range(-0.4, 1.2), 0, 7);
-    const keys = (Object.keys(p.attrs) as (keyof PlayerAttrs)[])
-      .filter((k) => p.attrs[k] < 99);
-    const picks = rng.shuffle([...focusHistory.filter((k) => keys.includes(k)), ...keys]).slice(0, 4);
-    let left = growth * 2.4;
-    for (const k of picks) {
-      if (left <= 0) break;
-      const add = Math.min(left, rng.range(0.5, 2.6));
-      p.attrs[k] = clamp(Math.round(p.attrs[k] + add), 1, 99);
-      left -= add;
-    }
+    const res = developPlayer(p, rng, fx, focusKeys);
     p.xp = 0;
     p.season = emptyStats();
-    refreshOverall(p);
-    if (p.overall > before) {
-      report.improved.push({ name: `${p.first} ${p.last}`, pos: p.pos, from: before, to: p.overall });
+    const entry: DevelopmentEntry = {
+      name: `${p.first} ${p.last}`,
+      pos: p.pos,
+      grade: p.grade,
+      from: res.from,
+      to: res.to,
+      outcome: res.outcome,
+      label: DEV_LABEL[res.outcome],
+    };
+    report.development.push(entry);
+    if (res.to > res.from) {
+      report.improved.push({ name: entry.name, pos: p.pos, from: res.from, to: res.to });
     }
   }
+  report.development.sort((a, b) => (b.to - b.from) - (a.to - a.from));
+  career.lastDevelopment = report.development;
 
-  // 3. Recruit to refill the roster. Prestige raises the ceiling of who shows up.
+  // 3. Recruit to refill the roster. Prestige raises the ceiling of who shows
+  //    up, but a badly-run programme must not spiral: the penalty for losing is
+  //    floored, and coaching pulls in the other direction, so a coach who
+  //    invests in development and culture recruits above the team's record.
   const used = new Set(staying.map((p) => p.number));
-  const prestigeBoost = (career.prestige - 60) * 0.22;
+  const prestigeBoost = clamp((career.prestige - 60) * 0.2 + fx.appeal * 9, -4, 12);
+  const potentialBonus = career.staff.development * 1.6 + fx.appeal * 3;
   for (const { pos, count } of ROSTER_SHAPE) {
     const have = staying.filter((p) => p.pos === pos).length;
     for (let i = have; i < count; i++) {
@@ -512,13 +598,36 @@ export function runOffseason(career: Career): OffseasonReport {
         faceoff: clamp(team.faceoff + prestigeBoost, 35, 99),
       };
       const grade: Grade = rng.bool(0.7) ? 9 : 10;
-      const p = generatePlayer(rng, shell, pos, { depth: i, grade }, used);
+      const p = generatePlayer(rng, shell, pos, { depth: i, grade, potentialBonus }, used);
       staying.push(p);
       report.arrived.push({ name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall, grade });
     }
   }
 
-  career.roster = sortDepthChart(staying);
+  // Transfers arrive on top of the squad, so without a cap a programme that
+  // recruits well every year ends up carrying thirty players. The ones who
+  // leave are the deepest reserves, and they are named in the report.
+  let squad = sortDepthChart(staying);
+  if (squad.length > MAX_ROSTER) {
+    const keep: PlayerData[] = [];
+    const perPos = new Map<string, number>();
+    for (const p of squad) {
+      const n = perPos.get(p.pos) ?? 0;
+      const shape = ROSTER_SHAPE.find((r) => r.pos === p.pos)?.count ?? 3;
+      // Everyone inside the shape stays; beyond it, best first until full.
+      if (n < shape || keep.length < MAX_ROSTER) {
+        keep.push(p);
+        perPos.set(p.pos, n + 1);
+      } else {
+        report.departed.push({ name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall });
+      }
+    }
+    squad = sortDepthChart(keep.slice(0, MAX_ROSTER));
+    for (const p of keep.slice(MAX_ROSTER)) {
+      report.departed.push({ name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall });
+    }
+  }
+  career.roster = squad;
 
   // 4. The rest of the league drifts, regressing gently toward its baseline.
   for (const t of TEAMS) {
@@ -534,18 +643,100 @@ export function runOffseason(career: Career): OffseasonReport {
     career.ratingOverrides[t.id] = next;
   }
 
-  // 5. New season.
+  // 5. Promotion and relegation, then the new season around the new table.
+  report.movement = runMovement(career);
+
+  // 6. Culture compounds: a settled programme passes chemistry down a year.
+  const chem = career.ratingOverrides[career.teamId]?.chemistry ?? team.chemistry;
+  career.ratingOverrides[career.teamId] = {
+    ...career.ratingOverrides[career.teamId],
+    chemistry: Math.round(clamp(chem + fx.chemistryGain, 30, 99)),
+  };
+
   career.year++;
-  career.schedule = buildSchedule(career.classKey, career.teamId, career.seed + career.year * 7919);
-  career.standings = emptyStandings(career.classKey);
+  career.schedule = buildSchedule(
+    career.classKey, career.teamId, career.seed + career.year * 7919,
+    classMembers(career, career.classKey).map((t) => t.id),
+  );
+  career.standings = emptyStandings(career, career.classKey);
   career.playoffSeeds = null;
   career.eliminated = false;
   career.seasonComplete = false;
   career.finish = null;
-  career.coachingPoints += 5;
+  career.coachingPoints += 4;
   career.focus = null;
+  career.market = buildMarket(
+    career.seed, career.year, career.teamId, career.classKey,
+    Object.fromEntries(Object.entries(career.standings).map(([id, r]) => [id, { wins: r.wins, losses: r.losses }])),
+  );
+  career.pitchesLeft = MAX_PITCHES;
   syncUserTeamRatings(career);
   return report;
+}
+
+/* ---------------------------------------------------------------- transfers */
+
+export interface PitchOutput {
+  result: PitchResult;
+  /** True when the player joined your roster. */
+  joined: boolean;
+}
+
+/** A snapshot of the programme, as a transfer target sees it. */
+export function programSnapshot(career: Career): ProgramSnapshot {
+  const row = career.standings[career.teamId];
+  const last = career.history[career.history.length - 1];
+  return {
+    team: userTeam(career),
+    roster: career.roster,
+    prestige: career.prestige,
+    staff: career.staff,
+    wins: last?.wins ?? row?.wins ?? 0,
+    losses: last?.losses ?? row?.losses ?? 0,
+    championships: career.championships,
+  };
+}
+
+/** Spends one pitch on a transfer candidate and applies whatever happens. */
+export function pitchTo(career: Career, candidateId: string): PitchOutput | null {
+  const c = career.market.find((x) => x.id === candidateId);
+  if (!c || career.pitchesLeft <= 0) return null;
+  if (c.status === 'committed' || c.status === 'declined' || c.status === 'lost') return null;
+
+  const rng = new Rng(`${career.seed}:pitch:${career.year}:${c.id}:${c.attempts}`);
+  const result = pitch(c, programSnapshot(career), rng);
+  c.attempts++;
+  career.pitchesLeft--;
+  c.status = result.outcome === 'committed' ? 'committed'
+    : result.outcome === 'considering' ? 'considering'
+      : result.outcome === 'lost' ? 'lost' : 'declined';
+  if (result.lostToTeamId) c.lostToTeamId = result.lostToTeamId;
+
+  if (result.outcome !== 'committed') return { result, joined: false };
+
+  // He joins on a number nobody else is wearing, and the depth chart re-sorts.
+  const used = new Set(career.roster.map((p) => p.number));
+  const joining: PlayerData = { ...c.player, season: emptyStats(), career: emptyStats(), xp: 0 };
+  if (used.has(joining.number)) {
+    for (let n = 1; n < 99; n++) if (!used.has(n)) { joining.number = n; break; }
+  }
+  let roster = sortDepthChart([...career.roster, joining]);
+  // A squad has a size. Bringing somebody in when you are full means somebody
+  // who was never going to play moves on, and you are told who.
+  let displaced: PlayerData | null = null;
+  if (roster.length > MAX_ROSTER) {
+    const cuttable = roster.filter((p) => p !== joining).sort((a, b) => a.overall - b.overall);
+    displaced = cuttable[0] ?? null;
+    if (displaced) roster = roster.filter((p) => p !== displaced);
+  }
+  career.roster = roster;
+  syncUserTeamRatings(career);
+  return {
+    result: displaced
+      ? { ...result, message: `${result.message} ${displaced.first} ${displaced.last} moves on.` }
+      : result,
+    joined: true,
+  };
 }
 
 /* ------------------------------------------------------------------ misc */

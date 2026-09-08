@@ -3,6 +3,9 @@ import type { ClassKey, TeamRatings } from '../data/teams';
 import type { Tactics } from '../data/tactics';
 import type { DifficultyKey } from '../data/difficulty';
 import type { GameLengthKey } from '../data/constants';
+import type { CoachStaff } from './coaching';
+import type { TransferCandidate } from './transfers';
+import type { MovementReport } from './promotion';
 
 export type PlayoffRound = 'QF' | 'SF' | 'F';
 
@@ -39,6 +42,17 @@ export interface SeasonRecord {
   champion: boolean;
 }
 
+/** One line of the offseason development report. */
+export interface DevelopmentEntry {
+  name: string;
+  pos: string;
+  grade: number;
+  from: number;
+  to: number;
+  outcome: string;
+  label: string;
+}
+
 export interface Alumnus {
   name: string;
   pos: string;
@@ -71,6 +85,19 @@ export interface Career {
   focus: WeeklyFocus | null;
   prestige: number;
 
+  /** Coach's office: what the programme has invested in. */
+  staff: CoachStaff;
+  /** Promotion and relegation moves every team, so the league carries its own
+   *  class table on top of the data file. */
+  classOverrides: Record<string, ClassKey>;
+  /** Last offseason's league movement, for the screen that explains it. */
+  lastMovement: MovementReport | null;
+  /** The open transfer market, live only during an offseason. */
+  market: TransferCandidate[];
+  pitchesLeft: number;
+  /** Development report from the last offseason. */
+  lastDevelopment: DevelopmentEntry[];
+
   history: SeasonRecord[];
   alumni: Alumnus[];
   championships: number;
@@ -85,4 +112,4 @@ export interface Career {
   finish: string | null;
 }
 
-export const CAREER_VERSION = 4;
+export const CAREER_VERSION = 5;

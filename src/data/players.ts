@@ -80,6 +80,11 @@ const WEIGHTS: Record<Position, Partial<Record<keyof PlayerAttrs, number>>> = {
   FO: { faceoff: 0.46, checking: 0.16, speed: 0.14, stamina: 0.12, awareness: 0.12 },
 };
 
+/** The attributes that actually move a player's overall at this position. */
+export function positionKeys(pos: Position): (keyof PlayerAttrs)[] {
+  return Object.keys(WEIGHTS[pos]) as (keyof PlayerAttrs)[];
+}
+
 export function computeOverall(pos: Position, a: PlayerAttrs): number {
   const w = WEIGHTS[pos];
   let sum = 0;
@@ -160,6 +165,8 @@ interface GenOpts {
   last?: string;
   number?: number;
   source?: RosterSource;
+  /** Extra ceiling, earned by a programme that develops players well. */
+  potentialBonus?: number;
 }
 
 /** Compresses the top of the scale so the best programs produce excellent
@@ -198,7 +205,9 @@ export function generatePlayer(
   for (const k of ATTR_KEYS) attrs[k] = Math.round(clamp(attrs[k] - youthPenalty, 25, 99));
 
   const overall = computeOverall(pos, attrs);
-  const growthRoom = { 9: 16, 10: 12, 11: 7, 12: 3 }[grade];
+  // A programme known for developing players attracts recruits with more in
+  // them, which is the only way a small programme ever climbs.
+  const growthRoom = { 9: 16, 10: 12, 11: 7, 12: 3 }[grade] + (opts.potentialBonus ?? 0);
   const potential = Math.round(clamp(overall + rng.range(2, growthRoom), overall, 99));
 
   let number = 0;

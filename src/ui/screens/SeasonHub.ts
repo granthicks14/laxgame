@@ -13,6 +13,11 @@ import { TeamManageScreen } from './TeamManage';
 import { StandingsScreen, ScheduleScreen } from './SeasonTables';
 import { SeasonSummaryScreen } from './SeasonSummary';
 import { CLASSES } from '../../data/teams';
+import { CoachOfficeScreen } from './CoachOffice';
+import { TransferPortalScreen } from './TransferPortal';
+import { DynastyStatsScreen } from './DynastyStats';
+import { staffSummary } from '../../league/coaching';
+import { movementOutlook } from '../../league/promotion';
 
 export class SeasonHubScreen implements Screen {
   el: HTMLElement;
@@ -52,6 +57,7 @@ export class SeasonHubScreen implements Screen {
           this.header(career, rank, standings.length),
           game ? this.nextGame(app, career, game) : this.playoffWait(career),
           this.focusPanel(app, career),
+          this.officePanel(app, career, mode),
           h('div', { class: 'row row--wrap' },
             h('button', {
               class: 'btn', text: 'Team', on: { click: () => app.push((a) => new TeamManageScreen(a, mode)) },
@@ -61,10 +67,39 @@ export class SeasonHubScreen implements Screen {
             }),
             h('button', {
               class: 'btn', text: 'Standings', on: { click: () => app.push((a) => new StandingsScreen(a, mode)) },
+            }),
+            h('button', {
+              class: 'btn', text: 'Statistics', on: { click: () => app.push((a) => new DynastyStatsScreen(a, mode)) },
             })),
           this.miniStandings(app, career, mode),
         ),
       ),
+    );
+  }
+
+  /** The coach's office, and the transfer window when it is open. */
+  private officePanel(app: App, career: Career, mode: 'season' | 'dynasty'): HTMLElement {
+    const open = career.market.length > 0 && career.pitchesLeft > 0;
+    return panel("Coach's office",
+      h('div', { class: 'small', text: staffSummary(career.staff) }),
+      h('div', { class: 'row row--wrap' },
+        h('button', {
+          class: 'btn', text: `Staff · ${career.coachingPoints} CP`,
+          on: { click: () => app.push((a) => new CoachOfficeScreen(a, mode)) },
+        }),
+        h('button', {
+          class: `btn${open ? ' btn--primary' : ''}`,
+          text: open ? `Transfers · ${career.pitchesLeft} left` : 'Transfers',
+          on: { click: () => app.push((a) => new TransferPortalScreen(a, mode)) },
+        })),
+      h('div', {
+        class: 'tiny',
+        text: movementOutlook(
+          standingsSorted(career).findIndex((r) => r.teamId === career.teamId) + 1,
+          Object.keys(career.standings).length,
+          career.classKey,
+        ),
+      }),
     );
   }
 

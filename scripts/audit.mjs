@@ -159,12 +159,19 @@ async function toHub() {
   return await page.getByRole('button', { name: /^Play game$/i }).count() > 0;
 }
 
-for (const [name, label] of [['Team', 'Team screen'], ['Schedule', 'Schedule'], ['Standings', 'Standings']]) {
+for (const [name, label] of [
+  ['Team', 'Team screen'], ['Schedule', 'Schedule'], ['Standings', 'Standings'],
+  ['Statistics', 'Statistics'], ['Staff', "Coach's office"], ['Transfers', 'Transfer portal'],
+]) {
   await toHub();
   const b = page.locator('button.btn', { hasText: name }).first();
   if (await b.count()) {
     await b.click(); await settle(400);
-    await sweep(label);
+    await sweep(label, /Quit game|Delete|Start a new|Run it back|Finish and clear|Needs \d+ CP|Nothing more to say|No pitches left/i);
+    if (name === 'Staff') {
+      // Buying staff is a spend, not a no-op; the sweep skips it because a
+      // programme with no points cannot upgrade anything.
+    }
     if (name === 'Team') {
       const row = page.locator('table tbody tr').first();
       if (await row.count()) { await row.click(); await settle(400); await sweep('Player screen'); const bk = page.locator('.topbar button').first(); if (await bk.count()) { await bk.click(); await settle(320); } }

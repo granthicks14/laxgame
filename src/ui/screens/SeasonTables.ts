@@ -2,9 +2,9 @@ import { h } from '../dom';
 import type { App, Screen } from '../App';
 import { screenEl, topbar, panelFlush, teamBadge, emptyPanel } from '../components';
 import { loadCareer } from '../../state/saves';
-import { effectiveTeam, opponentOf, playoffFieldSize, roundName, standingsSorted, userIsHome, winPct } from '../../league/career';
+import { classMembers, effectiveTeam, opponentOf, playoffFieldSize, roundName, standingsSorted, userIsHome, winPct } from '../../league/career';
 import type { Career, ScheduledGame } from '../../league/types';
-import { CLASSES, teamsInClass } from '../../data/teams';
+import { CLASSES } from '../../data/teams';
 
 function requireCareer(app: App, mode: 'season' | 'dynasty', title: string): Career | HTMLElement {
   const c = loadCareer(mode);
@@ -26,7 +26,7 @@ export class StandingsScreen implements Screen {
     const res = requireCareer(app, mode, 'Standings');
     if (res instanceof HTMLElement) { this.el = res; return; }
     const career = res;
-    const field = playoffFieldSize(teamsInClass(career.classKey).length);
+    const field = playoffFieldSize(classMembers(career, career.classKey).length);
     const rows = standingsSorted(career).map((r, i) => {
       const t = effectiveTeam(career, r.teamId);
       const diff = r.goalsFor - r.goalsAgainst;
