@@ -456,3 +456,41 @@ against a weak defence, two elite defences, one elite keeper, an extreme
 mismatch, fast break against a packed defence, rain and wind).
 `npm run levels` does the same through the real match engine, which is how you
 tell whether played and simulated games still agree.
+
+## Challenge chapters and the one ending — `src/challenge/state.ts`
+
+Nine rungs, three chapters: high school (0–3), college (4–6), professional
+(7–8). `completesChapter(stageIndex)` is true at the last rung of a chapter that
+is not the professional one.
+
+**There is exactly one ending: the PLL championship.** Winning anything else —
+including the Class A championship, which finishes the high school chapter —
+promotes the coach and generates offers at the next rung. This shipped broken
+once, so it now has an exhaustive invariant in `npm run stages`: every
+combination of rung × championship × hot seat × win percentage, asserting that
+`complete` is set only by a PLL title.
+
+Two traps that produced exactly that failure:
+
+- **A reputation gate on promotion.** A short-lived "you must be well known
+  before the next level will interview you" rule meant a coach who won the Class
+  A championship with a modest reputation was told *nobody at the next level is
+  calling* and offered lateral high school jobs. A championship must always
+  promote; reputation decides WHICH jobs, never WHETHER there are any. The
+  fallback in `resolveChallengeSeason` guarantees a non-empty list.
+- **Save validation that only knew the district.** `isValidCareer` checked
+  `tryGetTeam`, which knows the forty high schools and nothing else, so the
+  moment a career took a college job the save failed validation on the next load
+  and was deleted. It checks the whole world now.
+
+## Adding programmes — `src/data/world/programs.ts`
+
+A level's teams are rows in this file: id, name, mascot, abbr, conference,
+`tier` (within-level strength, 0–99), colours and region. Everything else —
+ratings, prestige, recruiting, coaching, the venue, rivals — is derived in
+`src/data/world.ts`, and rosters are generated on demand at the level's band, so
+a new row is a fully playable programme with nothing else to write.
+
+Two rules: a conference needs at least four teams to play a season (`npm run
+world` enforces it), and Division III should stay the largest division, as it is
+in reality. Run `npm run world` and `npm run stages` after editing.

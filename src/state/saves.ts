@@ -1,6 +1,7 @@
 import { load, save, removeRaw, readRaw, writeRaw } from '../core/storage';
 import { CAREER_VERSION, type Career, type CareerMode } from '../league/types';
 import { tryGetTeam } from '../data/teams';
+import { tryWorldTeam } from '../data/world';
 import { EMPTY_STAFF } from '../league/coaching';
 
 const RETIRED_KEY = 'lsl.retiredSave';
@@ -55,7 +56,11 @@ function isValidCareer(c: unknown): c is Career {
   return (
     x.version === CAREER_VERSION &&
     typeof x.teamId === 'string' &&
-    !!tryGetTeam(x.teamId) &&
+    // ANY team in the world, not only the forty high schools. Checking the
+    // district alone destroyed every Challenge career the moment it took a
+    // college job: the save failed validation on the next load and was thrown
+    // away, which reads exactly like the game ending your career.
+    !!(tryWorldTeam(x.teamId) ?? tryGetTeam(x.teamId)) &&
     Array.isArray(x.schedule) &&
     Array.isArray(x.roster) &&
     x.roster.length > 0 &&

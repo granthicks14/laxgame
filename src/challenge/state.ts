@@ -199,6 +199,9 @@ export function evaluateSeason(state: ChallengeState, input: SeasonInput): Seaso
 
   let outcome: SeasonOutcome = 'stay';
 
+  // THE ONLY ENDING. A championship at any other rung finishes a rung — and,
+  // at the top of a chapter, a chapter — and the career carries on. Nothing
+  // else may ever set `complete` from a win, at any level, for any reason.
   if (input.champion && state.stageIndex >= FINAL_STAGE) {
     state.complete = true;
     state.endedReason = 'You won the Premier Lacrosse League.';
@@ -206,7 +209,13 @@ export function evaluateSeason(state: ChallengeState, input: SeasonInput): Seaso
     messages.push('There is nothing above this. The climb is over.');
   } else if (input.champion) {
     outcome = 'promoted';
-    messages.push('The phone has started ringing.');
+    if (completesChapter(state.stageIndex)) {
+      const chapter = chapterOf(state.stageIndex);
+      messages.push(`${chapter.headline.toUpperCase()}. ${chapter.blurb}`);
+      messages.push(`Next chapter: ${chapter.nextName.toLowerCase()}.`);
+    } else {
+      messages.push('The phone has started ringing.');
+    }
   } else if (state.heat >= 3) {
     outcome = 'fired';
     state.fired = true;
@@ -295,17 +304,69 @@ export function promotionReach(state: ChallengeState): number {
   return state.reputation >= 70 && state.stageIndex < FINAL_STAGE - 1 ? 2 : 1;
 }
 
+/* ---------------------------------------------------------------- chapters */
+
 /**
- * The reputation a coach needs before anybody at the NEXT rung will interview
- * him, whatever he has just won.
+ * The ladder is nine rungs but three CHAPTERS, and crossing between them is the
+ * moment the career changes shape: schoolboys become recruited college players,
+ * and college players become professionals who are paid to be there.
  *
- * A championship opens the door; it does not walk you through it. Without this
- * the ladder is gated only on winning one title per rung, and a coach who gets
- * hot for a single season climbs the whole sport — which is not a career, it is
- * a lucky year. The bar rises as you go up, because the jobs do.
+ * Winning the last rung of a chapter completes that chapter. It does NOT end
+ * the career. There is exactly one ending, and it is the PLL.
  */
-export function promotionFloor(stageIndex: number): number {
-  return 26 + stageIndex * 6;
+export type Chapter = 'highschool' | 'college' | 'professional';
+
+export interface ChapterInfo {
+  key: Chapter;
+  name: string;
+  /** Stage indices, inclusive. */
+  from: number;
+  to: number;
+  /** Shown when the chapter is finished. */
+  headline: string;
+  blurb: string;
+  /** What the next chapter is called on the job screen. */
+  nextName: string;
+}
+
+export const CHAPTERS: ChapterInfo[] = [
+  {
+    key: 'highschool',
+    name: 'High school',
+    from: 0,
+    to: 3,
+    headline: 'High school chapter complete',
+    blurb: 'You have conquered high school lacrosse. But your coaching journey is far from over.',
+    nextName: 'College lacrosse',
+  },
+  {
+    key: 'college',
+    name: 'College',
+    from: 4,
+    to: 6,
+    headline: 'College chapter complete',
+    blurb: 'You have won at every level of college lacrosse. What is left is the professional game.',
+    nextName: 'The professional game',
+  },
+  {
+    key: 'professional',
+    name: 'Professional',
+    from: 7,
+    to: 8,
+    headline: 'The climb is over',
+    blurb: 'There is nothing above this.',
+    nextName: '',
+  },
+];
+
+export function chapterOf(stageIndex: number): ChapterInfo {
+  return CHAPTERS.find((c) => stageIndex >= c.from && stageIndex <= c.to) ?? CHAPTERS[0];
+}
+
+/** True when winning at this rung finishes a chapter and opens the next one. */
+export function completesChapter(stageIndex: number): boolean {
+  const c = chapterOf(stageIndex);
+  return stageIndex === c.to && c.key !== 'professional';
 }
 
 /** Applies an accepted offer. The career continues; the job does not. */

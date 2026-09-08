@@ -27,7 +27,7 @@ import {
 } from '../challenge/ladder';
 import {
   acceptOffer, declineAll, evaluateSeason, expectationFor, generateOffers, legacyScore,
-  newChallengeState, promotionFloor, promotionReach,
+  newChallengeState, promotionReach,
   type JobOffer, type Legacy, type Programme, type SeasonVerdict,
 } from '../challenge/state';
 import {
@@ -1189,17 +1189,7 @@ export function resolveChallengeSeason(career: Career): SeasonVerdict | null {
   });
 
   const rng = new Rng(`${career.seed}:offers:${state.totalYears}`);
-  if (verdict.outcome === 'promoted' && state.reputation < promotionFloor(state.stageIndex)) {
-    // He won it, and nobody above has heard of him. The title still counts —
-    // it is on the record and it lifted his reputation — but the move up has
-    // to be earned across more than one season.
-    state.offerKind = 'rehire';
-    state.offers = generateOffers(state, 'rehire', challengePool(state.stageIndex), rng)
-      .filter((o) => o.teamId !== career.teamId);
-    verdict.messages.push(
-      'Nobody at the next level is calling yet. Win here again, or build the reputation somewhere better.',
-    );
-  } else if (verdict.outcome === 'promoted') {
+  if (verdict.outcome === 'promoted') {
     state.offerKind = 'promotion';
     // The next rung always. A coach with a real name in the sport is also
     // offered something two rungs up — a smaller job at a much higher level,
@@ -1209,6 +1199,16 @@ export function resolveChallengeSeason(career: Career): SeasonVerdict | null {
     const offers = generateOffers(state, 'promotion', challengePool(next), rng, reach === next ? 3 : 2, next);
     if (reach !== next) {
       offers.push(...generateOffers(state, 'promotion', challengePool(reach), rng, 1, reach));
+    }
+    if (!offers.length) {
+      // Reputation decides WHICH jobs, never WHETHER there are any. Winning a
+      // championship is the promise this mode is built on, and an empty list
+      // would quietly end a career at the rung the coach just conquered.
+      const pool = challengePool(next);
+      const fallback = [...pool].sort((a, b) => a.prestige - b.prestige).slice(0, 3);
+      offers.push(...generateOffers(
+        { ...state, reputation: 0 }, 'promotion', fallback, rng, 3, next,
+      ));
     }
     state.offers = offers.sort((a, b) => (b.stageIndex - a.stageIndex) || (b.prestige - a.prestige));
   } else if (verdict.outcome === 'fired') {

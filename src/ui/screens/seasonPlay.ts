@@ -1,49 +1,10 @@
 import type { App } from '../App';
 import { GameScreen } from './GameScreen';
 import { PostGameScreen } from './PostGame';
-import { makeMatchConfig, tacticsFor } from '../../league/matchSetup';
-import {
-  applyGameStats, effectiveTeam, opponentOf, recordUserResult, roundName,
-  rosterForMatch, userIsHome,
-} from '../../league/career';
+import { buildSeasonMatch } from '../../league/careerMatch';
+import { applyGameStats, recordUserResult, roundNameIn, userIsHome } from '../../league/career';
 import { saveCareer } from '../../state/saves';
-import { generateRoster } from '../../data/players';
-import { difficultyFor } from '../../data/levels';
-import { coachEffects } from '../../league/coaching';
 import type { Career, ScheduledGame } from '../../league/types';
-
-export function buildSeasonMatch(career: Career, game: ScheduledGame, replays = true) {
-  const oppId = opponentOf(career, game);
-  const you = effectiveTeam(career, career.teamId);
-  const them = effectiveTeam(career, oppId);
-  const isHome = userIsHome(career, game);
-  const oppRoster = generateRoster(them, `${career.seed}:${career.year}:${oppId}`, career.level);
-  const yourRoster = rosterForMatch(career);
-
-  const label = game.playoff
-    ? roundName(game.playoff).toUpperCase()
-    : game.rivalry ? 'RIVALRY GAME' : undefined;
-
-  return makeMatchConfig({
-    homeTeam: isHome ? you : them,
-    awayTeam: isHome ? them : you,
-    humanSide: isHome ? 'home' : 'away',
-    // Nobody plays a professional game on rookie AI: the level sets a floor.
-    difficulty: difficultyFor(career.level, career.difficulty),
-    gameLength: career.gameLength,
-    level: career.level,
-    seed: hashSeed(`${career.seed}:${career.year}:${game.id}`),
-    contextLabel: label,
-    homeRoster: isHome ? yourRoster : oppRoster,
-    awayRoster: isHome ? oppRoster : yourRoster,
-    homeTactics: isHome ? career.tactics : tacticsFor(them),
-    awayTactics: isHome ? tacticsFor(them) : career.tactics,
-    // Your staff coaches your side. The opposition coaches itself.
-    homeCoaching: isHome ? coachEffects(career.staff) : undefined,
-    awayCoaching: isHome ? undefined : coachEffects(career.staff),
-    replays,
-  });
-}
 
 export function playSeasonGame(app: App, career: Career, game: ScheduledGame): void {
   const config = buildSeasonMatch(career, game, app.settings.goalReplays);
@@ -62,7 +23,7 @@ export function playSeasonGame(app: App, career: Career, game: ScheduledGame): v
 
       a.replace((b) => new PostGameScreen(b, {
         match,
-        title: game.playoff ? roundName(game.playoff) : `Week ${game.week}`,
+        title: roundNameIn(career, game),
         actions: [
           {
             label: 'Continue',
@@ -75,11 +36,3 @@ export function playSeasonGame(app: App, career: Career, game: ScheduledGame): v
   }));
 }
 
-function hashSeed(s: string): number {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}

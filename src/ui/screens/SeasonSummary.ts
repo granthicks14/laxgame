@@ -6,7 +6,7 @@ import {
   champion, createCareer, effectiveTeam, resolveChallengeSeason, runOffseason,
   seasonFormat, seasonRecordText, userTeam, type OffseasonReport,
 } from '../../league/career';
-import { ChallengeEndScreen, JobOffersScreen } from './Challenge';
+import { ChallengeEndScreen, JobOffersScreen, chapterCard } from './Challenge';
 import { stageAt } from '../../challenge/ladder';
 import { recruitingSummary } from '../../league/career';
 import type { Career } from '../../league/types';
@@ -134,6 +134,7 @@ export class SeasonSummaryScreen implements Screen {
       topbar(app, `Year ${career.year}`, 'Season complete', () => app.reset((a) => new MainMenuScreen(a))),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
+          verdict?.outcome === 'promoted' && climb ? chapterCard(climb.stageIndex) : null,
           verdict && climb
             ? panel(`${stageAt(climb.stageIndex).short} · reputation ${Math.round(climb.reputation)}`,
               ...verdict.messages.map((m) => h('div', { class: 'small', style: 'color:var(--text)', text: m })),

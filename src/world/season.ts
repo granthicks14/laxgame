@@ -162,6 +162,8 @@ export function buildRegularSeason(
   const cycles = Math.max(1, Math.round((format.regularGames - format.nonConference) / Math.max(1, ids.length - 1)));
 
   const rotating = list.slice(1);
+  const inLeague: Record<string, number> = {};
+  for (const id of ids) inLeague[id] = 0;
   let week = 1;
   for (let r = 0; r < rounds * cycles; r++) {
     const secondCycle = r >= rounds;
@@ -178,9 +180,36 @@ export function buildRegularSeason(
       }
       if (secondCycle) { const t = homeId; homeId = awayId; awayId = t; }
       homeCount[homeId]++;
+      inLeague[homeId]++;
+      inLeague[awayId]++;
       games.push({ id: `w${week}-${homeId}-${awayId}`, week, homeId, awayId, inConference: true });
     }
     rotating.unshift(rotating.pop()!);
+    week++;
+  }
+
+  // Top up to the season the format actually promises. A round robin in an
+  // eight-team league is seven games; a ten-game season means somebody is
+  // played twice, which is exactly what a small professional league does.
+  const target = Math.max(0, format.regularGames - format.nonConference);
+  let guard = 0;
+  while (guard++ < 24) {
+    const short = ids.filter((id) => inLeague[id] < target);
+    if (short.length < 2) break;
+    const order = rng.shuffle([...short]);
+    let added = 0;
+    for (let i = 0; i + 1 < order.length; i += 2) {
+      const a = order[i];
+      const b = order[i + 1];
+      const homeId = homeCount[a] <= homeCount[b] ? a : b;
+      const awayId = homeId === a ? b : a;
+      homeCount[homeId]++;
+      inLeague[a]++;
+      inLeague[b]++;
+      added++;
+      games.push({ id: `x${guard}-${homeId}-${awayId}`, week, homeId, awayId, inConference: true });
+    }
+    if (!added) break;
     week++;
   }
 

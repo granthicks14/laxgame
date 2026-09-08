@@ -248,6 +248,9 @@ export const D3_CONFERENCES: ConferenceInfo[] = [
   { id: 'odac', name: 'Old Dominion Athletic Conference', short: 'ODAC', level: 'd3', autoBid: true },
   { id: 'ccc', name: 'Commonwealth Coast Conference', short: 'CCC', level: 'd3', autoBid: true },
   { id: 'landmark', name: 'Landmark Conference', short: 'Landmark', level: 'd3', autoBid: true },
+  { id: 'empire8', name: 'Empire 8', short: 'Empire 8', level: 'd3', autoBid: true },
+  { id: 'mascac', name: 'Massachusetts State Collegiate Athletic Conference', short: 'MASCAC', level: 'd3', autoBid: true },
+  { id: 'skyline', name: 'Skyline Conference', short: 'Skyline', level: 'd3', autoBid: true },
 ];
 
 export const D3_PROGRAMS: ProgramRow[] = [
@@ -353,6 +356,36 @@ export const D3_PROGRAMS: ProgramRow[] = [
   { id: 'moravian', name: 'Moravian', mascot: 'Greyhounds', abbr: 'MOR', conference: 'landmark', tier: 54, primary: '#00205b', secondary: '#ffc72c', region: 'mid-atlantic' },
   { id: 'elizabethtown', name: 'Elizabethtown', mascot: 'Blue Jays', abbr: 'ETWN', conference: 'landmark', tier: 50, primary: '#00539f', secondary: '#ffffff', region: 'mid-atlantic' },
   { id: 'drew', name: 'Drew', mascot: 'Rangers', abbr: 'DREW', conference: 'landmark', tier: 38, primary: '#00543c', secondary: '#ffffff', region: 'northeast' },
+// --- Empire 8
+  { id: 'nazareth', name: 'Nazareth', mascot: 'Golden Flyers', abbr: 'NAZ', conference: 'empire8', tier: 86, primary: '#4b2e83', secondary: '#f2a900', region: 'northeast' },
+  { id: 'ithaca', name: 'Ithaca', mascot: 'Bombers', abbr: 'ITH', conference: 'empire8', tier: 78, primary: '#00457c', secondary: '#f2a900', region: 'northeast' },
+  { id: 'st-john-fisher', name: 'St. John Fisher', mascot: 'Cardinals', abbr: 'SJF', conference: 'empire8', tier: 76, primary: '#a6192e', secondary: '#000000', region: 'northeast' },
+  { id: 'alfred', name: 'Alfred', mascot: 'Saxons', abbr: 'ALF', conference: 'empire8', tier: 64, primary: '#4b2e83', secondary: '#f2a900', region: 'northeast' },
+  { id: 'utica', name: 'Utica', mascot: 'Pioneers', abbr: 'UTC', conference: 'empire8', tier: 70, primary: '#00539f', secondary: '#f2a900', region: 'northeast' },
+  { id: 'elmira', name: 'Elmira', mascot: 'Soaring Eagles', abbr: 'ELM', conference: 'empire8', tier: 58, primary: '#4b2e83', secondary: '#ffffff', region: 'northeast' },
+  { id: 'hartwick', name: 'Hartwick', mascot: 'Hawks', abbr: 'HAR', conference: 'empire8', tier: 62, primary: '#00205b', secondary: '#ffffff', region: 'northeast' },
+  { id: 'houghton', name: 'Houghton', mascot: 'Highlanders', abbr: 'HOU', conference: 'empire8', tier: 48, primary: '#4b2e83', secondary: '#c8c9c7', region: 'northeast' },
+
+  // --- MASCAC
+  { id: 'salem-state', name: 'Salem State', mascot: 'Vikings', abbr: 'SAL', conference: 'mascac', tier: 74, primary: '#00539f', secondary: '#f2a900', region: 'northeast' },
+  { id: 'westfield-state', name: 'Westfield State', mascot: 'Owls', abbr: 'WST', conference: 'mascac', tier: 68, primary: '#00205b', secondary: '#c8102e', region: 'northeast' },
+  { id: 'bridgewater-state', name: 'Bridgewater State', mascot: 'Bears', abbr: 'BRI', conference: 'mascac', tier: 71, primary: '#c8102e', secondary: '#ffffff', region: 'northeast' },
+  { id: 'worcester-state', name: 'Worcester State', mascot: 'Lancers', abbr: 'WOR', conference: 'mascac', tier: 60, primary: '#00539f', secondary: '#c8c9c7', region: 'northeast' },
+  { id: 'fitchburg-state', name: 'Fitchburg State', mascot: 'Falcons', abbr: 'FIT', conference: 'mascac', tier: 55, primary: '#00694e', secondary: '#ffffff', region: 'northeast' },
+  { id: 'framingham-state', name: 'Framingham State', mascot: 'Rams', abbr: 'FRA', conference: 'mascac', tier: 52, primary: '#000000', secondary: '#f2a900', region: 'northeast' },
+  { id: 'plymouth-state', name: 'Plymouth State', mascot: 'Panthers', abbr: 'PLY', conference: 'mascac', tier: 66, primary: '#00694e', secondary: '#ffffff', region: 'northeast' },
+  { id: 'mass-maritime', name: 'Mass Maritime', mascot: 'Buccaneers', abbr: 'MMA', conference: 'mascac', tier: 50, primary: '#00205b', secondary: '#f2a900', region: 'northeast' },
+
+  // --- Skyline
+  { id: 'farmingdale', name: 'Farmingdale State', mascot: 'Rams', abbr: 'FSC', conference: 'skyline', tier: 72, primary: '#00694e', secondary: '#ffffff', region: 'northeast' },
+  { id: 'old-westbury', name: 'Old Westbury', mascot: 'Panthers', abbr: 'OW', conference: 'skyline', tier: 56, primary: '#00539f', secondary: '#c8102e', region: 'northeast' },
+  { id: 'mount-saint-mary-ny', name: 'Mount Saint Mary', mascot: 'Knights', abbr: 'MSM', conference: 'skyline', tier: 54, primary: '#00205b', secondary: '#c8c9c7', region: 'northeast' },
+  { id: 'suny-maritime', name: 'SUNY Maritime', mascot: 'Privateers', abbr: 'MAR', conference: 'skyline', tier: 58, primary: '#00205b', secondary: '#f2a900', region: 'northeast' },
+  { id: 'sarah-lawrence', name: 'Sarah Lawrence', mascot: 'Gryphons', abbr: 'SLC', conference: 'skyline', tier: 44, primary: '#00694e', secondary: '#ffffff', region: 'northeast' },
+  { id: 'purchase', name: 'Purchase', mascot: 'Panthers', abbr: 'PUR', conference: 'skyline', tier: 42, primary: '#4b2e83', secondary: '#c8c9c7', region: 'northeast' },
+  { id: 'yeshiva', name: 'Yeshiva', mascot: 'Maccabees', abbr: 'YU', conference: 'skyline', tier: 40, primary: '#00205b', secondary: '#ffffff', region: 'northeast' },
+  { id: 'st-josephs-li', name: "St. Joseph's Long Island", mascot: 'Golden Eagles', abbr: 'SJC', conference: 'skyline', tier: 62, primary: '#a6192e', secondary: '#f2a900', region: 'northeast' },
+
 ];
 
 /* ===========================================================================

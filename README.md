@@ -89,7 +89,12 @@ systems that feed each other:
   leaderboards for points, goals, assists, saves and ground balls.
 
 **Challenge** — one coaching career, nine rungs, from Class D high school to the
-Premier Lacrosse League. This is the long game. It is the **same career engine
+Premier Lacrosse League, in three chapters: **high school** (Class D → C → B →
+A), **college** (D-III → D-II → D-I) and **professional** (semi-pro → PLL).
+Winning the last rung of a chapter completes that chapter and opens the next
+job market. **There is exactly one ending, and it is the PLL championship** —
+`npm run stages` asserts that across all 360 combinations of rung, result and
+hot seat. This is the long game. It is the **same career engine
 as Dynasty** — every offseason system, the transfer window, recruiting,
 scouting, development, staff, statistics and the record book — plus the ladder
 on top. Nothing is missing because the mode is called something else; `npm run
@@ -117,6 +122,21 @@ driving a full season and offseason in each.
   climbs faster — see the note under Tuning and testing.)*
 - **Legacy.** Championships weighted by how hard they were to win, how far you
   climbed, the players you found and developed, and the years you gave it.
+- **Every rung is genuinely playable.** Not simulation-only: 267 programmes
+  across six levels, each with ratings, an identity, a conference, a home
+  ground, a generated roster and a schedule. You can press Play on a Division
+  III fixture and the match engine loads two real college squads.
+  `npm run stages` proves it rung by rung — 266 checks, including one fixture
+  per level run through the actual engine.
+
+| Level | Programmes | Conferences |
+| --- | --- | --- |
+| THSLL district | 40 | 5 classes |
+| NCAA Division III | 107 | 13 |
+| NCAA Division II | 34 | 6 |
+| NCAA Division I | 66 | 10 |
+| Continental Lacrosse League | 12 | 2 |
+| Premier Lacrosse League | 8 | 1 |
 
 **Recruiting and scouting** — a class runs alongside every season, in every mode.
 
@@ -340,6 +360,14 @@ with shooting around 26–32% and saves around 50–57%.
 `npm run challenge` runs a whole Challenge career headlessly — every season, job
 offer, sacking and championship — and `RUNS=10 npm run challenge` samples ten of
 them.
+
+`npm run stages` walks all nine rungs of the ladder: it checks the league data
+exists, plays one fixture through the **real match engine** using the same
+config the Play button builds, plays the season out through the playoffs to a
+champion, runs the offseason, and confirms that winning **promotes** the coach
+rather than ending the career. It also runs the ending invariant exhaustively.
+It is what caught the bug where taking a college job destroyed the save on the
+next load, because save validation only knew about the forty high schools.
 
 **Known balance shift.** The possession model rewards a rating edge more steeply
 than the formula it replaced, so a coach who spends Coach Points well and

@@ -27,7 +27,10 @@
     "test:responsive": "node scripts/responsive-check.mjs",
     "scoring": "esbuild src/dev/scoring.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-scoring.mjs --log-level=error && node node_modules/.cache/lsl-scoring.mjs",
     "modes": "esbuild src/dev/modes.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-modes.mjs --log-level=error && node node_modules/.cache/lsl-modes.mjs",
-    "checklist": "esbuild src/dev/checklist.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-checklist.mjs --log-level=error && node node_modules/.cache/lsl-checklist.mjs"
+    "checklist": "esbuild src/dev/checklist.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-checklist.mjs --log-level=error && node node_modules/.cache/lsl-checklist.mjs",
+    "stages": "esbuild src/dev/stages.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-stages.mjs --log-level=error && node node_modules/.cache/lsl-stages.mjs",
+    "seed-save": "esbuild src/dev/seed-save.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-seed.mjs --log-level=error && node node_modules/.cache/lsl-seed.mjs",
+    "test:ladder": "node scripts/ladder-flow.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

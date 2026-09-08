@@ -20,7 +20,10 @@ import {
 import type { Career } from '../../league/types';
 import { STAGES, stageAt, stageDivisionName } from '../../challenge/ladder';
 import { SITUATIONS } from '../../challenge/situations';
-import type { JobOffer } from '../../challenge/state';
+import {
+  CHAPTERS, chapterOf, completesChapter, type JobOffer,
+} from '../../challenge/state';
+import { effectiveTeam } from '../../league/career';
 import { DIFFICULTIES, DIFFICULTY_ORDER, type DifficultyKey } from '../../data/difficulty';
 import { GAME_LENGTHS, type GameLengthKey } from '../../data/constants';
 import { SeasonHubScreen } from './SeasonHub';
@@ -142,19 +145,45 @@ function bullet(title: string, text: string): HTMLElement {
     h('div', { class: 'tiny', text }));
 }
 
-/** The ladder itself, with everything below your rung marked as climbed. */
+/**
+ * The ladder, grouped into its three chapters. Nine rungs is a lot to read as a
+ * flat list, and the chapter breaks are where the career actually changes shape.
+ */
 export function ladderList(currentIndex: number): HTMLElement {
   const wrap = h('div', { class: 'stack', style: 'gap:0' });
-  STAGES.forEach((stage, i) => {
-    const cls = i < currentIndex ? 'rung is-done' : i === currentIndex ? 'rung is-here' : 'rung is-locked';
-    wrap.appendChild(h('div', { class: cls },
-      h('div', { class: 'rung__dot' }),
-      h('div', { class: 'stack', style: 'gap:1px;min-width:0' },
-        h('div', { class: 'rung__name', text: stage.short }),
-        h('div', { class: 'rung__need', text: i === currentIndex ? stage.requirement : stage.name })),
-      h('div', { class: 'tiny', text: `${i + 1}/${STAGES.length}` })));
-  });
+  for (const chapter of CHAPTERS) {
+    const done = currentIndex > chapter.to;
+    wrap.appendChild(h('div', {
+      class: 'eyebrow',
+      style: `margin:8px 0 2px;${done ? 'color:var(--green)' : currentIndex >= chapter.from ? 'color:var(--accent)' : ''}`,
+      text: `${chapter.name}${done ? ' · complete' : ''}`,
+    }));
+    for (let i = chapter.from; i <= chapter.to; i++) {
+      const stage = STAGES[i];
+      const cls = i < currentIndex ? 'rung is-done' : i === currentIndex ? 'rung is-here' : 'rung is-locked';
+      wrap.appendChild(h('div', { class: cls },
+        h('div', { class: 'rung__dot' }),
+        h('div', { class: 'stack', style: 'gap:1px;min-width:0' },
+          h('div', { class: 'rung__name', text: stage.short }),
+          h('div', { class: 'rung__need', text: i === currentIndex ? stage.requirement : stage.name })),
+        h('div', { class: 'tiny', text: `${i + 1}/${STAGES.length}` })));
+    }
+  }
   return wrap;
+}
+
+/**
+ * The chapter-complete card. This is what a coach sees after the last rung of
+ * high school or college — a milestone, emphatically NOT an ending.
+ */
+export function chapterCard(stageIndex: number): HTMLElement | null {
+  if (!completesChapter(stageIndex)) return null;
+  const chapter = chapterOf(stageIndex);
+  return h('div', { class: 'chapter' },
+    h('div', { class: 'chapter__mark' }, trophyIcon(46)),
+    h('div', { class: 'chapter__title display', text: chapter.headline }),
+    h('div', { class: 'chapter__body', text: chapter.blurb }),
+    h('div', { class: 'chapter__next display', text: `Next chapter · ${chapter.nextName}` }));
 }
 
 /* ---------------------------------------------------------------- tracker */
@@ -236,9 +265,15 @@ export class JobOffersScreen implements Screen {
       const offers = state.offers ?? [];
       const kind = state.offerKind;
 
+      const target = offers[0]?.stageIndex ?? state.stageIndex;
+      const movingChapter = kind === 'promotion' && chapterOf(target).key !== chapterOf(state.stageIndex).key;
+      const card = movingChapter ? chapterCard(state.stageIndex) : null;
+      if (card) body.appendChild(card);
+
       body.appendChild(panel(
-        kind === 'promotion' ? 'The phone is ringing'
-          : kind === 'demotion' ? 'Starting again' : 'Who will have you',
+        movingChapter ? `${chapterOf(target).name} coaching opportunities`
+          : kind === 'promotion' ? 'The phone is ringing'
+            : kind === 'demotion' ? 'Starting again' : 'Who will have you',
         h('div', {
           class: 'small',
           text: kind === 'promotion'
@@ -283,16 +318,29 @@ export class JobOffersScreen implements Screen {
   }
 }
 
+function summaryRow(label: string, value: string): HTMLElement {
+  return h('div', { class: 'row', style: 'justify-content:space-between;gap:12px' },
+    h('span', { class: 'small', style: 'color:var(--text)', text: label }),
+    h('span', { class: 'display', style: 'font-size:18px', text: value }));
+}
+
+function prestigeWord(n: number): string {
+  return n >= 82 ? 'High' : n >= 66 ? 'Medium' : 'Low';
+}
+
 function offerCard(app: App, career: Career, offer: JobOffer, redraw: () => void): HTMLElement {
   const stage = stageAt(offer.stageIndex);
   const sit = SITUATIONS[offer.situation];
+  // The squad you would actually inherit, from the real team data.
+  const squad = effectiveTeam(career, offer.teamId).overall;
   return panel(null,
     h('div', { class: 'stack', style: 'gap:6px' },
       h('div', { class: 'row', style: 'justify-content:space-between;gap:10px' },
         h('div', { class: 'display', style: 'font-size:19px', text: offer.teamName }),
         h('span', { class: 'pill pill--accent', text: stage.short })),
       h('div', { class: 'row row--wrap', style: 'gap:6px' },
-        h('span', { class: 'pill', text: `Prestige ${offer.prestige}` }),
+        h('span', { class: 'pill', text: `Team OVR ${squad}` }),
+        h('span', { class: 'pill', text: `Prestige ${prestigeWord(offer.prestige)}` }),
         h('span', {
           class: sit.severity >= 3 ? 'pill pill--red' : sit.severity === 0 ? 'pill pill--green' : 'pill',
           text: sit.label,
@@ -339,6 +387,10 @@ export class ChallengeEndScreen implements Screen {
     const titleRows = STAGES
       .map((s) => ({ s, n: state.titles[s.key] ?? 0 }))
       .filter((r) => r.n > 0);
+    const titles = titleRows.reduce((n, r) => n + r.n, 0);
+    const wins = state.steps.reduce((n, s) => n + s.wins, 0);
+    const losses = state.steps.reduce((n, s) => n + s.losses, 0);
+    const clubs = new Set(state.steps.map((s) => s.teamShort)).size;
 
     this.el = screenEl(
       topbar(app, 'The career', `${state.totalYears} seasons`, () => app.reset((a) => new MainMenuScreen(a))),
@@ -347,9 +399,16 @@ export class ChallengeEndScreen implements Screen {
           won
             ? h('div', { class: 'trophy' },
               h('div', { class: 'trophy__icon' }, trophyIcon(58)),
-              h('div', { class: 'trophy__title', text: 'The climb is over' }),
-              h('div', { class: 'small', style: 'margin-top:6px', text: 'Class D to the Premier Lacrosse League.' }))
+              h('div', { class: 'trophy__title', text: 'Legendary coaching journey complete' }),
+              h('div', { class: 'small', style: 'margin-top:6px', text: 'You conquered every level of the lacrosse world.' }))
             : panel('It ends here', h('div', { class: 'small', text: state.endedReason ?? 'The career is over.' })),
+
+          panel('The career in numbers',
+            summaryRow('Career length', `${state.totalYears} years`),
+            summaryRow('Career record', `${wins}-${losses}`),
+            summaryRow('Championships', `${titles}`),
+            summaryRow('Programmes coached', `${clubs}`),
+            summaryRow('Legacy score', `${legacy.score}`)),
           panel(`${legacy.title} · ${legacy.score}`,
             ...legacy.lines.map((l) => h('div', { class: 'row', style: 'justify-content:space-between' },
               h('span', { class: 'small', text: `${l.label} — ${l.value}` }),
