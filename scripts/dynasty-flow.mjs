@@ -13,7 +13,8 @@ import { chromium } from 'playwright';
 import { chromiumPath } from './chromium.mjs';
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
-const SAVE = 'lsl.career.dynasty.v6';
+// The save version moves with the game; find whatever the build actually wrote.
+const MODE = 'dynasty';
 
 const results = [];
 const problems = [];
@@ -31,7 +32,15 @@ page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
 const settle = (ms = 320) => page.waitForTimeout(ms);
-const save = () => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), SAVE);
+const saveKey = () => page.evaluate((m) => {
+  const keys = Object.keys(localStorage).filter((k) => k.startsWith(`lsl.career.${m}.v`));
+  keys.sort((a, b) => Number(b.split('.v')[1]) - Number(a.split('.v')[1]));
+  return keys[0] ?? null;
+}, MODE);
+const save = async () => {
+  const k = await saveKey();
+  return k ? page.evaluate((kk) => JSON.parse(localStorage.getItem(kk) ?? 'null'), k) : null;
+};
 const clickText = async (re) => {
   const b = page.getByRole('button', { name: re }).first();
   if (!(await b.count())) return false;
@@ -130,9 +139,17 @@ check('the statistics screen lists your squad', statRows > 0, `${statRows} rows`
 check('district leaderboards are populated', leaderRows > 0, `${leaderRows} leaders`);
 await back();
 
+const advanceSeason = async () => {
+  // Simulating a season now passes through the postseason screens: qualifying
+  // is shown once, and the bracket opens itself when the playoffs are drawn.
+  if (await clickText(/^Simulate this game$/)) return true;
+  if (await clickText(/^Continue to the (playoffs|season)$/)) return true;
+  return false;
+};
+
 // Simulate the rest of the season.
-for (let i = 0; i < 40; i++) {
-  if (!(await clickText(/Simulate this game/))) break;
+for (let i = 0; i < 60; i++) {
+  if (!(await advanceSeason())) break;
 }
 await settle(600);
 const seasonEnd = await save();
@@ -180,12 +197,17 @@ if (await clickText(/Open (player movement|transfer portal|free agency)/i)) {
   check('the portal shows interest for each player', cards === off.market.length,
     `${cards} of ${off.market.length}`);
   const rosterBefore = (await save()).roster.length;
-  await clickText(/Make your pitch/);
+  // A pitch is now an ANGLE: the recommended one is the primary button on the
+  // first player's card.
+  const angleButtons = await page.locator('.panel .btn--primary').count();
+  check('the portal offers a pitch angle to choose', angleButtons > 0, `${angleButtons} suggested`);
+  await page.locator('.panel .btn--primary').first().click().catch(() => {});
   await settle(500);
   const afterPitch = await save();
   const target = afterPitch.market.find((c) => c.attempts > 0);
   check('a pitch produces an outcome', !!target && target.status !== 'open',
     target ? target.status : 'none');
+  check('the angle is recorded against the player', !!target?.lastAngle, target?.lastAngle ?? 'none');
   check('a pitch costs one of your three', afterPitch.pitchesLeft === off.pitchesLeft - 1);
   if (target?.status === 'committed') {
     check('a committed player joins the squad', afterPitch.roster.length === rosterBefore + 1);

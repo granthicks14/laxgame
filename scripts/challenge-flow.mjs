@@ -12,7 +12,8 @@ import { chromium } from 'playwright';
 import { chromiumPath } from './chromium.mjs';
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
-const SAVE = 'lsl.career.challenge.v6';
+// The save version moves with the game; find whatever the build actually wrote.
+const MODE = 'challenge';
 
 const results = [];
 const problems = [];
@@ -30,7 +31,15 @@ page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
 const settle = (ms = 320) => page.waitForTimeout(ms);
-const save = () => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), SAVE);
+const saveKey = () => page.evaluate((m) => {
+  const keys = Object.keys(localStorage).filter((k) => k.startsWith(`lsl.career.${m}.v`));
+  keys.sort((a, b) => Number(b.split('.v')[1]) - Number(a.split('.v')[1]));
+  return keys[0] ?? null;
+}, MODE);
+const save = async () => {
+  const k = await saveKey();
+  return k ? page.evaluate((kk) => JSON.parse(localStorage.getItem(kk) ?? 'null'), k) : null;
+};
 const clickText = async (re) => {
   const b = page.getByRole('button', { name: re }).first();
   if (!(await b.count())) return false;
@@ -118,9 +127,17 @@ await settle();
 /* -------------------------------------------------------------- a season */
 
 // Simulate the whole season from the hub.
+const advanceSeason = async () => {
+  // Simulating a season now passes through the postseason screens: qualifying
+  // is shown once, and the bracket opens itself when the playoffs are drawn.
+  if (await clickText(/^Simulate this game$/)) return true;
+  if (await clickText(/^Continue to the (playoffs|season)$/)) return true;
+  return false;
+};
+
 let guard = 0;
-while (guard++ < 40) {
-  const simmed = await clickText(/^Simulate this game$/);
+while (guard++ < 60) {
+  const simmed = await advanceSeason();
   if (!simmed) break;
   await settle(260);
   const s = await save();
@@ -195,12 +212,16 @@ if (after && !after.challenge.offers?.length && after.challenge.totalYears === 1
   const now = await save();
   if (offseason) {
     await settle(400);
-    const cards = await page.getByRole('button', { name: /Make your pitch|Go back to him|Nothing more to say/i }).count();
+    // Each player on the board offers a set of pitch angles, with the one that
+    // fits him best marked as the primary button.
+    const cards = await page.locator('.panel .btn--primary, .panel .btn[disabled]').count();
     check('players are available', now.market.length > 0 && cards > 0,
       `${now.market.length} in the save, ${cards} on screen`);
     check('approaches are available', (now.pitchesLeft ?? 0) > 0, `${now.pitchesLeft}`);
 
-    const pitched = await clickText(/Make your pitch|Go back to him/i);
+    const pitched = await page.locator('.panel .btn--primary').first().click()
+      .then(() => true).catch(() => false);
+    await settle(400);
     const afterPitch = await save();
     check('an approach can be made from Challenge Mode',
       pitched ? afterPitch.pitchesLeft < now.pitchesLeft : true,

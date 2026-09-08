@@ -10,6 +10,8 @@ export interface Settings {
   reducedMotion: boolean;
   showHints: boolean;
   seenTutorial: boolean;
+  /** The recruiting walkthrough opens once, then lives behind a button. */
+  seenRecruiting: boolean;
   /** Show a highlight replay after each goal. */
   goalReplays: boolean;
   /** 'auto' picks touch controls on touch devices. */
@@ -29,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reducedMotion: false,
   showHints: true,
   seenTutorial: false,
+  seenRecruiting: false,
   goalReplays: true,
   controls: 'auto',
   simDetails: false,

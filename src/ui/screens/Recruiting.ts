@@ -14,8 +14,10 @@ import { h, clear } from '../dom';
 import type { App, Screen } from '../App';
 import { screenEl, topbar, panel, panelFlush, emptyPanel, segmented } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
-import { recruitContext } from '../../league/career';
+import { recruitContext, spendCoachPoints, userTeam } from '../../league/career';
 import type { Career, CareerMode } from '../../league/types';
+
+const userTeamShort = (career: Career): string => userTeam(career).short;
 import {
   BOARD_LABEL, BOARD_TAB, assignScout, board, boardTabs, classGrade, hireScout, interestFactors,
   makeOffer, maxScouts, offerWord, releaseScout, signUndrafted, trackProspect,
@@ -28,6 +30,68 @@ import {
 import { TRAITS, qualityLabel, specialtyLabel, type Scout } from '../../scouting/scouts';
 import { POSITION_LABEL, type Position } from '../../data/constants';
 import { LEVELS } from '../../data/levels';
+
+/**
+ * Recruiting has depth, and depth is worthless if the coach cannot see what to
+ * do next. This is the six-step answer, shown the first time and available for
+ * ever after from the button on the board.
+ */
+const STEPS: { icon: string; title: string; body: string }[] = [
+  {
+    icon: '1',
+    title: 'Hire a scout, then send him somewhere',
+    body: 'You cannot judge a player nobody has watched. A scout works one prospect at a '
+      + 'time and closes the error bar on him — and now and then he rings you about somebody '
+      + 'the rankings missed entirely.',
+  },
+  {
+    icon: '2',
+    title: 'Read your own estimate, not the ranking',
+    body: 'Every prospect shows YOUR number with a ± around it. The public ranking beside it '
+      + 'is what everyone else believes, and it is often wrong. The gap between the two is '
+      + 'the entire game.',
+  },
+  {
+    icon: '3',
+    title: 'Put the ones you want on your board',
+    body: 'Tracking a prospect keeps him in front of you and lets you assign a scout. '
+      + 'The Hidden Gems tab fills up as your people establish who is undervalued.',
+  },
+  {
+    icon: '4',
+    title: 'Offer — and offers are scarce',
+    body: 'An offer is the strongest thing you can do, and you only get a handful a year. '
+      + 'It jumps his interest, and it is worth more if your scouts have been around him.',
+  },
+  {
+    icon: '5',
+    title: 'Watch the interest bar and the rivals',
+    body: 'Every prospect page shows exactly what he is weighing about you — your record, '
+      + 'his likely role, who else is chasing him. Fix what you can and the bar moves.',
+  },
+  {
+    icon: '6',
+    title: 'Win the race',
+    body: 'The class closes from the top down and rival programmes find your gems eventually. '
+      + 'Whoever he likes most when he decides gets him, and he arrives on your roster at '
+      + 'the offseason.',
+  },
+];
+
+function walkthrough(onClose: () => void): HTMLElement {
+  return h('div', { class: 'panel', style: 'border-color:var(--accent)' },
+    h('div', { class: 'panel__head' },
+      h('span', { text: 'How recruiting works' }),
+      h('span', { class: 'spacer' }),
+      h('button', { class: 'btn btn--sm btn--ghost', text: 'Close', on: { click: onClose } })),
+    h('div', { class: 'panel__body stack' },
+      ...STEPS.map((s) => h('div', { class: 'row', style: 'gap:10px;align-items:flex-start' },
+        h('span', { class: 'step__n display', text: s.icon }),
+        h('div', { class: 'stack', style: 'gap:1px;min-width:0' },
+          h('div', { class: 'small', style: 'color:var(--text)', text: s.title }),
+          h('div', { class: 'tiny', text: s.body })))),
+      h('button', { class: 'btn btn--primary btn--block', text: 'Got it', on: { click: onClose } })));
+}
 
 const POS_FILTER: { value: Position | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -43,6 +107,8 @@ export class RecruitingScreen implements Screen {
   private body = h('div', { class: 'stack' });
   private tab: BoardTab = 'targets';
   private pos: Position | 'all' = 'all';
+  private help = false;
+  private app: App | null = null;
 
   constructor(app: App, mode: CareerMode) {
     const career = loadCareer(mode);
@@ -59,11 +125,29 @@ export class RecruitingScreen implements Screen {
       return;
     }
 
+    this.app = app;
     const state = career.recruiting;
+    // First time in, the walkthrough is open. After that it is a button.
+    this.help = !app.settings.seenRecruiting;
+    if (this.help) app.updateSettings({ seenRecruiting: true });
+    const helpSlot = h('div');
+    const renderHelp = () => {
+      clear(helpSlot);
+      if (this.help) helpSlot.appendChild(walkthrough(() => { this.help = false; renderHelp(); }));
+    };
+    renderHelp();
+
     this.el = screenEl(
       topbar(app, 'Recruiting', `${LEVELS[state.level].short} · week ${state.week}`),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
+          h('button', {
+            class: 'btn btn--block btn--sm',
+            text: 'How does recruiting work?',
+            on: { click: () => { this.help = !this.help; renderHelp(); } },
+          }),
+          helpSlot,
+          this.nextStep(career),
           this.summary(career),
           this.staffPanel(app, career),
           segmented(
@@ -83,6 +167,62 @@ export class RecruitingScreen implements Screen {
       ),
     );
     this.render(app, career);
+  }
+
+  /**
+   * The single most useful thing on the screen: what to do next, right now,
+   * worked out from the state the class is actually in.
+   */
+  private nextStep(career: Career): HTMLElement {
+    const state = career.recruiting!;
+    const par = levelPar(state.level);
+    const open = state.prospects.filter((p) => !p.committedTo);
+    const idle = state.scouts.filter((s) => !s.assignedTo);
+    const gems = open.filter((p) => p.scouted >= 50 && estimateOf(p, par).potential - p.hype >= 6);
+    const readyToOffer = open.filter((p) => !p.offered && p.scouted >= 45);
+    const battles = open.filter((p) => p.offered && p.suitors.length >= 2);
+
+    let text: string;
+    let where: BoardTab | null = null;
+    if (!state.scouts.length) {
+      text = 'Start by hiring a scout. Without one you are recruiting off the same rankings '
+        + 'as everybody else, and the rankings are wrong.';
+    } else if (idle.length) {
+      text = `${idle.length} scout${idle.length === 1 ? ' is' : 's are'} idle. Open a prospect and send `
+        + `${idle.length === 1 ? 'him' : 'them'} to watch somebody.`;
+      where = 'targets';
+    } else if (gems.length && state.offersLeft > 0) {
+      text = `Your people rate ${gems.length} player${gems.length === 1 ? '' : 's'} well above the ranking. `
+        + 'Offer before somebody else works it out.';
+      where = 'gems';
+    } else if (readyToOffer.length && state.offersLeft > 0) {
+      text = `${state.offersLeft} offer${state.offersLeft === 1 ? '' : 's'} left, and `
+        + `${readyToOffer.length} player${readyToOffer.length === 1 ? '' : 's'} you have seen enough of.`;
+      where = 'targets';
+    } else if (battles.length) {
+      text = `${battles.length} recruiting battle${battles.length === 1 ? '' : 's'} to hold on to. `
+        + 'Keep a scout on them and win the close ones.';
+      where = 'battles';
+    } else if (!state.offersLeft) {
+      text = 'Every offer is out. Your scouts keep working — the rest is whether they say yes.';
+      where = 'offers';
+    } else {
+      text = 'Keep scouting. The class closes from the top down, so the longer you wait the '
+        + 'fewer names are left.';
+      where = 'targets';
+    }
+
+    return h('div', { class: 'panel', style: 'border-color:var(--accent)' },
+      h('div', { class: 'panel__body stack', style: 'gap:6px' },
+        h('div', { class: 'eyebrow', style: 'color:var(--accent)', text: 'What to do next' }),
+        h('div', { class: 'small', style: 'color:var(--text)', text }),
+        where
+          ? h('button', {
+            class: 'btn btn--sm btn--block',
+            text: `Go to ${BOARD_LABEL[where].toLowerCase()}`,
+            on: { click: () => { this.tab = where!; this.pos = 'all'; this.render(this.app!, career); } },
+          })
+          : null));
   }
 
   private summary(career: Career): HTMLElement {
@@ -224,9 +364,12 @@ export class RecruitingScreen implements Screen {
           text: `${est.line} · ${p.hometown}`,
         }),
         h('div', { class: 'tiny', text: this.statusText(p) })),
-      h('div', { class: 'stack', style: 'gap:2px;align-items:flex-end' },
-        h('div', { class: 'num', text: est.margin ? `${est.potential}±${est.margin}` : `${est.potential}` }),
-        h('div', { class: 'tiny', text: `rank ${p.hype}` }),
+      // Both numbers, labelled: what he is now and what your scouts think he
+      // becomes. Showing only the ceiling made every prospect look the same.
+      h('div', { class: 'stack', style: 'gap:1px;align-items:flex-end' },
+        h('div', { class: 'num', style: 'font-size:15px', text: est.margin ? `${est.potential}±${est.margin}` : `${est.potential}` }),
+        h('div', { class: 'tiny', text: 'ceiling' }),
+        h('div', { class: 'tiny', text: `now ${est.overall}` }),
         confidencePips(est.confidence)),
     );
   }
@@ -277,6 +420,39 @@ export class ProspectScreen implements Screen {
           bigStat('Interest', `${Math.round(p.interest)}%`)),
       ));
 
+      // The interest bar and who else is on him — the two things a coach needs
+      // at a glance and had to work out for himself before.
+      const rivalNames = p.suitors
+        .map((su) => recruitContext(career).rivals.find((r) => r.id === su.teamId)?.name ?? 'A rival')
+        .slice(0, 4);
+      body.appendChild(panel('Where he is leaning',
+        h('div', { class: 'row', style: 'justify-content:space-between' },
+          h('span', { class: 'small', style: 'color:var(--text)', text: 'Interest in your programme' }),
+          h('span', { class: 'num', text: `${Math.round(p.interest)}%` })),
+        h('div', { class: 'interest' },
+          h('div', {
+            class: 'interest__fill',
+            style: `width:${Math.round(p.interest)}%;background:${
+              p.interest > 66 ? 'var(--green)' : p.interest > 38 ? 'var(--accent)' : 'var(--red)'}`,
+          })),
+        h('div', {
+          class: 'tiny',
+          text: p.interest > 70 ? 'He is close. Do not let anybody else in.'
+            : p.interest > 45 ? 'He is listening. An offer would move this a long way.'
+              : 'He is not sold. Get somebody in front of him.',
+        }),
+        h('div', { class: 'eyebrow', style: 'margin-top:6px', text: 'Who is in for him' }),
+        h('div', { class: 'stack', style: 'gap:1px' },
+          h('div', {
+            class: 'tiny',
+            style: 'color:var(--accent)',
+            text: `1. ${userTeamShort(career)} — ${Math.round(p.interest)}%`
+              + (p.offered ? ' (offered)' : ''),
+          }),
+          ...(rivalNames.length
+            ? rivalNames.map((n, i) => h('div', { class: 'tiny', text: `${i + 2}. ${n}` }))
+            : [h('div', { class: 'tiny', text: 'Nobody else is on him yet.' })]))));
+
       body.appendChild(panel('Report',
         ...scoutingReport(p, par).map((l) => h('div', { class: 'small', text: l })),
         h('div', { class: 'row row--wrap', style: 'gap:8px;margin-top:4px' },
@@ -286,8 +462,8 @@ export class ProspectScreen implements Screen {
           }))),
       ));
 
-      // Who else is on him, and what he is weighing.
-      body.appendChild(panel('Where you stand',
+      // Exactly what he is weighing about you, line by line.
+      body.appendChild(panel('What he is weighing',
         ...interestFactors(p, recruitContext(career), state.level).map((f) => h('div', {
           class: 'row', style: 'justify-content:space-between',
         },
@@ -373,6 +549,11 @@ export class ProspectScreen implements Screen {
 
     const isUndrafted = undrafted(state).some((x) => x.id === p.id);
     return panel('What you can do',
+      h('div', {
+        class: 'tiny',
+        text: 'An offer is the strongest thing you have and you only get a few. A scout on him '
+          + 'narrows the numbers and warms him to you at the same time.',
+      }),
       offerBtn,
       isUndrafted
         ? h('button', {
@@ -463,7 +644,7 @@ export class ScoutMarketScreen implements Screen {
                     return;
                   }
                   if (hireScout(state, s.id)) {
-                    career.coachingPoints -= s.salary;
+                    spendCoachPoints(career, s.salary);
                     saveCareer(career);
                     redraw();
                   }

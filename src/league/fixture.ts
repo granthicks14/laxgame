@@ -18,9 +18,11 @@ import { GAME_LENGTHS } from '../data/constants';
 import { getTeam, tryGetTeam, type TeamData } from '../data/teams';
 import { tryWorldTeam } from '../data/world';
 import { weatherFor } from '../render/weather';
-import { coachEffects } from './coaching';
+import { coachEffects, withPerks } from './coaching';
+import { coachPerks } from '../challenge/coach';
 import { tacticsFor } from './matchSetup';
 import { simulateMatch, type SimResult } from './simulate';
+import { gameStory, type GameStory } from './gameStory';
 import type { Career, ScheduledGame } from './types';
 
 /** A team as this career has it: world data plus whatever drift it has picked up. */
@@ -64,7 +66,8 @@ export function simulateFixture(career: Career, g: ScheduledGame): SimResult {
     home.homeField?.time ?? 'day',
     tryWorldTeam(g.homeId)?.region ?? 'texas',
   );
-  const fx = coachEffects(career.staff);
+  // The coach's office AND everything he has earned across his career.
+  const fx = withPerks(coachEffects(career.staff), coachPerks(career.coach));
   const mine = fx.offenseIQ * 0.5 + fx.defenseIQ * 0.5;
 
   return simulateMatch(home, away, `${career.seed}:${career.year}:${g.id}`, {
@@ -78,5 +81,30 @@ export function simulateFixture(career: Career, g: ScheduledGame): SimResult {
     awayTactics: g.awayId === career.teamId ? career.tactics : tacticsFor(away),
     homeCoaching: g.homeId === career.teamId ? mine : aiCoaching(g.homeId),
     awayCoaching: g.awayId === career.teamId ? mine : aiCoaching(g.awayId),
+  });
+}
+
+/**
+ * The story of a fixture the coach's team has already played.
+ *
+ * Returns null when the recorded score did not come out of the simulation —
+ * a game the coach played by hand has its own scoreline, and a story must
+ * describe the game that is on the record rather than a different one the
+ * model would have produced.
+ */
+export function fixtureStory(career: Career, g: ScheduledGame): GameStory | null {
+  if (!g.played) return null;
+  const home = g.homeId === career.teamId;
+  if (!home && g.awayId !== career.teamId) return null;
+  const r = simulateFixture(career, g);
+  if (r.homeScore !== g.homeScore || r.awayScore !== g.awayScore) return null;
+  const you = fixtureTeam(career, career.teamId);
+  const them = fixtureTeam(career, home ? g.awayId : g.homeId);
+  return gameStory(r, {
+    side: home ? 'home' : 'away',
+    yourName: you.short || you.name,
+    theirName: them.short || them.name,
+    yourRating: you.overall,
+    theirRating: them.overall,
   });
 }

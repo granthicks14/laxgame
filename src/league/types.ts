@@ -13,6 +13,7 @@ import type { PortalDeparture, TransferCandidate } from './transfers';
 import type { MovementReport } from './promotion';
 import type { RecruitingState } from '../scouting/recruiting';
 import type { ChallengeState } from '../challenge/state';
+import type { CoachProfile } from '../challenge/coach';
 
 export type { PlayoffRound } from '../world/season';
 
@@ -34,6 +35,16 @@ export interface ScheduledGame {
   featured: boolean;
 }
 
+/**
+ * A team's season. `wins`/`losses` are the OVERALL record — every game played,
+ * conference or not. The conference split is tracked alongside it because that
+ * is what seeds a conference tournament.
+ *
+ * Both are needed. Counting only conference games is what made a college record
+ * stop moving after the round robin ended: the non-conference fixtures were
+ * played, but the opponent had no row in this table and the result was dropped
+ * on the floor.
+ */
 export interface StandingRow {
   teamId: string;
   wins: number;
@@ -41,6 +52,10 @@ export interface StandingRow {
   ties: number;
   goalsFor: number;
   goalsAgainst: number;
+  /** Conference-only record, used for seeding. */
+  confWins: number;
+  confLosses: number;
+  confTies: number;
 }
 
 export type WeeklyFocus = 'offense' | 'defense' | 'faceoffs' | 'conditioning' | 'chemistry';
@@ -118,6 +133,12 @@ export interface Career {
   recruiting: RecruitingState | null;
   /** Only set in Challenge Mode: the coach's whole career, across programmes. */
   challenge: ChallengeState | null;
+  /**
+   * THE COACH. One person for the whole career: his points, his experience,
+   * every upgrade he has bought, and every job he has held. Nothing in here is
+   * ever rebuilt or reduced when he changes programme.
+   */
+  coach: CoachProfile | null;
 
   history: SeasonRecord[];
   alumni: Alumnus[];
@@ -125,6 +146,16 @@ export interface Career {
   careerWins: number;
   careerLosses: number;
 
+  /**
+   * The postseason as the coach experiences it. Qualifying is the biggest
+   * moment of a season and used to slide past in one line of small text.
+   */
+  postseason: {
+    /** False until the "you are in" screen has been shown for this season. */
+    clinchedSeen: boolean;
+    /** How many rounds the coach has watched, for following it after a defeat. */
+    revealed: number;
+  };
   /** Set once the regular season is complete. */
   playoffSeeds: string[] | null;
   /** Field for the national bracket, at levels that have one. */
@@ -137,4 +168,4 @@ export interface Career {
   finish: string | null;
 }
 
-export const CAREER_VERSION = 6;
+export const CAREER_VERSION = 7;

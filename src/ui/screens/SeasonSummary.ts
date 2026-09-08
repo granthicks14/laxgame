@@ -7,6 +7,7 @@ import {
   seasonFormat, seasonRecordText, userTeam, type OffseasonReport,
 } from '../../league/career';
 import { ChallengeEndScreen, JobOffersScreen, chapterCard } from './Challenge';
+import { BracketScreen } from './Playoffs';
 import { stageAt } from '../../challenge/ladder';
 import { recruitingSummary } from '../../league/career';
 import type { Career } from '../../league/types';
@@ -123,6 +124,14 @@ export class SeasonSummaryScreen implements Screen {
             app.reset((a) => new MainMenuScreen(a));
           },
         },
+      }));
+    }
+    // The tournament goes on whether or not the coach is in it.
+    if (career.schedule.some((g) => g.playoff)) {
+      actions.push(h('button', {
+        class: 'btn btn--block',
+        text: 'View the final playoff bracket',
+        on: { click: () => app.push((a) => new BracketScreen(a, career.mode)) },
       }));
     }
     actions.push(h('button', {

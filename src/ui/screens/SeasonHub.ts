@@ -25,13 +25,16 @@ import { stageAt } from '../../challenge/ladder';
 import { SITUATIONS } from '../../challenge/situations';
 import { classGrade } from '../../scouting/recruiting';
 import { newsFeed } from '../../league/news';
+import { bracketRounds, postseasonStatus, validateRecords, type PostseasonStatus } from '../../league/career';
+import { BracketScreen, ClinchedScreen } from './Playoffs';
 import { MODE_LABEL, isCareerMode } from '../../league/modes';
 import { marketFor } from '../../league/transfers';
+import type { GameStory } from '../../league/gameStory';
 
 export class SeasonHubScreen implements Screen {
   el: HTMLElement;
 
-  constructor(app: App, mode: CareerMode) {
+  constructor(app: App, mode: CareerMode, story: GameStory | null = null) {
     const career = loadCareer(mode);
     if (!career) {
       this.el = screenEl(
@@ -46,6 +49,33 @@ export class SeasonHubScreen implements Screen {
           }],
         ))),
       );
+      return;
+    }
+
+    // A save written by an older build, or one that drifted, is repaired here
+    // against the schedule before anything is drawn from it.
+    const repaired = validateRecords(career);
+    if (repaired.length) {
+      saveCareer(career);
+      app.toast('Record rebuilt from the schedule');
+    }
+
+    // Qualifying is the biggest moment of a season: it gets a screen, once.
+    const post = postseasonStatus(career);
+    if (post?.qualified && !career.postseason.clinchedSeen && !career.seasonComplete) {
+      this.el = new ClinchedScreen(app, career, () => {
+        app.replace((a) => new SeasonHubScreen(a, mode));
+      }).el;
+      return;
+    }
+
+    // The postseason opens on the bracket. `revealed` is zero until the bracket
+    // has been looked at, so this happens exactly once a season and never
+    // interrupts a coach who has already been in there.
+    if (post && !career.seasonComplete && !career.postseason.revealed && bracketRounds(career).length) {
+      this.el = new BracketScreen(app, mode, () => {
+        app.replace((a) => new SeasonHubScreen(a, mode));
+      }).el;
       return;
     }
 
@@ -64,7 +94,9 @@ export class SeasonHubScreen implements Screen {
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
           this.header(career, rank, standings.length),
-          game ? this.nextGame(app, career, game) : this.playoffWait(career),
+          story ? this.storyPanel(story) : null,
+          post ? this.postseasonPanel(app, career, mode, post) : null,
+          game ? this.nextGame(app, career, game) : this.playoffWait(app, career, mode),
           this.focusPanel(app, career),
           this.officePanel(app, career, mode),
           isCareerMode(mode) ? this.recruitingPanel(app, career, mode) : null,
@@ -250,12 +282,12 @@ export class SeasonHubScreen implements Screen {
           text: 'Simulate this game',
           on: {
             click: () => {
-              simulateUserGame(career, game);
+              const told = simulateUserGame(career, game);
               saveCareer(career);
               const you = userIsHome(career, game) ? game.homeScore : game.awayScore;
               const them = userIsHome(career, game) ? game.awayScore : game.homeScore;
-              app.toast(`${you > them ? 'Won' : 'Lost'} ${you}-${them}`);
-              app.replace((a) => new SeasonHubScreen(a, career.mode));
+              app.toast(`${you > them ? 'Won' : you === them ? 'Drew' : 'Lost'} ${you}-${them}`);
+              app.replace((a) => new SeasonHubScreen(a, career.mode, told));
             },
           },
         }),
@@ -263,12 +295,46 @@ export class SeasonHubScreen implements Screen {
     );
   }
 
-  private playoffWait(career: Career): HTMLElement {
+  /**
+   * What happened in the game that was just simulated. Every word of it comes
+   * out of that game's box score, so it can never describe a different game.
+   */
+  private storyPanel(story: GameStory): HTMLElement {
+    return panel(story.headline,
+      h('div', { class: 'small', text: story.line }),
+      h('div', { class: 'tiny', text: 'Taken from the box score of the game you just simulated.' }));
+  }
+
+  /** Where the coach stands in the bracket, with the bracket one tap away. */
+  private postseasonPanel(
+    app: App, career: Career, mode: CareerMode, post: PostseasonStatus,
+  ): HTMLElement {
+    return panel('Postseason',
+      h('div', { class: 'row row--wrap', style: 'gap:6px' },
+        h('span', { class: 'pill', text: seasonRecordText(career) }),
+        post.qualified && post.seed > 0 ? h('span', { class: 'pill pill--accent', text: `${post.seed} seed of ${post.field}` }) : null,
+        h('span', {
+          class: !post.qualified || post.eliminated ? 'pill pill--red' : 'pill pill--green',
+          text: !post.qualified ? 'Missed the playoffs' : post.eliminated ? 'Eliminated' : post.roundName || 'In the bracket',
+        })),
+      h('button', {
+        class: 'btn btn--block btn--primary',
+        text: !post.qualified || post.eliminated ? 'Follow the bracket' : 'View playoff bracket',
+        on: { click: () => app.push((a) => new BracketScreen(a, mode)) },
+      }));
+  }
+
+  private playoffWait(app: App, career: Career, mode: CareerMode): HTMLElement {
     return panel('Season',
       h('div', { class: 'small', text: career.eliminated
-        ? 'Your season is over. The bracket is playing out.'
+        ? 'Your season is over. The bracket is playing out — you can still watch it.'
         : 'Waiting on the next round.' }),
-      h('div', { class: 'small', text: `Record: ${seasonRecordText(career)}` }));
+      h('div', { class: 'small', text: `Record: ${seasonRecordText(career)}` }),
+      h('button', {
+        class: 'btn btn--block',
+        text: 'Playoff bracket',
+        on: { click: () => app.push((a) => new BracketScreen(a, mode)) },
+      }));
   }
 
   private focusPanel(app: App, career: Career): HTMLElement {

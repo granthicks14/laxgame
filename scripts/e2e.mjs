@@ -96,11 +96,8 @@ async function desktop(browser) {
   await page.waitForTimeout(500);
   check('season hub shows a next game', await page.getByRole('button', { name: /^Play game$/i }).count() === 1);
 
-  for (let i = 0; i < 20; i++) {
-    const sim = page.getByRole('button', { name: /Simulate this game/i });
-    if (!(await sim.count())) break;
-    await sim.click();
-    await page.waitForTimeout(320);
+  for (let i = 0; i < 40; i++) {
+    if (!(await advanceSeason(page, 320))) break;
   }
   const summary = await page.locator('.scroll').innerText();
   check('season reaches a conclusion', /CHAMPIONS|Lost in|Missed the playoffs|Lost the championship/i.test(summary),
@@ -127,6 +124,23 @@ async function desktop(browser) {
   await ctx.close();
 }
 
+/**
+ * One step through a season: the next game, or the postseason screen standing
+ * between the coach and it (qualifying is shown once, and the bracket opens
+ * itself the moment the playoffs are drawn).
+ */
+async function advanceSeason(page, wait) {
+  for (const re of [/^Simulate this game$/i, /^Continue to the (playoffs|season)$/i]) {
+    const b = page.getByRole('button', { name: re }).first();
+    if (await b.count()) {
+      await b.click().catch(() => {});
+      await page.waitForTimeout(wait);
+      return true;
+    }
+  }
+  return false;
+}
+
 async function dynasty(browser) {
   const { ctx, page } = await newPage(browser, { viewport: { width: 1280, height: 900 } });
   await boot(page);
@@ -134,11 +148,8 @@ async function dynasty(browser) {
   await page.waitForTimeout(340);
   await page.getByRole('button', { name: /Start dynasty/i }).click();
   await page.waitForTimeout(500);
-  for (let i = 0; i < 20; i++) {
-    const sim = page.getByRole('button', { name: /Simulate this game/i });
-    if (!(await sim.count())) break;
-    await sim.click();
-    await page.waitForTimeout(300);
+  for (let i = 0; i < 40; i++) {
+    if (!(await advanceSeason(page, 300))) break;
   }
   await page.getByRole('button', { name: /Advance to year 2/i }).click();
   await page.waitForTimeout(700);

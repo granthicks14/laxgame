@@ -1185,3 +1185,9 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
   margin-top: 10px; font-size: 12px; letter-spacing: .2em; color: var(--text);
   border-top: 2px solid var(--line); padding-top: 8px; display: inline-block;
 }
+
+/* --- numbered walkthrough steps ------------------------------------------ */
+.step__n {
+  flex: 0 0 auto; width: 24px; height: 24px; display: grid; place-items: center;
+  border: 2px solid var(--accent); color: var(--accent); font-size: 13px;
+}

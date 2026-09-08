@@ -8,13 +8,14 @@ import {
   TEAMS, getTeam, areRivals, type ClassKey, type TeamData, type TeamRatings,
 } from '../data/teams';
 import { DEFAULT_TACTICS } from '../data/tactics';
-import { EMPTY_STAFF, coachEffects } from './coaching';
+import { EMPTY_STAFF, coachEffects, withPerks } from './coaching';
+import type { CoachEffects } from './coaching';
 import { isCareerMode } from './modes';
 import { DEV_LABEL, developPlayer } from './development';
 import { planMovement, type DivisionResult, type MovementReport } from './promotion';
 import {
   buildMarket, marketFor, pitch, runOutgoing,
-  type PitchResult, type PortalDeparture, type ProgramSnapshot,
+  type PitchAngle, type PitchResult, type PortalDeparture, type ProgramSnapshot,
 } from './transfers';
 import { ensureDevProfile, rosterShape } from '../data/players';
 import { LEVELS } from '../data/levels';
@@ -35,11 +36,15 @@ import {
 } from '../challenge/situations';
 import { difficultyFor } from '../data/levels';
 import { STAR_OVERALL } from '../data/players';
-import { TRACK_ORDER } from './coaching';
+import {
+  buyUpgrade, coachPerks, levelOf, newCoachProfile, seasonXp,
+  type CoachPerks, type CoachProfile,
+} from '../challenge/coach';
 import { DIFFICULTIES, type DifficultyKey } from '../data/difficulty';
 import type { GameLengthKey, Position } from '../data/constants';
 import { buildSchedule, regularSeasonWeeks } from './schedule';
-import { simulateFixture } from './fixture';
+import { fixtureStory, simulateFixture } from './fixture';
+import type { GameStory } from './gameStory';
 import { recordSimulatedUserGame } from './leagueStats';
 import {
   CAREER_VERSION, type Career, type CareerMode, type DevelopmentEntry,
@@ -115,11 +120,13 @@ export function createCareer(opts: NewCareerOptions): Career {
     lastDevelopment: [],
     recruiting: null,
     challenge: null,
+    coach: null,
     history: [],
     alumni: [],
     championships: 0,
     careerWins: 0,
     careerLosses: 0,
+    postseason: { clinchedSeen: false, revealed: 0 },
     playoffSeeds: null,
     nationalSeeds: null,
     autoBids: [],
@@ -144,6 +151,7 @@ export function openRecruitingClass(career: Career): RecruitingState {
     cycle: career.year,
     level: career.level,
     prestige: career.prestige,
+    perks: perksOf(career),
     shell,
     keepScouts: career.recruiting?.scouts,
   });
@@ -155,7 +163,7 @@ export function openRecruitingClass(career: Career): RecruitingState {
 export function recruitContext(career: Career): RecruitContext {
   const team = userTeam(career);
   const row = career.standings[career.teamId];
-  const fx = coachEffects(career.staff);
+  const fx = coachingOf(career);
   const depth = { A: 0, M: 0, D: 0, G: 0, FO: 0 } as Record<Position, number>;
   for (const p of career.roster) depth[p.pos] = (depth[p.pos] ?? 0) + 1;
   const pool = career.level === 'hs'
@@ -164,6 +172,10 @@ export function recruitContext(career: Career): RecruitContext {
       .filter((t) => t.conference === career.conferenceId || t.prestige > 70)
       .map((t) => ({ id: t.id, name: t.short, recruiting: t.recruiting }));
   return {
+    perks: perksOf(career),
+    commitments: career.recruiting
+      ? career.recruiting.prospects.filter((p) => p.committedTo === career.teamId).length
+      : 0,
     teamId: career.teamId,
     teamName: team.short,
     prestige: career.prestige,
@@ -273,7 +285,10 @@ function emptyStandings(career: Career, leagueId: string): Record<string, Standi
     ? classMembers(career, leagueId as ClassKey).map((t) => t.id)
     : teamsInConference(leagueId).map((t) => t.id);
   for (const id of members) {
-    rows[id] = { teamId: id, wins: 0, losses: 0, ties: 0, goalsFor: 0, goalsAgainst: 0 };
+    rows[id] = {
+      teamId: id, wins: 0, losses: 0, ties: 0, goalsFor: 0, goalsAgainst: 0,
+      confWins: 0, confLosses: 0, confTies: 0,
+    };
   }
   return rows;
 }
@@ -365,14 +380,58 @@ function applyResult(career: Career, g: ScheduledGame, homeScore: number, awaySc
   g.homeScore = homeScore;
   g.awayScore = awayScore;
   if (g.playoff) return; // playoff games do not count in the standings table
-  const h = career.standings[g.homeId];
-  const a = career.standings[g.awayId];
-  if (!h || !a) return;
-  h.goalsFor += homeScore; h.goalsAgainst += awayScore;
-  a.goalsFor += awayScore; a.goalsAgainst += homeScore;
-  if (homeScore > awayScore) { h.wins++; a.losses++; }
-  else if (awayScore > homeScore) { a.wins++; h.losses++; }
-  else { h.ties++; a.ties++; }
+  // Every team that HAS a row gets the result, whether or not its opponent does.
+  // A non-conference opponent plays in another conference and keeps its own
+  // table; requiring both sides to be present here silently threw away every
+  // non-conference result, which is how a college record stopped updating
+  // after the round robin finished.
+  const inConf = g.inConference !== false;
+  record(career.standings[g.homeId], homeScore, awayScore, inConf);
+  record(career.standings[g.awayId], awayScore, homeScore, inConf);
+}
+
+function record(row: StandingRow | undefined, forGoals: number, against: number, inConf: boolean): void {
+  if (!row) return;
+  row.goalsFor += forGoals;
+  row.goalsAgainst += against;
+  if (forGoals > against) { row.wins++; if (inConf) row.confWins++; }
+  else if (against > forGoals) { row.losses++; if (inConf) row.confLosses++; }
+  else { row.ties++; if (inConf) row.confTies++; }
+}
+
+/**
+ * Rebuilds every record from the schedule, which is the only source of truth,
+ * and reports what it had to correct. Cheap enough to run after every game.
+ */
+export function validateRecords(career: Career): string[] {
+  const problems: string[] = [];
+  const before = JSON.stringify(career.standings);
+  for (const row of Object.values(career.standings)) {
+    row.wins = 0; row.losses = 0; row.ties = 0;
+    row.confWins = 0; row.confLosses = 0; row.confTies = 0;
+    row.goalsFor = 0; row.goalsAgainst = 0;
+  }
+  for (const g of career.schedule) {
+    if (!g.played || g.playoff) continue;
+    const inConf = g.inConference !== false;
+    record(career.standings[g.homeId], g.homeScore, g.awayScore, inConf);
+    record(career.standings[g.awayId], g.awayScore, g.homeScore, inConf);
+  }
+  if (JSON.stringify(career.standings) !== before) {
+    const mine = career.standings[career.teamId];
+    problems.push(
+      `standings did not match the schedule and were rebuilt from it`
+      + (mine ? ` (your record is now ${mine.wins}-${mine.losses})` : ''),
+    );
+  }
+  // The coach's own record has to equal the games he has actually played.
+  const mine = career.standings[career.teamId];
+  if (mine) {
+    const played = career.schedule.filter((g) => g.featured && g.played && !g.playoff).length;
+    const counted = mine.wins + mine.losses + mine.ties;
+    if (counted !== played) problems.push(`your record counts ${counted} of ${played} completed games`);
+  }
+  return problems;
 }
 
 /** Play out every non-featured game up to and including `week`. */
@@ -397,7 +456,8 @@ export function recordUserResult(career: Career, g: ScheduledGame, homeScore: nu
   const diff = DIFFICULTIES[career.difficulty];
   let cp = 1 + (won ? 1 : 0) + (g.rivalry && won ? 1 : 0) + (g.playoff ? 1 : 0);
   cp = Math.max(1, Math.round(cp * diff.rewardMultiplier));
-  career.coachingPoints += cp;
+  // Points and experience both belong to the coach, not the programme.
+  awardCoachPoints(career, cp, cp * 1.5 + (won ? 2 : 0.5));
   career.prestige = clamp(career.prestige + (won ? 0.8 : -0.6) + (g.playoff && won ? 1.5 : 0), 5, 100);
 
   simulateThroughWeek(career, g.week);
@@ -406,10 +466,18 @@ export function recordUserResult(career: Career, g: ScheduledGame, homeScore: nu
   tickRecruiting(career);
   career.focus = null;
   advancePhase(career);
+  // The schedule is the source of truth. Checking against it after every game
+  // means a record can never drift for more than one fixture.
+  validateRecords(career);
 }
 
-/** Simulate the player's own game instead of playing it. */
-export function simulateUserGame(career: Career, g: ScheduledGame): void {
+/**
+ * Simulate the player's own game instead of playing it.
+ *
+ * Returns the story of what happened, built from the box score the simulation
+ * actually produced, so the screen that reports the score can report the game.
+ */
+export function simulateUserGame(career: Career, g: ScheduledGame): GameStory | null {
   const r = simulateFixture(career, g);
   // The box score is produced BEFORE the result is recorded, because recording
   // the result rolls the league forward and can start the next round.
@@ -420,15 +488,26 @@ export function simulateUserGame(career: Career, g: ScheduledGame): void {
   // the player partly simulated would show holes in its own statistics.
   recordSimulatedUserGame(career, g, mine, theirs);
   syncUserTeamRatings(career);
+  return fixtureStory(career, g);
 }
 
 /* ----------------------------------------------------------------- playoffs */
 
+/**
+ * The table. A conference is seeded on its CONFERENCE record — that is what a
+ * conference tournament is for — while a high school class, where every game is
+ * a league game, is seeded on the whole season. Both fall back to the overall
+ * record to break a tie.
+ */
 export function standingsSorted(career: Career): StandingRow[] {
+  const byConference = career.level !== 'hs';
   return Object.values(career.standings).slice().sort((a, b) => {
-    const pa = winPct(a);
-    const pb = winPct(b);
+    const pa = byConference ? confPct(a) : winPct(a);
+    const pb = byConference ? confPct(b) : winPct(b);
     if (pb !== pa) return pb - pa;
+    const oa = winPct(a);
+    const ob = winPct(b);
+    if (ob !== oa) return ob - oa;
     const da = a.goalsFor - a.goalsAgainst;
     const db = b.goalsFor - b.goalsAgainst;
     if (db !== da) return db - da;
@@ -440,6 +519,26 @@ export const winPct = (r: StandingRow): number => {
   const g = r.wins + r.losses + r.ties;
   return g === 0 ? 0 : (r.wins + r.ties * 0.5) / g;
 };
+
+/** Conference win percentage, which is what seeds a conference tournament. */
+export const confPct = (r: StandingRow): number => {
+  const g = (r.confWins ?? 0) + (r.confLosses ?? 0) + (r.confTies ?? 0);
+  return g === 0 ? 0 : ((r.confWins ?? 0) + (r.confTies ?? 0) * 0.5) / g;
+};
+
+/** "12-4" overall, and "7-1 conference" alongside it where that differs. */
+export function recordText(r: StandingRow | undefined): string {
+  if (!r) return '0-0';
+  return `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ''}`;
+}
+
+export function conferenceRecordText(r: StandingRow | undefined): string | null {
+  if (!r) return null;
+  const g = (r.confWins ?? 0) + (r.confLosses ?? 0) + (r.confTies ?? 0);
+  const all = r.wins + r.losses + r.ties;
+  if (!g || g === all) return null;
+  return `${r.confWins}-${r.confLosses} conf`;
+}
 
 const ROUND_NAME: Record<PlayoffRound, string> = {
   R16: 'First Round',
@@ -680,6 +779,57 @@ function finishSeason(career: Career): void {
   });
 }
 
+/* ----------------------------------------------------------- postseason */
+
+export interface PostseasonStatus {
+  /** True once a bracket exists that the coach's team is in. */
+  qualified: boolean;
+  /** Seed in the bracket he qualified for, 1-based. 0 when unknown. */
+  seed: number;
+  field: number;
+  /** Which competition he is in. */
+  bracket: Bracket;
+  /** The opponent in his next unplayed playoff game. */
+  nextOpponentId: string | null;
+  roundName: string;
+  eliminated: boolean;
+}
+
+/** Where the coach stands in the postseason, or null if there is no bracket. */
+export function postseasonStatus(career: Career): PostseasonStatus | null {
+  const games = career.schedule.filter((g) => g.playoff);
+  if (!games.length) return null;
+  const mine = games.filter((g) => g.featured);
+  const bracket = (mine[0]?.bracket ?? games[0].bracket ?? 'league') as Bracket;
+  const seeds = (bracket === 'national' ? career.nationalSeeds : career.playoffSeeds) ?? [];
+  const next = mine.find((g) => !g.played) ?? null;
+  return {
+    qualified: mine.length > 0,
+    seed: seeds.indexOf(career.teamId) + 1,
+    field: seeds.length,
+    bracket,
+    nextOpponentId: next ? (next.homeId === career.teamId ? next.awayId : next.homeId) : null,
+    roundName: next ? roundNameIn(career, next) : '',
+    eliminated: career.eliminated,
+  };
+}
+
+/** Playoff games grouped into rounds, in the order they are decided. */
+export function bracketRounds(career: Career): {
+  bracket: Bracket; round: PlayoffRound; label: string; games: ScheduledGame[];
+}[] {
+  const order: PlayoffRound[] = ['R16', 'QF', 'SF', 'F'];
+  const brackets: Bracket[] = ['league', 'conference', 'national'];
+  const out: { bracket: Bracket; round: PlayoffRound; label: string; games: ScheduledGame[] }[] = [];
+  for (const b of brackets) {
+    for (const r of order) {
+      const games = career.schedule.filter((g) => g.playoff === r && (g.bracket ?? 'league') === b);
+      if (games.length) out.push({ bracket: b, round: r, label: roundNameIn(career, games[0]), games });
+    }
+  }
+  return out;
+}
+
 /** Winner of the competition that decides this level's champion. */
 export function champion(career: Career): string | null {
   const title = titleBracket(seasonFormat(career));
@@ -733,7 +883,7 @@ export function trainPlayer(career: Career, playerId: string, attr: keyof Player
   if (!p) return false;
   if (p.attrs[attr] >= 99) return false;
   if (p.overall >= p.potential + 4) return false;
-  career.coachingPoints -= TRAIN_COST;
+  spendCoachPoints(career, TRAIN_COST);
   p.attrs[attr] = clamp(p.attrs[attr] + 2, 1, 99);
   refreshOverall(p);
   syncUserTeamRatings(career);
@@ -840,7 +990,7 @@ export function runOffseason(career: Career): OffseasonReport {
   const level = career.level;
   const pro = LEVELS[level].ageSystem === 'pro';
   const team = effectiveTeam(career, career.teamId);
-  const fx = coachEffects(career.staff);
+  const fx = withPerks(coachEffects(career.staff), perksOf(career));
   const shape = rosterShape(level);
   const cap = maxRoster(level);
   const report: OffseasonReport = {
@@ -957,23 +1107,34 @@ export function runOffseason(career: Career): OffseasonReport {
   // The ones who leave are the deepest reserves, and they are named.
   let squad = sortDepthChart(staying);
   if (squad.length > cap) {
+    // Trim POSITION BY POSITION. Slicing a depth-chart-ordered list to a cap
+    // cuts from the end — which is where the goalies and the faceoff man are —
+    // and a squad could come out of the offseason with no keeper at all.
     const keep: PlayerData[] = [];
-    const perPos = new Map<string, number>();
+    const byPos = new Map<Position, PlayerData[]>();
     for (const p of squad) {
-      const n = perPos.get(p.pos) ?? 0;
-      const want = shape.find((r) => r.pos === p.pos)?.count ?? 3;
-      // Everyone inside the shape stays; beyond it, best first until full.
-      if (n < want || keep.length < cap) {
-        keep.push(p);
-        perPos.set(p.pos, n + 1);
-      } else {
-        report.departed.push({ name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall });
-      }
+      const list = byPos.get(p.pos) ?? [];
+      list.push(p);
+      byPos.set(p.pos, list);
     }
-    squad = sortDepthChart(keep.slice(0, cap));
-    for (const p of keep.slice(cap)) {
-      report.departed.push({ name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall });
+    // 1. The shape is untouchable: the best `want` at every position stay.
+    const spare: PlayerData[] = [];
+    for (const { pos, count } of shape) {
+      const list = byPos.get(pos) ?? [];
+      keep.push(...list.slice(0, count));
+      spare.push(...list.slice(count));
     }
+    // Anything at a position the shape does not list is spare by definition.
+    for (const [pos, list] of byPos) {
+      if (!shape.some((r) => r.pos === pos)) spare.push(...list);
+    }
+    // 2. The rest of the squad, best first, until the roster is full.
+    spare.sort((a, b) => b.overall - a.overall);
+    for (const p of spare) {
+      if (keep.length < cap) keep.push(p);
+      else report.departed.push({ name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall });
+    }
+    squad = sortDepthChart(keep);
   }
   career.roster = squad;
 
@@ -1010,9 +1171,13 @@ export function runOffseason(career: Career): OffseasonReport {
   career.eliminated = false;
   career.seasonComplete = false;
   career.finish = null;
-  career.coachingPoints += 4;
+  // A new season has its own postseason: qualifying is news again, and the
+  // bracket opens itself again the day it is drawn.
+  career.postseason = { clinchedSeen: false, revealed: 0 };
+  awardCoachPoints(career, 4, 6);
   career.focus = null;
   // Who you have actually seen play decides how well you know the market.
+  const perks = perksOf(career);
   const playedIds = career.schedule
     .filter((g) => g.featured && g.played)
     .map((g) => (g.homeId === career.teamId ? g.awayId : g.homeId));
@@ -1021,10 +1186,15 @@ export function runOffseason(career: Career): OffseasonReport {
     level === 'hs' ? classMembers(career, career.classKey) : teamsInConference(career.conferenceId),
     Object.fromEntries(Object.entries(career.standings).map(([id, r]) => [id, { wins: r.wins, losses: r.losses }])),
     level,
-    { playedIds: [...new Set(playedIds)], scouts: career.recruiting?.scouts.length ?? 0 },
+    {
+      playedIds: [...new Set(playedIds)],
+      scouts: career.recruiting?.scouts.length ?? 0,
+      extraTargets: perks.extraTargets,
+      fullReports: perks.fullPortalReports,
+    },
   );
   career.portalOut = report.portalOut;
-  career.pitchesLeft = marketFor(level).pitches;
+  career.pitchesLeft = marketFor(level).pitches + perks.extraPitches;
   openRecruitingClass(career);
   syncUserTeamRatings(career);
   return report;
@@ -1054,14 +1224,17 @@ export function programSnapshot(career: Career): ProgramSnapshot {
 }
 
 /** Spends one pitch on a transfer candidate and applies whatever happens. */
-export function pitchTo(career: Career, candidateId: string): PitchOutput | null {
+export function pitchTo(
+  career: Career, candidateId: string, angle: PitchAngle = 'development',
+): PitchOutput | null {
   const c = career.market.find((x) => x.id === candidateId);
   if (!c || career.pitchesLeft <= 0) return null;
   if (c.status === 'committed' || c.status === 'declined' || c.status === 'lost') return null;
 
   const rng = new Rng(`${career.seed}:pitch:${career.year}:${c.id}:${c.attempts}`);
-  const result = pitch(c, programSnapshot(career), rng);
+  const result = pitch(c, programSnapshot(career), rng, angle, perksOf(career));
   c.attempts++;
+  c.lastAngle = angle;
   career.pitchesLeft--;
   c.status = result.outcome === 'committed' ? 'committed'
     : result.outcome === 'considering' ? 'considering'
@@ -1079,10 +1252,22 @@ export function pitchTo(career: Career, candidateId: string): PitchOutput | null
   let roster = sortDepthChart([...career.roster, joining]);
   // A squad has a size. Bringing somebody in when you are full means somebody
   // who was never going to play moves on, and you are told who.
+  //
+  // He must come from a position with somebody to spare. Cutting the worst
+  // player on the roster outright is how a squad ended up with no goalie.
   let displaced: PlayerData | null = null;
-  if (roster.length > MAX_ROSTER) {
-    const cuttable = roster.filter((p) => p !== joining).sort((a, b) => a.overall - b.overall);
-    displaced = cuttable[0] ?? null;
+  const cap = maxRoster(career.level);
+  if (roster.length > cap) {
+    const shape = rosterShape(career.level);
+    const counts = new Map<Position, number>();
+    for (const p of roster) counts.set(p.pos, (counts.get(p.pos) ?? 0) + 1);
+    const cuttable = roster
+      .filter((p) => p !== joining)
+      .filter((p) => (counts.get(p.pos) ?? 0) > (shape.find((r) => r.pos === p.pos)?.count ?? 3))
+      .sort((a, b) => a.overall - b.overall);
+    displaced = cuttable[0]
+      ?? roster.filter((p) => p !== joining).sort((a, b) => a.overall - b.overall)[0]
+      ?? null;
     if (displaced) roster = roster.filter((p) => p !== displaced);
   }
   career.roster = roster;
@@ -1116,6 +1301,85 @@ export function teamRecordText(career: Career, teamId: string): string {
  * of the weakest in Class D, and the roster you are handed has whatever is
  * actually wrong with it applied — see challenge/situations.ts.
  */
+/* ------------------------------------------------------------- the coach */
+
+/** The coach's profile, created on demand so an older save picks one up. */
+export function coachProfile(career: Career): CoachProfile {
+  if (!career.coach) {
+    career.coach = newCoachProfile(career.coachingPoints);
+    // A career already in progress keeps what it has earned.
+    career.coach.careerWins = career.careerWins;
+    career.coach.careerLosses = career.careerLosses;
+    career.coach.championships = career.championships;
+    career.coach.seasons = career.history.length;
+    career.coach.xp = career.history.reduce(
+      (n, h) => n + seasonXp(h.wins, h.losses, h.champion, career.challenge?.stageIndex ?? 0), 0,
+    );
+  }
+  return career.coach;
+}
+
+export function coachLevel(career: Career): number {
+  return levelOf(coachProfile(career).xp);
+}
+
+/** Everything the coach's upgrades are worth, for the systems that read them. */
+export function perksOf(career: Career): CoachPerks {
+  return coachPerks(career.coach);
+}
+
+/** The coach's effects as every screen and system should see them. */
+export function coachingOf(career: Career): CoachEffects {
+  return withPerks(coachEffects(career.staff), perksOf(career));
+}
+
+/** Buys an upgrade. Points live on the coach, so this survives a job change. */
+export function buyCoachUpgrade(career: Career, key: string): boolean {
+  const profile = coachProfile(career);
+  const ok = buyUpgrade(profile, key);
+  if (ok) career.coachingPoints = profile.points;
+  return ok;
+}
+
+/** Spends points from the coach's own purse. */
+export function spendCoachPoints(career: Career, points: number): boolean {
+  const profile = coachProfile(career);
+  if (profile.points < points) return false;
+  profile.points -= points;
+  career.coachingPoints = profile.points;
+  return true;
+}
+
+/** Keeps the legacy Coach Points field and the profile in step. */
+export function awardCoachPoints(career: Career, points: number, xp: number): void {
+  const profile = coachProfile(career);
+  profile.points += points;
+  profile.xp += xp;
+  career.coachingPoints = profile.points;
+}
+
+/** Writes the current job into the coach's history before he leaves it. */
+function closeCurrentJob(career: Career): void {
+  const profile = coachProfile(career);
+  const open = profile.jobs[profile.jobs.length - 1];
+  if (open && open.toYear === null) open.toYear = career.year;
+}
+
+/** Opens a job on the coach's record. */
+function openJob(career: Career, stageKey: string): void {
+  const profile = coachProfile(career);
+  profile.jobs.push({
+    teamId: career.teamId,
+    teamShort: userTeam(career).short,
+    stageKey,
+    fromYear: career.year,
+    toYear: null,
+    wins: 0,
+    losses: 0,
+    titles: 0,
+  });
+}
+
 export function startChallenge(opts: {
   difficulty: DifficultyKey; gameLength: GameLengthKey; teamId?: string; seed?: number;
 }): Career {
@@ -1138,6 +1402,8 @@ export function startChallenge(opts: {
     level: stage.level,
   });
   career.challenge = newChallengeState(0, situation, expectationFor(stage, prestige, situation, 22));
+  career.coach = newCoachProfile(career.coachingPoints);
+  openJob(career, stage.key);
   applyChallengeSituation(career, situation);
   return career;
 }
@@ -1187,6 +1453,23 @@ export function resolveChallengeSeason(career: Career): SeasonVerdict | null {
     teamShort: userTeam(career).short,
     prestige: career.prestige,
   });
+
+  // The season goes onto the coach's own record, and onto the job he held.
+  const profile = coachProfile(career);
+  const wins = last?.wins ?? 0;
+  const losses = last?.losses ?? 0;
+  const won = last?.champion ?? false;
+  profile.seasons++;
+  profile.careerWins += wins;
+  profile.careerLosses += losses;
+  if (won) profile.championships++;
+  const job = profile.jobs[profile.jobs.length - 1];
+  if (job && job.toYear === null) {
+    job.wins += wins;
+    job.losses += losses;
+    if (won) job.titles++;
+  }
+  awardCoachPoints(career, 0, seasonXp(wins, losses, won, state.stageIndex));
 
   const rng = new Rng(`${career.seed}:offers:${state.totalYears}`);
   if (verdict.outcome === 'promoted') {
@@ -1250,14 +1533,19 @@ export function takeChallengeJob(career: Career, offer: JobOffer): void {
   career.ratingOverrides[offer.teamId] = {};
   career.prestige = clamp(offer.prestige, 5, 100);
 
-  // You keep what you know, not who you hired. Assistants do not move with you.
-  for (const track of TRACK_ORDER) career.staff[track] = Math.floor(career.staff[track] * 0.5);
+  // THE COACH DOES NOT RESET. His staff, his points, his upgrades, his
+  // experience and his record all belong to him and travel with him — halving
+  // the office he spent five seasons building was the single worst bug in this
+  // mode. Only the PROGRAMME changes: a new roster, a new division, a new set
+  // of problems.
+  closeCurrentJob(career);
 
   // Everything about the season restarts.
   career.year++;
   career.playoffSeeds = null;
   career.nationalSeeds = null;
   career.autoBids = [];
+  career.postseason = { clinchedSeen: false, revealed: 0 };
   career.eliminated = false;
   career.seasonComplete = false;
   career.finish = null;
@@ -1266,6 +1554,7 @@ export function takeChallengeJob(career: Career, offer: JobOffer): void {
   career.pitchesLeft = 0;
   career.lastMovement = null;
   startSeasonSchedule(career, career.seed + career.year * 7919);
+  openJob(career, stage.key);
   applyChallengeSituation(career, offer.situation);
   // The recruits you were chasing do not follow you. That is the cost of moving.
   openRecruitingClass(career);

@@ -7,15 +7,40 @@
  *   2. A college game is genuinely playable: the Play button loads two real
  *      college rosters into the match engine and produces a real result.
  *
+ * The two saves it starts from are generated here, so the fixtures can never go
+ * stale against the current save format.
+ *
  *   npm run build && npm run preview &
  *   node scripts/ladder-flow.mjs
  */
 import { chromium } from 'playwright';
 import { chromiumPath } from './chromium.mjs';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+/** A Challenge save at a chosen rung, written by the game's own code. */
+const SEEDS = mkdtempSync(join(tmpdir(), 'lsl-seeds-'));
+function seed(name, env) {
+  const file = join(SEEDS, `${name}.json`);
+  const json = execFileSync('npm', ['run', 'seed-save', '--silent'], {
+    env: { ...process.env, ...env }, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+  });
+  writeFileSync(file, json.trim());
+  return file;
+}
+// The A-Class champion, a Division III coach with a season in front of him, and
+// the two ends of the invariant: a Division I title (which must NOT finish the
+// career) and the PLL title (which is the only thing that does).
+const A_CLASS_CHAMPION = seed('aclass-champ', { STAGE: '3', CHAMPION: '1' });
+const D3_SEASON = seed('d3', { STAGE: '4' });
+const D1_CHAMPION = seed('d1-champ', { STAGE: '6', CHAMPION: '1' });
+const PLL_CHAMPION = seed('pll-champ', { STAGE: '8', CHAMPION: '1' });
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
-const KEY = 'lsl.career.challenge.v6';
+// The save version moves with the game; find whatever the build actually wrote.
+const MODE = 'challenge';
 
 const results = [];
 const problems = [];
@@ -33,7 +58,15 @@ page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
 const settle = (ms = 350) => page.waitForTimeout(ms);
-const save = () => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), KEY);
+const saveKey = () => page.evaluate((m) => {
+  const keys = Object.keys(localStorage).filter((k) => k.startsWith(`lsl.career.${m}.v`));
+  keys.sort((a, b) => Number(b.split('.v')[1]) - Number(a.split('.v')[1]));
+  return keys[0] ?? null;
+}, MODE);
+const save = async () => {
+  const k = await saveKey();
+  return k ? page.evaluate((kk) => JSON.parse(localStorage.getItem(kk) ?? 'null'), k) : null;
+};
 const clickText = async (re) => {
   const b = page.getByRole('button', { name: re }).first();
   if (!(await b.count())) return false;
@@ -44,8 +77,11 @@ const clickText = async (re) => {
 
 async function load(file) {
   const json = readFileSync(file, 'utf8').trim();
+  // The seeded save says which version it is; write it under that key so the
+  // app loads it directly instead of migrating or ignoring it.
+  const key = `lsl.career.${MODE}.v${JSON.parse(json).version}`;
   await page.goto(BASE, { waitUntil: 'networkidle' });
-  await page.evaluate(([k, s]) => { localStorage.clear(); localStorage.setItem(k, s); }, [KEY, json]);
+  await page.evaluate(([k, s]) => { localStorage.clear(); localStorage.setItem(k, s); }, [key, json]);
   await page.reload({ waitUntil: 'networkidle' });
   await page.getByText('Press Start').click();
   await settle(400);
@@ -57,7 +93,7 @@ async function load(file) {
 
 /* ------------------------ 1. the A-Class championship is NOT the end ------ */
 
-await load('/tmp/aclass-champ.json');
+await load(A_CLASS_CHAMPION);
 const afterTitle = await save();
 check('the Class A title did not end the career', !afterTitle.challenge.complete,
   `complete=${afterTitle.challenge.complete}`);
@@ -100,7 +136,7 @@ check('the career still has not ended', !inCollege.challenge.complete);
 
 /* ------------------------ 2. a college game is actually playable ---------- */
 
-await load('/tmp/d3-save.json');
+await load(D3_SEASON);
 const d3 = await save();
 check('the seeded Division III career loaded', d3.level === 'd3', d3.level);
 const hub = (await page.locator('.wrapper').innerText());
@@ -159,6 +195,33 @@ check('the college result is recorded in the league',
   `${recorded.schedule.filter((g) => g.played).length} games played`);
 check('college players recorded statistics',
   recorded.roster.some((p) => p.season.gamesPlayed > 0));
+
+/* -------------------- 3. the ONE ending, and the ones that are not ---------- */
+
+await load(D1_CHAMPION);
+const afterD1 = await save();
+check('a Division I title does not end the career', !afterD1.challenge.complete,
+  afterD1.challenge.endedReason ?? 'still coaching');
+const d1Screen = (await page.locator('.wrapper').innerText()).toLowerCase();
+check('a Division I champion is not shown the final screen',
+  !/legendary coaching journey complete/.test(d1Screen));
+
+await load(PLL_CHAMPION);
+const afterPll = await save();
+check('winning the PLL ends the career', !!afterPll.challenge.complete,
+  afterPll.challenge.endedReason ?? 'none');
+check('the ending is the PLL championship',
+  /premier lacrosse league/i.test(afterPll.challenge.endedReason ?? ''),
+  afterPll.challenge.endedReason ?? 'none');
+// The coach sees the season he just won first; the ending is the step after it.
+const verdict = (await page.locator('.wrapper').innerText()).toLowerCase();
+check('the winning season is reported before the career ends',
+  /pll championship/.test(verdict), verdict.split('\n').find((l) => l.trim()) ?? '');
+await clickText(/See how the career ended/i);
+await settle(700);
+const endScreen = (await page.locator('.wrapper').innerText()).toLowerCase();
+check('the final completion screen is shown', /legendary coaching journey complete/.test(endScreen),
+  endScreen.split('\n').filter((l) => l.trim()).slice(0, 8).join(' / '));
 
 console.log(`\n${results.filter(Boolean).length}/${results.length} checks passed`);
 if (problems.length) console.log(`\nFailed: ${problems.join(', ')}`);

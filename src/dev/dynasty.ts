@@ -8,7 +8,7 @@
 import { Rng } from '../core/rng';
 import {
   createCareer, advancePhase, classMembers, effectiveClass, nextUserGame, pitchTo,
-  runOffseason, simulateUserGame, standingsSorted, userTeam,
+  runOffseason, spendCoachPoints, simulateUserGame, standingsSorted, userTeam,
 } from '../league/career';
 import { leaders, leagueStatLines } from '../league/leagueStats';
 import { LADDER_LABEL, ordinal } from '../league/promotion';
@@ -38,7 +38,7 @@ function spend(career: Career): string[] {
     for (;;) {
       const cost = upgradeCost(career.staff[track]);
       if (cost === null || career.coachingPoints < cost) break;
-      career.coachingPoints -= cost;
+      spendCoachPoints(career, cost);
       career.staff[track]++;
       bought.push(`${track}→${career.staff[track]}`);
     }

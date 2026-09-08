@@ -3,7 +3,7 @@ import type { App, Screen } from '../App';
 import type { CareerMode } from '../../league/types';
 import { screenEl, topbar, panel, panelFlush, ratingBar, segmented, teamBadge, emptyPanel } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
-import { TRAIN_COST, trainPlayer, userTeam } from '../../league/career';
+import { TRAIN_COST, awardCoachPoints, perksOf, spendCoachPoints, trainPlayer, userTeam } from '../../league/career';
 import type { Career } from '../../league/types';
 import {
   ATTR_LABEL, GRADE_LABEL, sortDepthChart, starTier,
@@ -13,7 +13,7 @@ import { OFFENSE_STYLES, DEFENSE_STYLES, type DefenseStyle, type OffenseStyle } 
 import { POSITION_LABEL } from '../../data/constants';
 import type { TeamData } from '../../data/teams';
 import { rosterSourceFor } from '../../data/rosters';
-import { PROJECTS, committedCost, project, projectsFor } from '../../league/projects';
+import { PROJECTS, committedCost, project, projectCost, projectsFor } from '../../league/projects';
 import { CURVES, TIERS, archetype, tierFor } from '../../data/archetypes';
 import { levelPar } from '../../scouting/prospects';
 
@@ -294,7 +294,7 @@ export class PlayerScreen implements Screen {
     const redraw = () => {
       clear(box);
       const active = project(p.project);
-      const spent = committedCost(career.roster);
+      const spent = committedCost(career.roster, perksOf(career).projectDiscount);
       box.appendChild(h('div', {
         class: 'tiny',
         text: `${spent} CP committed to projects across the squad. A project runs for one offseason and then ends.`,
@@ -304,10 +304,10 @@ export class PlayerScreen implements Screen {
         box.appendChild(h('div', { class: 'tiny', text: active.tradeoff }));
         box.appendChild(h('button', {
           class: 'btn btn--block',
-          text: `Cancel and refund ${active.cost} CP`,
+          text: `Cancel and refund ${projectCost(active, perksOf(career).projectDiscount)} CP`,
           on: {
             click: () => {
-              career.coachingPoints += active.cost;
+              awardCoachPoints(career, projectCost(active, perksOf(career).projectDiscount), 0);
               p.project = null;
               saveCareer(career);
               redraw();
@@ -317,8 +317,10 @@ export class PlayerScreen implements Screen {
         }));
         return;
       }
+      const discount = perksOf(career).projectDiscount;
       for (const info of projectsFor(p).slice(0, 4)) {
-        const afford = career.coachingPoints >= info.cost;
+        const cost = projectCost(info, discount);
+        const afford = career.coachingPoints >= cost;
         box.appendChild(h('div', { class: 'row', style: 'gap:10px;align-items:center' },
           h('div', { class: 'stack', style: 'gap:1px;flex:1 1 auto;min-width:0' },
             h('div', { class: 'small', style: 'color:var(--text)', text: info.label }),
@@ -326,11 +328,11 @@ export class PlayerScreen implements Screen {
             h('div', { class: 'tiny', text: info.tradeoff })),
           h('button', {
             class: `btn btn--sm${afford ? ' btn--primary' : ''}`,
-            text: `${info.cost} CP`,
+            text: `${cost} CP`,
             on: {
               click: () => {
-                if (career.coachingPoints < info.cost) { app.toast('Not enough Coach Points.'); return; }
-                career.coachingPoints -= info.cost;
+                if (career.coachingPoints < cost) { app.toast('Not enough Coach Points.'); return; }
+                spendCoachPoints(career, cost);
                 p.project = info.key;
                 saveCareer(career);
                 redraw();

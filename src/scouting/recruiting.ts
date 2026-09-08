@@ -33,6 +33,7 @@ import {
 import {
   noiseDecay, scoutMarket, weeklyProgress, weeklyRapport, type Scout,
 } from './scouts';
+import type { CoachPerks } from '../challenge/coach';
 
 export interface RecruitNews {
   week: number;
@@ -50,6 +51,8 @@ export interface RecruitingState {
   scouts: Scout[];
   /** Scouts available to hire this cycle. */
   market: Scout[];
+  /** Extra staff slots the coach's upgrades have earned. */
+  extraScouts: number;
   offersLeft: number;
   maxOffers: number;
   /** Committed to you. They join the roster at the offseason. */
@@ -105,6 +108,8 @@ export interface NewClassOptions {
   cycle: number;
   level: Level;
   prestige: number;
+  /** The coach's upgrades, which decide how big a class he can work. */
+  perks?: CoachPerks;
   /** A shell whose ratings set the talent pool the class is drawn from. */
   shell: GameTeam;
   /** Scouts carried over from last cycle. */
@@ -113,9 +118,10 @@ export interface NewClassOptions {
 
 export function newRecruitingClass(opts: NewClassOptions): RecruitingState {
   const key = `${opts.seed}:class:${opts.cycle}`;
+  const perks = opts.perks;
   const prospects = buildClass(key, {
     level: opts.level,
-    size: classSize(opts.level),
+    size: classSize(opts.level) + (perks?.extraProspects ?? 0),
     origin: originFor(opts.level),
     shell: opts.shell,
   });
@@ -126,8 +132,9 @@ export function newRecruitingClass(opts: NewClassOptions): RecruitingState {
     prospects,
     scouts,
     market: scoutMarket(`${key}:market`, opts.level, opts.prestige),
-    offersLeft: offerBudget(opts.level),
-    maxOffers: offerBudget(opts.level),
+    extraScouts: perks?.extraScouts ?? 0,
+    offersLeft: offerBudget(opts.level) + (perks?.extraOffers ?? 0),
+    maxOffers: offerBudget(opts.level) + (perks?.extraOffers ?? 0),
     signed: [],
     news: [],
     week: 0,
@@ -271,7 +278,7 @@ export interface HireResult {
 export function hireScout(state: RecruitingState, scoutId: string): Scout | null {
   const i = state.market.findIndex((s) => s.id === scoutId);
   if (i < 0) return null;
-  if (state.scouts.length >= maxScouts(state.level)) return null;
+  if (state.scouts.length >= maxScouts(state.level, state.extraScouts ?? 0)) return null;
   const [s] = state.market.splice(i, 1);
   state.scouts.push(s);
   return s;
@@ -286,7 +293,11 @@ export function releaseScout(state: RecruitingState, scoutId: string): void {
 }
 
 /** A programme can only carry so many scouts, whatever it can afford. */
-export function maxScouts(level: Level): number {
+export function maxScouts(level: Level, extra = 0): number {
+  return baseScouts(level) + extra;
+}
+
+function baseScouts(level: Level): number {
   switch (level) {
     case 'hs': return 2;
     case 'd3': return 3;
@@ -328,6 +339,8 @@ export function withdrawOffer(state: RecruitingState, id: string): void {
 /* ------------------------------------------------------------- the weekly */
 
 export interface RecruitContext {
+  /** What the coach's own upgrades are worth. */
+  perks: CoachPerks;
   teamId: string;
   teamName: string;
   prestige: number;
@@ -336,6 +349,8 @@ export interface RecruitContext {
   wins: number;
   losses: number;
   championships: number;
+  /** Commitments already landed this cycle, for momentum. */
+  commitments: number;
   /** How many players you already carry at each position. */
   depth: Record<Position, number>;
   /** Programmes that can compete for these players. */
@@ -351,9 +366,12 @@ export function interestFactors(
 ): { label: string; delta: number }[] {
   const out: { label: string; delta: number }[] = [];
   const par = levelPar(level);
+  if (ctx.perks.interestFloor) {
+    out.push({ label: 'Your reputation as a recruiter', delta: ctx.perks.interestFloor });
+  }
 
   // A prospect ranked far above your programme is not listening.
-  const reach = p.hype - (ctx.prestige * 0.35 + par * 0.65);
+  const reach = p.hype - (ctx.prestige * 0.35 + par * 0.65) - ctx.perks.reach;
   if (reach > 6) out.push({ label: 'Ranked above your programme', delta: -Math.round(reach * 1.6) });
   else if (reach < -8) out.push({ label: 'You are a step up for him', delta: Math.round(Math.min(14, -reach * 0.8)) });
 
@@ -370,7 +388,9 @@ export function interestFactors(
   const room = have <= 2 ? 12 : have <= 4 ? 4 : -10;
   out.push({ label: room > 0 ? 'He would play right away' : 'You are stacked at his position', delta: room });
 
-  if (p.offered) out.push({ label: 'You have offered', delta: 16 });
+  if (p.offered) out.push({ label: 'You have offered', delta: 16 + ctx.perks.closing });
+  const landed = ctx.commitments * ctx.perks.momentum;
+  if (landed) out.push({ label: 'Momentum from your other commitments', delta: Math.round(landed) });
   if (p.suitors.length >= 2) out.push({ label: `${p.suitors.length} other programmes involved`, delta: -Math.min(18, p.suitors.length * 5) });
 
   return out;
@@ -401,13 +421,13 @@ export function advanceRecruitingWeek(
   //    ever gets onto your board, because you cannot scout a player you have
   //    never heard of, and the rankings will not tell you about him.
   for (const s of state.scouts) {
-    const chance = 0.12 + s.quality * 0.05;
+    const chance = (0.12 + s.quality * 0.05) * ctx.perks.gemTips;
     if (rng.next() > chance) continue;
     const unseen = state.prospects.filter((p) => !p.committedTo && p.scouted < 12 && !p.tracked);
     if (!unseen.length) continue;
     // A scout with an eye for a sleeper mostly tips genuinely undervalued
     // players. Everyone else is guessing, which is what makes him worth hiring.
-    const bias = s.trait === 'gems' ? 0.62 : 0.22;
+    const bias = clamp((s.trait === 'gems' ? 0.62 : 0.22) * ctx.perks.gemTips, 0, 0.9);
     const undervalued = unseen.filter((p) => p.player.potential - p.hype >= 8);
     const pool = undervalued.length && rng.next() < bias ? undervalued : unseen;
     const p = rng.pick(pool);
@@ -427,9 +447,11 @@ export function advanceRecruitingWeek(
     const p = state.prospects.find((x) => x.id === s.assignedTo);
     if (!p || p.committedTo) { s.assignedTo = null; continue; }
     const wasBlind = p.scouted < 50;
-    p.scouted = clamp(p.scouted + weeklyProgress(s, p) * rng.range(0.8, 1.2), 0, 100);
-    p.noise *= noiseDecay(s);
-    p.interest = clamp(p.interest + weeklyRapport(s), 0, 100);
+    p.scouted = clamp(
+      p.scouted + weeklyProgress(s, p) * ctx.perks.scoutSpeed * rng.range(0.8, 1.2), 0, 100,
+    );
+    p.noise *= Math.pow(noiseDecay(s), ctx.perks.scoutAccuracy);
+    p.interest = clamp(p.interest + weeklyRapport(s) + ctx.perks.interestPerWeek, 0, 100);
 
     if (wasBlind && p.scouted >= 50) {
       const est = estimateOf(p, par);

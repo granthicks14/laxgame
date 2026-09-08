@@ -18,6 +18,7 @@ import { getTeam } from '../data/teams';
 import { worldTeam } from '../data/world';
 import type { Level } from '../data/levels';
 import type { Position } from '../data/constants';
+import { coachPerks } from '../challenge/coach';
 
 const line = (s = '') => console.log(s);
 const pct = (n: number, d: number) => `${((n / Math.max(1, d)) * 100).toFixed(1)}%`;
@@ -70,6 +71,8 @@ function cycle(level: Level, teamId: string, scouts: number, seed: number): {
   const state = newRecruitingClass({ seed, cycle: 1, level, prestige: 70, shell });
   const depth = { A: 3, M: 5, D: 4, G: 1, FO: 1 } as Record<Position, number>;
   const ctx: RecruitContext = {
+    perks: coachPerks(null),
+    commitments: 0,
     teamId,
     teamName: shell.short,
     prestige: 70,
@@ -144,6 +147,7 @@ line('AI PROGRAMMES — do gems get taken if you leave them alone?');
   for (let i = 0; i < 20; i++) {
     const state = newRecruitingClass({ seed: 5000 + i, cycle: 1, level: 'd1', prestige: 40, shell });
     const ctx: RecruitContext = {
+      perks: coachPerks(null), commitments: 0,
       teamId: 'me', teamName: 'Me', prestige: 40, appeal: 0, wins: 2, losses: 10, championships: 0,
       depth: { A: 6, M: 9, D: 8, G: 3, FO: 2 } as Record<Position, number>,
       rivals: [

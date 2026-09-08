@@ -33,6 +33,7 @@ import type { GameTeam, TeamData } from '../data/teams';
 import { teamsInConference as WORLD_TEAMS_IN, tryWorldTeam } from '../data/world';
 import type { Level } from '../data/levels';
 import { coachEffects, type CoachStaff } from './coaching';
+import type { CoachPerks } from '../challenge/coach';
 
 export type TransferReason =
   | 'buried'
@@ -61,6 +62,8 @@ export interface TransferCandidate {
   lostToTeamId?: string;
   /** Pitches you have already spent on him. */
   attempts: number;
+  /** The angle you last used on him, so a second approach has to say something new. */
+  lastAngle?: PitchAngle;
   /**
    * 0..100 — how well you know this player. A man you played against twice is
    * a known quantity; one from the other side of the league is a report.
@@ -97,6 +100,101 @@ export function transferEstimate(c: TransferCandidate): TransferEstimate {
         : margin <= 6 ? 'Second-hand reports only'
           : 'You are going on a highlight reel',
   };
+}
+
+/* ------------------------------------------------------------- the pitch */
+
+/**
+ * What you say to him. Each angle is worth something to some players and
+ * nothing to others, and the fit is worked out from HIS situation rather than
+ * from a dice roll — a buried player wants minutes, a player on a losing team
+ * wants to win, and a senior wants to be developed for the next level.
+ */
+export type PitchAngle =
+  | 'playingtime' | 'championship' | 'starting' | 'development'
+  | 'coaching' | 'prestige' | 'culture' | 'freshstart' | 'system';
+
+export interface PitchAngleInfo {
+  key: PitchAngle;
+  label: string;
+  /** What the coach is offering, in his own words. */
+  blurb: string;
+  /** Shown when it works. */
+  landed: string;
+}
+
+export const PITCH_ANGLES: Record<PitchAngle, PitchAngleInfo> = {
+  playingtime: { key: 'playingtime', label: 'Immediate playing time',
+    blurb: 'He walks in and plays. Say it plainly and mean it.',
+    landed: 'He wants the field, and you promised it.' },
+  championship: { key: 'championship', label: 'Championship opportunity',
+    blurb: 'This programme is going to win something, and he can be part of it.',
+    landed: 'He wants to win, and you are winning.' },
+  starting: { key: 'starting', label: 'A starting role',
+    blurb: 'Not minutes — the job. His position, his line.',
+    landed: 'The job was the whole pitch.' },
+  development: { key: 'development', label: 'Player development',
+    blurb: 'He leaves here a better player than he arrived. That is the offer.',
+    landed: 'He believes you can make him better.' },
+  coaching: { key: 'coaching', label: 'Better coaching',
+    blurb: 'The staff here is the reason players get better. Sell the staff.',
+    landed: 'He came for the coaching.' },
+  prestige: { key: 'prestige', label: 'Programme prestige',
+    blurb: 'The badge, the crowd, the history. Some players want the name.',
+    landed: 'He wanted the name on the front of the shirt.' },
+  culture: { key: 'culture', label: 'Team culture',
+    blurb: 'Nobody leaves this locker room. Sell the room.',
+    landed: 'He wanted to be somewhere settled.' },
+  freshstart: { key: 'freshstart', label: 'A fresh start',
+    blurb: 'Whatever happened where he was, it does not follow him here.',
+    landed: 'He needed to be somewhere else, and you offered it.' },
+  system: { key: 'system', label: 'System fit',
+    blurb: 'The way this team plays is the way he plays. Show him the tape.',
+    landed: 'He saw himself in the way you play.' },
+};
+
+export const PITCH_ORDER: PitchAngle[] = [
+  'playingtime', 'starting', 'championship', 'development',
+  'coaching', 'prestige', 'culture', 'freshstart', 'system',
+];
+
+/**
+ * How well an angle fits this player, in interest points. Positive is a good
+ * read of him; negative means you told him something he did not care about.
+ */
+export function angleFit(angle: PitchAngle, c: TransferCandidate, prog: ProgramSnapshot): number {
+  const fx = coachEffects(prog.staff);
+  const have = prog.roster.filter((p) => p.pos === c.player.pos).length;
+  const needed = NEEDED[c.player.pos] ?? 3;
+  const room = needed - have;
+  const winning = prog.wins > prog.losses + 1;
+  const strong = prog.prestige >= 72;
+
+  switch (angle) {
+    case 'playingtime':
+      return c.reason === 'buried' ? 14 : room > 0 ? 8 : -8;
+    case 'starting':
+      return c.reason === 'buried' || c.reason === 'role' ? (room > 0 ? 16 : 4) : -6;
+    case 'championship':
+      return c.reason === 'losing' ? (winning || prog.championships > 0 ? 16 : -4) : winning ? 6 : -6;
+    case 'development':
+      return c.reason === 'development' ? 14 + prog.staff.development * 2 : prog.staff.development * 2 - 2;
+    case 'coaching':
+      return Math.round(fx.developmentRate * 10 - 10) + (c.reason === 'development' ? 8 : -2);
+    case 'prestige':
+      return strong ? 10 : -10;
+    case 'culture':
+      return Math.round(fx.retention * 14) - 3;
+    case 'freshstart':
+      return c.reason === 'losing' || c.reason === 'buried' ? 7 : -3;
+    case 'system':
+      return c.player.overall >= prog.team.overall ? 4 : 9;
+  }
+}
+
+/** The angle a coach would obviously reach for, so the UI can suggest one. */
+export function suggestedAngle(c: TransferCandidate, prog: ProgramSnapshot): PitchAngle {
+  return [...PITCH_ORDER].sort((a, b) => angleFit(b, c, prog) - angleFit(a, c, prog))[0];
 }
 
 export interface InterestBreakdown {
@@ -204,6 +302,10 @@ export interface MarketKnowledge {
   playedIds: string[];
   /** Scouts on the payroll, which is what closes the gap on everybody else. */
   scouts: number;
+  /** Extra names the coach's connections put in the window. */
+  extraTargets?: number;
+  /** Portal Expert: everyone in the window comes with a full report. */
+  fullReports?: boolean;
 }
 
 export function buildMarket(
@@ -255,7 +357,7 @@ export function buildMarket(
   // How well the coach knows each of them, before the cut.
   for (const c of pool) {
     const seen = knowledge.playedIds.includes(c.fromTeamId);
-    c.known = clamp(
+    c.known = knowledge.fullReports ? 100 : clamp(
       (seen ? 82 : info.baseKnowledge) + knowledge.scouts * 9 + rng.range(-6, 6),
       0, 100,
     );
@@ -283,7 +385,7 @@ export function buildMarket(
     perTeam.set(c.fromTeamId, n + 1);
     perPos.set(c.player.pos, pn + 1);
     picked.push(c);
-    if (picked.length >= info.size) break;
+    if (picked.length >= info.size + (knowledge.extraTargets ?? 0)) break;
   }
   return picked;
 }
@@ -335,9 +437,14 @@ export function runOutgoing(
   const left: PortalDeparture[] = [];
 
   for (const [pos, list] of byPos) {
+    const floor = NEEDED[pos] ?? 3;
+    let remaining = list.length;
     for (let depth = 0; depth < list.length; depth++) {
       const p = list[depth];
-      const needed = NEEDED[pos] ?? 3;
+      const needed = floor;
+      // A position can never be stripped below what it takes to field a team.
+      // Without this a run of departures left a squad with two midfielders.
+      if (remaining <= floor) { stayed.push(p); continue; }
       // Seniors are leaving anyway; the ones who go are the ones with years
       // left and no path to the field.
       const buried = depth >= needed;
@@ -351,6 +458,7 @@ export function runOutgoing(
       chance *= clamp(1 - ctx.retention * 0.65, 0.3, 1);
       if (rng.next() > clamp(chance, 0, 0.45)) { stayed.push(p); continue; }
 
+      remaining--;
       const to = ctx.rivals.length ? rng.pick(ctx.rivals) : null;
       left.push({
         name: `${p.first} ${p.last}`,
@@ -480,18 +588,35 @@ export interface PitchResult {
  */
 export function pitch(
   c: TransferCandidate, prog: ProgramSnapshot, rng: Rng,
+  angle: PitchAngle = 'development', perks?: CoachPerks,
 ): PitchResult {
   const { score } = interestIn(c, prog);
   const bonus = c.status === 'considering' ? 12 : 0;
   const fatigue = c.attempts * 6;
-  const chance = clamp((score + bonus - fatigue) / 130, 0.02, 0.9);
+  // What you actually SAY to him. A player who is buried does not want to hear
+  // about your culture; he wants to hear that he will play.
+  let fit = angleFit(angle, c, prog);
+  // He has already heard this one. Saying the same thing louder is not a pitch.
+  if (c.lastAngle === angle) fit = Math.min(fit, 0) + Math.max(0, fit) * 0.25 - 6;
+  const power = perks?.pitchPower ?? 1;
+  const chance = clamp(((score + bonus + fit - fatigue) / 130) * power, 0.02, 0.93);
   const roll = rng.next();
 
   if (roll < chance) {
-    return { outcome: 'committed', message: `${c.player.first} ${c.player.last} is coming.` };
+    return {
+      outcome: 'committed',
+      message: `${c.player.first} ${c.player.last} is coming. ${PITCH_ANGLES[angle].landed}`,
+    };
   }
-  if (roll < chance + 0.28 && c.attempts < 2) {
-    return { outcome: 'considering', message: 'He is thinking about it. Go back to him.' };
+  if (roll < chance + 0.28 * (perks?.pitchPower ?? 1) && c.attempts < 2) {
+    return {
+      outcome: 'considering',
+      message: c.lastAngle === angle
+        ? 'He has heard that from you already. Try a different angle.'
+        : fit >= 8
+          ? 'That landed. He is thinking hard about it — go back to him.'
+          : 'He is thinking about it, but that was not what he wanted to hear.',
+    };
   }
   // Somebody else in the league takes him: a rival with a real need.
   if (rng.next() < 0.3) {

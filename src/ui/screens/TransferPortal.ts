@@ -5,7 +5,8 @@ import { screenEl, topbar, panel, emptyPanel, teamBadge } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
 import { pitchTo, programSnapshot } from '../../league/career';
 import {
-  REASON_TEXT, interestIn, marketFor, transferEstimate, type TransferCandidate,
+  PITCH_ANGLES, PITCH_ORDER, REASON_TEXT, angleFit, interestIn, marketFor,
+  suggestedAngle, transferEstimate, type TransferCandidate,
 } from '../../league/transfers';
 import { MODE_LABEL } from '../../league/modes';
 import { GRADE_LABEL, starTier } from '../../data/players';
@@ -156,24 +157,68 @@ export class TransferPortalScreen implements Screen {
             text: `${f.delta >= 0 ? '+' : ''}${f.delta}`,
           })))),
 
-      h('button', {
-        class: `btn btn--block${closed || career.pitchesLeft <= 0 ? '' : ' btn--primary'}`,
-        disabled: closed || career.pitchesLeft <= 0,
-        text: closed
-          ? 'Nothing more to say'
-          : career.pitchesLeft <= 0
-            ? `No ${info.pitchesWord} left this window`
-            : c.status === 'considering' ? 'Go back to him' : 'Make your pitch',
-        on: {
-          click: () => {
-            const out = pitchTo(career, c.id);
-            if (!out) return;
-            saveCareer(career);
-            app.toast(out.result.message);
-            render();
+      // WHAT you say to him. Each angle is worth something to some players and
+      // nothing to others, and the fit is worked out from his own situation.
+      closed || career.pitchesLeft <= 0
+        ? null
+        : this.pitchPicker(app, career, c, render),
+      closed || career.pitchesLeft <= 0
+        ? h('button', {
+          class: 'btn btn--block',
+          disabled: true,
+          text: closed ? 'Nothing more to say' : `No ${info.pitchesWord} left this window`,
+        })
+        : null,
+    );
+  }
+
+  /** The angles, best fit first, each saying what it offers and how it lands. */
+  private pitchPicker(
+    app: App, career: Career, c: TransferCandidate, render: () => void,
+  ): HTMLElement {
+    const snap = programSnapshot(career);
+    // The angle he has already heard is never the one suggested next.
+    const fresh = PITCH_ORDER.filter((k) => k !== c.lastAngle);
+    const best = c.lastAngle === suggestedAngle(c, snap)
+      ? [...fresh].sort((a, b) => angleFit(b, c, snap) - angleFit(a, c, snap))[0]
+      : suggestedAngle(c, snap);
+    const angles = [...fresh, ...(c.lastAngle ? [c.lastAngle] : [])]
+      .sort((a, b) => (angleFit(b, c, snap) - (b === c.lastAngle ? 100 : 0))
+        - (angleFit(a, c, snap) - (a === c.lastAngle ? 100 : 0)))
+      .slice(0, 4);
+    return h('div', { class: 'stack', style: 'gap:6px' },
+      h('div', { class: 'eyebrow', text: c.status === 'considering' ? 'Go back to him with' : 'What do you tell him?' }),
+      ...angles.map((key) => {
+        const info = PITCH_ANGLES[key];
+        const fit = angleFit(key, c, snap);
+        return h('button', {
+          class: `btn btn--block${key === best ? ' btn--primary' : ''}`,
+          style: 'justify-content:flex-start;text-align:left;min-height:auto;padding:8px 12px',
+          on: {
+            click: () => {
+              const out = pitchTo(career, c.id, key);
+              if (!out) return;
+              saveCareer(career);
+              app.toast(out.result.message);
+              render();
+            },
           },
         },
+          h('span', { class: 'stack', style: 'gap:1px;min-width:0' },
+            h('span', { style: 'font-size:14px', text: info.label }),
+            h('span', {
+              class: 'tiny',
+              style: `text-transform:none;letter-spacing:0;${fit >= 8 ? 'color:var(--green)' : fit <= -4 ? 'color:var(--red)' : ''}`,
+              text: c.lastAngle === key ? `You have already told him this. ${info.blurb}`
+                : fit >= 8 ? `Exactly what he wants to hear. ${info.blurb}`
+                  : fit <= -4 ? `He does not care about this. ${info.blurb}`
+                    : info.blurb,
+            })));
       }),
-    );
+      h('div', {
+        class: 'tiny',
+        text: `${career.pitchesLeft} ${career.pitchesLeft === 1 ? 'approach' : 'approaches'} left. `
+          + 'Reading him right is worth more than saying it twice.',
+      }));
   }
 }

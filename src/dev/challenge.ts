@@ -8,7 +8,7 @@
  */
 import {
   advancePhase, declineChallengeOffers, nextUserGame, resolveChallengeSeason,
-  runOffseason, seekChallengeJob, simulateUserGame, startChallenge, takeChallengeJob,
+  runOffseason, spendCoachPoints, seekChallengeJob, simulateUserGame, startChallenge, takeChallengeJob,
   userTeam, challengeLegacy,
 } from '../league/career';
 import { assignScout, board, hireScout, makeOffer } from '../scouting/recruiting';
@@ -30,7 +30,7 @@ function spend(career: Career): void {
     for (;;) {
       const cost = upgradeCost(career.staff[track]);
       if (cost === null || career.coachingPoints < cost) break;
-      career.coachingPoints -= cost;
+      spendCoachPoints(career, cost);
       career.staff[track]++;
     }
   }
@@ -50,7 +50,7 @@ function recruit(career: Career): void {
   for (const s of [...state.market]) {
     if (career.coachingPoints < s.salary + 12) break;
     if (!hireScout(state, s.id)) break;
-    career.coachingPoints -= s.salary;
+    spendCoachPoints(career, s.salary);
   }
 
   const targets = board(state, career.teamId, 'targets');

@@ -66,6 +66,15 @@ export interface SimResult {
   home: SimTeamBox;
   away: SimTeamBox;
   overtime: boolean;
+  /**
+   * Goals per quarter, so a game has a shape and not just a final score. Four
+   * entries, plus a fifth for the sudden-victory period when `overtime` is set.
+   */
+  homeByQuarter: number[];
+  awayByQuarter: number[];
+  /** The biggest lead either side held, for comeback stories. */
+  homeBiggestLead: number;
+  awayBiggestLead: number;
 }
 
 /** Conditions, kept as plain numbers so this file never imports the renderer. */
@@ -397,6 +406,30 @@ export function simulateMatch(
     else awayGoals++;
   }
 
+  // How the game unfolded. Quarters are drawn from each side's own scoring
+  // rate with real run-of-play streakiness, so a 13-11 that was never in doubt
+  // and a 13-11 won from five down are different games on the same scoreline.
+  //
+  // A game that went to overtime was LEVEL after four quarters, so only the
+  // regulation goals are split; the sudden-victory goal is its own period. Any
+  // other arrangement would let the run of play disagree with the fact that it
+  // needed overtime at all.
+  const homeReg = overtime && homeGoals > awayGoals ? homeGoals - 1 : homeGoals;
+  const awayReg = overtime && awayGoals > homeGoals ? awayGoals - 1 : awayGoals;
+  const [homeByQuarter, awayByQuarter] = splitGame(rng, homeReg, awayReg);
+  if (overtime) {
+    homeByQuarter.push(homeGoals - homeReg);
+    awayByQuarter.push(awayGoals - awayReg);
+  }
+  let lead = 0;
+  let homeBiggestLead = 0;
+  let awayBiggestLead = 0;
+  for (let q = 0; q < homeByQuarter.length; q++) {
+    lead += homeByQuarter[q] - awayByQuarter[q];
+    homeBiggestLead = Math.max(homeBiggestLead, lead);
+    awayBiggestLead = Math.max(awayBiggestLead, -lead);
+  }
+
   fillBox(box.home, box.away, homeGoals, awayGoals, profile, timeScale, share, rng, level);
   fillBox(box.away, box.home, awayGoals, homeGoals, profile, timeScale, 1 - share, rng, level);
   // Faceoff takes are the same event for both sides, so they have to match.
@@ -418,7 +451,57 @@ export function simulateMatch(
     home: box.home,
     away: box.away,
     overtime,
+    homeByQuarter,
+    awayByQuarter,
+    homeBiggestLead,
+    awayBiggestLead,
   };
+}
+
+/**
+ * Splits both final scores across four quarters TOGETHER.
+ *
+ * Drawing each side independently was the reason a comeback never happened: two
+ * independent clumpings almost always cancel out, so the lead crept along with
+ * the final margin and no team ever got three or four clear and then lost it.
+ *
+ * Real games have a shape. One side takes the first half, the other takes the
+ * second; or somebody scores five in a row and holds on. A single shared
+ * momentum swing gives every game one, and because it only moves goals BETWEEN
+ * quarters it can never change the final score.
+ */
+function splitGame(rng: Rng, homeGoals: number, awayGoals: number): [number[], number[]] {
+  // Where the game turned, and how hard. Most games swing a little; some are
+  // two different games either side of half time.
+  const turn = 1 + Math.floor(rng.next() * 3);   // quarter the run breaks on
+  const strength = rng.range(0, 1) ** 1.6;       // mostly gentle, occasionally not
+  const toward = rng.next() < 0.5 ? 1 : -1;      // who owns the early part of it
+
+  const tilt = (q: number, side: 1 | -1): number => {
+    const early = q < turn ? 1 : -1;
+    return 1 + strength * 0.85 * early * toward * side;
+  };
+  const weightsFor = (side: 1 | -1): number[] => [0, 1, 2, 3]
+    .map((q) => Math.max(0.08, rng.range(0.55, 1.5) * tilt(q, side)));
+
+  return [
+    allocate(homeGoals, weightsFor(1)),
+    allocate(awayGoals, weightsFor(-1)),
+  ];
+}
+
+/** Hands out `goals` across four quarters in proportion to `weights`. */
+function allocate(goals: number, weights: number[]): number[] {
+  const total = weights.reduce((n, w) => n + w, 0);
+  const out = [0, 0, 0, 0];
+  let left = goals;
+  for (let q = 0; q < 3; q++) {
+    const n = Math.min(left, Math.round((weights[q] / total) * goals));
+    out[q] = n;
+    left -= n;
+  }
+  out[3] = left;
+  return out;
 }
 
 /**

@@ -117,7 +117,15 @@ export function projectsFor(p: PlayerData): ProjectInfo[] {
   return [...PROJECTS].sort((a, b) => (rank[a.key] ?? 9) - (rank[b.key] ?? 9));
 }
 
-/** Total Coach Points currently committed to projects. */
-export function committedCost(roster: PlayerData[]): number {
-  return roster.reduce((n, p) => n + (project(p.project)?.cost ?? 0), 0);
+/** What a project costs this coach, after his development upgrades. */
+export function projectCost(info: ProjectInfo, discount = 0): number {
+  return Math.max(2, Math.round(info.cost * (1 - discount)));
+}
+
+/** Total Coach Points currently committed to projects, at this coach's rate. */
+export function committedCost(roster: PlayerData[], discount = 0): number {
+  return roster.reduce((n, p) => {
+    const info = project(p.project);
+    return n + (info ? projectCost(info, discount) : 0);
+  }, 0);
 }

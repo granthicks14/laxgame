@@ -1,3 +1,5 @@
+import type { CoachPerks } from '../challenge/coach';
+
 /* ---------------------------------------------------------------------------
  * THE COACH'S OFFICE
  * ---------------------------------------------------------------------------
@@ -156,6 +158,25 @@ export function coachEffects(staff: CoachStaff): CoachEffects {
     chemistryGain: f(staff.culture) * 3.2,
     retention: f(staff.culture),
     appeal: f(staff.culture) * 0.7 + f(staff.development) * 0.3,
+  };
+}
+
+/**
+ * The office AND everything the coach has earned across his career, combined.
+ * Every system that reads a CoachEffects reads the combined value, so an
+ * upgrade on the coach's own tree is never a label with nothing behind it.
+ */
+export function withPerks(fx: CoachEffects, perks: CoachPerks): CoachEffects {
+  const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+  return {
+    ...fx,
+    offenseIQ: clamp01(fx.offenseIQ + perks.gameday),
+    defenseIQ: clamp01(fx.defenseIQ + perks.gameday),
+    developmentRate: fx.developmentRate * perks.development,
+    breakoutRate: fx.breakoutRate * perks.breakouts,
+    chemistryGain: fx.chemistryGain + perks.chemistry,
+    retention: clamp01(fx.retention + perks.retention),
+    appeal: clamp01(fx.appeal + perks.interestFloor / 60),
   };
 }
 

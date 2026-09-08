@@ -8,7 +8,7 @@ import {
   seasonFormat, standingsSorted, userIsHome, winPct,
 } from '../../league/career';
 import { divisionName } from './divisionName';
-import { simulateFixture } from '../../league/fixture';
+import { fixtureStory, simulateFixture } from '../../league/fixture';
 import { simulationBreakdown } from '../../league/simulate';
 import type { Bracket } from '../../world/season';
 import type { Career, PlayoffRound, ScheduledGame } from '../../league/types';
@@ -110,6 +110,7 @@ export class ScheduleScreen implements Screen {
     const them = isHome ? g.awayScore : g.homeScore;
     const won = g.played && you > them;
     const cls = g.played ? (won ? 'good' : 'bad') : '';
+    const story = g.played ? fixtureStory(career, g) : null;
 
     return h('div', { class: 'panel' },
       h('div', { class: 'panel__body row', style: 'gap:10px;padding:10px 12px' },
@@ -118,7 +119,9 @@ export class ScheduleScreen implements Screen {
         h('div', { class: 'stack', style: 'gap:0;flex:1 1 auto;min-width:0' },
           h('div', { style: 'font-size:14px' }, `${isHome ? 'vs' : 'at'} ${opp.short}`),
           h('div', { class: 'tiny' },
-            g.playoff ? roundNameIn(career, g) : g.rivalry ? 'Rivalry' : `OVR ${opp.overall}`)),
+            g.playoff ? roundNameIn(career, g) : g.rivalry ? 'Rivalry' : `OVR ${opp.overall}`),
+          // What that game was, in one line taken from its own box score.
+          story ? h('div', { class: 'tiny', style: 'color:var(--accent)' }, story.headline) : null),
         g.played
           ? h('div', { class: `num ${cls}`, style: 'font-size:15px' }, `${won ? 'W' : 'L'} ${you}-${them}`)
           : h('span', { class: 'pill', text: 'Upcoming' }),
@@ -126,6 +129,13 @@ export class ScheduleScreen implements Screen {
       // The debug view, off unless the coach turned it on in Settings. It shows
       // how the simulation reached this scoreline, which is the only practical
       // way to tell a bad model from a bad afternoon.
+      story
+        ? h('div', {
+          class: 'tiny',
+          style: 'padding:0 12px 10px;color:var(--muted)',
+          text: story.line,
+        })
+        : null,
       showSim && g.played ? this.simDetail(career, g) : null);
   }
 

@@ -7,7 +7,7 @@ import { EMPTY_STAFF } from '../league/coaching';
 const RETIRED_KEY = 'lsl.retiredSave';
 
 /** Versions this build can read and upgrade in place. */
-const MIGRATABLE = [4, 5];
+const MIGRATABLE = [4, 5, 6];
 
 const key = (mode: CareerMode): string => `lsl.career.${mode}.v${CAREER_VERSION}`;
 
@@ -45,6 +45,22 @@ function migrateCareer(raw: unknown): unknown {
   // The recruiting class opens on the next offseason for an upgraded save.
   if (c.recruiting === undefined) c.recruiting = null;
   if (c.challenge === undefined) c.challenge = null;
+  // The coach's profile is built on first use from what the career already has,
+  // so an upgrade tree bought before this existed is not lost.
+  if (c.coach === undefined) c.coach = null;
+  if (!c.postseason) c.postseason = { clinchedSeen: false, revealed: 0 };
+
+  // v6 -> v7: standings carry a conference split as well as the overall record.
+  // A v6 save counted only conference games, so the overall record is rebuilt
+  // from the schedule when the career loads — see validateRecords.
+  const rows = c.standings as Record<string, Record<string, number>> | undefined;
+  if (rows) {
+    for (const row of Object.values(rows)) {
+      if (typeof row.confWins !== 'number') row.confWins = row.wins ?? 0;
+      if (typeof row.confLosses !== 'number') row.confLosses = row.losses ?? 0;
+      if (typeof row.confTies !== 'number') row.confTies = row.ties ?? 0;
+    }
+  }
   c.version = CAREER_VERSION;
   return c;
 }

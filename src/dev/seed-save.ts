@@ -7,7 +7,7 @@
  *   STAGE=3 CHAMPION=1 ...          # a save sitting on the Class A title
  */
 import {
-  advancePhase, nextUserGame, simulateUserGame, startChallenge, takeChallengeJob,
+  advancePhase, nextUserGame, runOffseason, simulateUserGame, startChallenge, takeChallengeJob,
 } from '../league/career';
 import { programmesAt, stageAt } from '../challenge/ladder';
 import { expectationFor } from '../challenge/state';
@@ -22,6 +22,11 @@ function playSeason(c: Career) {
   let g = 0;
   while (g++ < 500) { const x = nextUserGame(c); if (!x) break; simulateUserGame(c, x); }
   advancePhase(c);
+}
+
+/** Did the coach actually win the thing, according to his own record book? */
+function wonIt(c: Career): boolean {
+  return c.history[c.history.length - 1]?.champion === true;
 }
 
 const career = startChallenge({ difficulty: 'varsity', gameLength: 'short', seed: 2468 });
@@ -39,9 +44,19 @@ if (STAGE > 0) {
 }
 if (PLAY || CHAMPION) {
   playSeason(career);
+  // A championship save has to be a season the coach GENUINELY won: forging the
+  // flag produces a save whose own screens contradict each other ("champions",
+  // and underneath it "lost the final"). So keep playing seasons at this rung
+  // until he wins one for real.
   if (CHAMPION) {
-    const last = career.history[career.history.length - 1];
-    if (last) { last.champion = true; last.finish = 'CHAMPIONS'; }
+    let seasons = 1;
+    while (!wonIt(career) && seasons++ < 60) {
+      runOffseason(career);
+      playSeason(career);
+    }
+    if (!wonIt(career)) {
+      throw new Error(`no championship at stage ${STAGE} in ${seasons} seasons — pick another team or seed`);
+    }
   }
 }
 console.log(JSON.stringify(career));

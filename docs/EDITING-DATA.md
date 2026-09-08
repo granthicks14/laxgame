@@ -329,6 +329,32 @@ award in `recordUserResult` (`src/league/career.ts`). A season currently pays
 around twenty points, which is roughly one upgrade.
 
 ---
+## The coach himself — `src/challenge/coach.ts`
+
+Separate from the office above, and the important distinction: `coachEffects`
+belongs to the PROGRAMME and is rebuilt at every job, while this belongs to the
+COACH and follows him for the whole career. It lives on `career.coach`, is
+created once by `newCoachProfile()` and is never recreated — `takeChallengeJob`
+closes the current job on the profile and opens a new one on the same object.
+
+- `UPGRADES` — 25 entries, each with a `branch`, a Coach Point `cost`, a minimum
+  coach `level`, and `requires` naming the upgrades that must be owned first.
+  `BRANCHES` / `BRANCH_ORDER` control how they group on screen.
+- `levelOf(xp)` / `xpForNextLevel(xp)` — twelve levels on a widening curve;
+  `coachTitle(level)` names them.
+- `coachPerks(profile)` — the only thing the rest of the game reads. Every field
+  on `CoachPerks` is consumed somewhere: `scout*`/`gemTips`/`extraScouts` in
+  `src/scouting/`, `extra*`/`interest*`/`closing` in recruiting, `extraPitches`/
+  `pitchPower`/`fullPortalReports` in transfers, `development`/`breakouts` in
+  `src/league/development.ts`, and `gameday`/`chemistry` through
+  `withPerks(coachEffects(staff), perks)` in `src/league/coaching.ts`.
+
+To lengthen or shorten a career, move `cost` and `level` on `UPGRADES` and the
+XP awarded in `recordUserResult`. `npm run careers` reports the level and upgrade
+count reached by six different spending strategies over forty seasons; the tree
+is meant to be *unfinished* for most of a climb.
+
+---
 
 ## Archetypes and curves — `src/data/archetypes.ts`
 
@@ -373,6 +399,52 @@ the model. The playing-time term dominates deliberately, and `NEEDED` (starters
 plus cover) decides whether a team is actually short at a position — measuring
 need against the full squad shape is how a market ends up full of third-choice
 goalkeepers.
+
+`PITCH_ANGLES` is what you actually say to a player. `angleFit(angle, candidate,
+program)` scores an angle against *his* reason for looking and your programme's
+situation; `suggestedAngle()` picks the best one for the card. The fit is added
+to interest inside `pitch()`, and an angle the player has already heard
+(`candidate.lastAngle`) is worth a quarter of its value minus six — repeating
+yourself is not a pitch.
+
+`runOutgoing()` will not strip a position below its floor, whatever a rival
+offers: that is how a squad ended up with two midfielders.
+
+---
+
+## Records and the postseason — `src/league/career.ts`
+
+The schedule is the source of truth for every record. `applyResult()` writes each
+played fixture to both teams' `StandingRow`s, keeping the conference split
+(`confWins`/`confLosses`/`confTies`) separate because that is what seeds a
+conference tournament. `validateRecords(career)` re-derives every row from the
+played fixtures, returns a list of what it repaired, and runs after every game
+and on every load of the hub — so wins + losses + ties always equals games
+played, and an older save repairs itself rather than drifting.
+
+`postseasonStatus(career)` answers where the coach stands (qualified, seed,
+field, bracket, next opponent, eliminated) and `bracketRounds(career)` groups the
+playoff fixtures into rounds in the order they are decided. `career.postseason`
+holds two bits of screen state: `clinchedSeen` (the qualification screen is shown
+once) and `revealed` (how far into the bracket the coach has looked, which is
+what lets an eliminated coach follow the tournament to a champion). Both reset in
+the offseason and at a new job.
+
+---
+
+## Game stories — `src/league/gameStory.ts`
+
+`gameStory(result, context)` picks the ONE thing that defines a game and writes a
+headline and a sentence for it. Every kind is guarded by the box score — a
+comeback line requires a real deficit in `homeBiggestLead`/`awayBiggestLead`, a
+goalie line requires the save percentage that earned it — so no story can
+describe a game that did not happen. Order matters: the list is checked from the
+strongest signal down.
+
+`fixtureStory(career, game)` in `src/league/fixture.ts` is the one entry point
+the UI uses. It returns `null` unless the recorded score is the score the
+simulation produces, which means a game the coach played by hand gets no story
+rather than one about a different game.
 
 ---
 

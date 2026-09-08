@@ -16,6 +16,7 @@ import { LEVELS } from '../data/levels';
 import { SITUATIONS } from '../challenge/situations';
 import { stageAt } from '../challenge/ladder';
 import { effectiveTeam, seasonFormat, standingsSorted, userTeam } from './career';
+import { fixtureStory } from './fixture';
 import type { Career, ScheduledGame } from './types';
 
 export type NewsKind = 'result' | 'streak' | 'upset' | 'player' | 'recruiting' | 'career' | 'league';
@@ -69,7 +70,11 @@ function resultStories(career: Career): NewsItem[] {
       : margin < 0
         ? `${opp.short} beat ${team.short} ${Math.max(last.homeScore, last.awayScore)}-${Math.min(last.homeScore, last.awayScore)}`
         : `${team.short} and ${opp.short} drew`,
-    body: last.playoff ? 'A playoff game.' : last.rivalry ? 'A rivalry game.' : `Week ${last.week}.`,
+    // The story of the game, straight from its box score, when the score on
+    // the record is the one the simulation produced. A game the coach played
+    // by hand gets the plain line instead of a story about a different game.
+    body: fixtureStory(career, last)?.line
+      ?? (last.playoff ? 'A playoff game.' : last.rivalry ? 'A rivalry game.' : `Week ${last.week}.`),
     weight: 40 + (last.playoff ? 25 : 0) + (last.rivalry ? 10 : 0),
   });
 
