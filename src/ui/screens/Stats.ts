@@ -6,18 +6,24 @@ import { userTeam } from '../../league/career';
 import type { Career } from '../../league/types';
 import { GRADE_LABEL, sortDepthChart } from '../../data/players';
 import { CareerEntryScreen } from './CareerEntry';
+import { ChallengeEntryScreen } from './Challenge';
+import type { CareerMode } from '../../league/types';
 
 export class StatsScreen implements Screen {
   el: HTMLElement;
 
   constructor(app: App) {
-    const dynasty = loadCareer('dynasty');
-    const season = loadCareer('season');
-    let mode: 'dynasty' | 'season' = dynasty ? 'dynasty' : 'season';
+    const saves: Partial<Record<CareerMode, Career | null>> = {
+      dynasty: loadCareer('dynasty'),
+      season: loadCareer('season'),
+      challenge: loadCareer('challenge'),
+    };
+    const available = (['dynasty', 'challenge', 'season'] as CareerMode[]).filter((m) => saves[m]);
+    let mode: CareerMode = available[0] ?? 'dynasty';
     const body = h('div', { class: 'stack' });
 
     const render = () => {
-      const career = mode === 'dynasty' ? dynasty : season;
+      const career = saves[mode] ?? null;
       body.replaceChildren();
       if (!career) {
         body.appendChild(emptyPanel(
@@ -26,6 +32,7 @@ export class StatsScreen implements Screen {
           + 'final records, season leaders, career totals and every player who comes through.',
           [
             { label: 'Start a dynasty', primary: true, onClick: () => app.push((a) => new CareerEntryScreen(a, 'dynasty')) },
+            { label: 'Start a Challenge career', onClick: () => app.push((a) => new ChallengeEntryScreen(a)) },
             { label: 'Start a season', onClick: () => app.push((a) => new CareerEntryScreen(a, 'season')) },
           ],
         ));
@@ -34,11 +41,14 @@ export class StatsScreen implements Screen {
       for (const el of this.build(career)) body.appendChild(el);
     };
 
-    const tabs = dynasty && season
+    const LABEL: Record<CareerMode, string> = {
+      dynasty: 'Dynasty', season: 'Season', challenge: 'Challenge',
+    };
+    const tabs = available.length > 1
       ? segmented(
-        [{ value: 'dynasty', label: 'Dynasty' }, { value: 'season', label: 'Season' }],
+        available.map((m) => ({ value: m, label: LABEL[m] })),
         mode,
-        (v) => { mode = v as 'dynasty' | 'season'; render(); },
+        (v) => { mode = v as CareerMode; render(); },
         true,
       )
       : null;

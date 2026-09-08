@@ -261,7 +261,14 @@ export class JobOffersScreen implements Screen {
             declineChallengeOffers(career);
             saveCareer(career);
             if (state.complete) { app.replace((a) => new ChallengeEndScreen(a, career)); return; }
-            app.toast(wasFired ? 'A year out. One more and nobody will call.' : 'You stay put.');
+            if (wasFired && state.offers && state.offers.length) {
+              // A year passes and a new, weaker list comes up. There is no team
+              // to go back to, so the decision simply comes round again.
+              app.toast(`A year out of the game. ${state.strikes >= 1 ? 'One more and nobody will call.' : ''}`.trim());
+              redraw();
+              return;
+            }
+            app.toast(wasFired ? 'A year out of the game.' : 'You stay put.');
             app.replace((a) => new SeasonHubScreen(a, 'challenge'));
           },
         },

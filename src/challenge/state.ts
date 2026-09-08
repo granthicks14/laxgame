@@ -249,10 +249,10 @@ export interface Programme {
  */
 export function generateOffers(
   state: ChallengeState, kind: OfferKind, pool: Programme[], rng: Rng, count = 3,
-): JobOffer[] {
-  const targetStage = kind === 'promotion'
+  targetStage = kind === 'promotion'
     ? Math.min(FINAL_STAGE, state.stageIndex + 1)
-    : kind === 'demotion' ? Math.max(0, state.stageIndex - 1) : state.stageIndex;
+    : kind === 'demotion' ? Math.max(0, state.stageIndex - 1) : state.stageIndex,
+): JobOffer[] {
   const stage = stageAt(targetStage);
 
   // Reputation decides WHERE IN THE POOL you can shop, not an absolute rating —
@@ -282,7 +282,17 @@ export function generateOffers(
       expectation: expectationFor(stage, p.prestige, situation, state.reputation),
       note: SITUATIONS[situation].blurb,
     };
-  }).sort((a, b) => b.prestige - a.prestige);
+  }).sort((a, b) => (b.stageIndex - a.stageIndex) || (b.prestige - a.prestige));
+}
+
+/**
+ * How far a championship can carry you. Normally one rung. A coach with a real
+ * name in the sport can be hired two rungs up — a dominant high school programme
+ * does produce college head coaches — which is what keeps a nine-rung ladder to
+ * a career a person can actually finish.
+ */
+export function promotionReach(state: ChallengeState): number {
+  return state.reputation >= 70 && state.stageIndex < FINAL_STAGE - 1 ? 2 : 1;
 }
 
 /** Applies an accepted offer. The career continues; the job does not. */

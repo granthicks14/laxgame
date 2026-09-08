@@ -93,6 +93,90 @@ export function playoffFieldSize(teamCount: number): number {
 `advancePhase` derives the round names from the field size, so an 8-team field
 plays QF → SF → F and a 4-team field plays SF → F with no other changes.
 
+## Levels — `src/data/levels.ts`
+
+The six tiers of the sport. A team's `overall` is a rating *within its own
+level*; what turns that into a squad is the level's **player band**, which is
+the range of actual attribute values its players are drawn from.
+
+```ts
+d1: { band: { lo: 74, hi: 99 }, rosterSize: 28, minDifficulty: 'allstate', crowdScale: 1.7, ... }
+```
+
+High school has `band: null`, meaning *identity* — high school ratings ARE the
+player scale, and every other level is measured from it. Do not give high school
+a band: Dynasty balance and every save in existence depend on it staying the
+yardstick.
+
+`minDifficulty` floors the AI's decision quality, so a professional opponent
+genuinely thinks better rather than only having better numbers. `crowdScale`
+sizes the stands. Run `npm run ladder` after any change: it prints the actual
+player pools each level produces.
+
+Because goalies are judged against `Match.par` — the average overall of the two
+squads on the field — raising a band does **not** silently strangle scoring at
+that level. Run `npm run levels` to confirm; it plays real matches at every tier
+and prints goals, shooting and save percentages.
+
+## The world — `src/data/world/programs.ts`
+
+Compact tables of every programme above high school: id, name, mascot, abbr,
+conference, `tier` (a within-level strength, 0–99), colours and region.
+
+**Names and conference memberships are real (2026) but unverified from this
+build environment. `tier` and every number derived from it are gameplay
+fiction.** The Continental Lacrosse League is invented outright. The file states
+all of this at the top; keep that header accurate if you edit it.
+
+`src/data/world.ts` builds the world from those tables and validates it. Run
+`npm run world` after editing: it checks that every conference exists, sits at
+the right level, and has at least four teams — the fewest that can play a real
+season.
+
+## Season formats — `src/world/season.ts`
+
+One engine for every level. A `SeasonFormat` says how many regular-season games
+there are, how many are non-conference, how big the conference tournament and
+national bracket are, and what the trophy is called. High school reproduces
+exactly what the district already did.
+
+## The ladder — `src/challenge/ladder.ts`, `situations.ts`, `state.ts`
+
+`STAGES` is the nine rungs of Challenge Mode. `parWinPct` is roughly what a
+competent coach manages there, and it feeds the expectations a programme holds
+you to.
+
+`SITUATIONS` are the starting problems. Each one has an `expectationRelief`
+(how much easier the board is on you because of it) and an `applySituation`
+that changes the roster you inherit. **The situation must be applied to the
+roster, not to the team rating** — team ratings are derived from the roster, so
+shifting both double-counts the problem and makes it permanent. Chemistry is the
+one exception, because it does not live in any player.
+
+`state.ts` holds reputation, heat and offers. `promotionReach` decides whether a
+championship carries you one rung or two; without the two-rung path a nine-rung
+ladder takes eighty seasons and nobody finishes it. Run `RUNS=10 npm run
+challenge` after touching any of it.
+
+## Scouting — `src/scouting/`
+
+`prospects.ts` generates a class and hides it. The key idea is that `hype` (the
+public ranking) is generated from a **shadow player at the slot he was ranked
+in**, while the real player is generated from a much better or much worse slot.
+That is what makes a hidden gem genuinely hidden rather than merely
+underrated — and gems are weighted toward the back of the class, busts toward
+the front, because nobody hides at number one.
+
+`estimateOf` is what every screen renders. Never render `prospect.player`
+directly; the truth is only visible once he signs.
+
+`scouts.ts` sets what a scout costs and how fast he works. `recruiting.ts` runs
+the weekly cycle: tips, scouting, rival interest, and commitments. The two
+numbers that decide whether the whole system is worth using are the tip chance
+(you cannot scout a player you have not heard of) and the rival `insight` rate
+(how long your window is before somebody else finds him). Run `npm run
+scouting` after changing either.
+
 ## Rosters — `src/data/rosters.ts`
 
 Two kinds of roster, never mixed:
@@ -245,6 +329,18 @@ award in `recordUserResult` (`src/league/career.ts`). A season currently pays
 around twenty points, which is roughly one upgrade.
 
 ---
+
+## Archetypes and curves — `src/data/archetypes.ts`
+
+What kind of player somebody is (`ARCHETYPES`, which bias attributes at creation
+and growth every offseason), when he improves (`CURVES`), and how high his
+ceiling is in words (`TIERS`). `CURVES[*].weight` must sum to 1.
+
+## Development projects — `src/league/projects.ts`
+
+A season-long commitment to one player: a cost, a set of attributes it drives,
+and a stated tradeoff. The tradeoff is real — development.ts suppresses growth
+outside a project's focus to a quarter of normal.
 
 ## Development — `src/league/development.ts`
 

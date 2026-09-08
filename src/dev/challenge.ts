@@ -123,6 +123,14 @@ function run(seed: number): RunResult {
     if (state.complete) break;
 
     if (state.offers && state.offers.length) {
+      // Once in a career, turn everything down after a sacking: it exercises
+      // the year-out-of-the-game path, which is a real way this mode ends.
+      if (state.fired && fired === 1 && state.strikes === 0) {
+        if (VERBOSE) console.log('      turned everything down — a year out of the game');
+        declineChallengeOffers(career);
+        if (state.complete) break;
+        continue;
+      }
       // Take the best programme available, which is what a coach climbing does.
       const pick = state.offers[0];
       if (VERBOSE) {

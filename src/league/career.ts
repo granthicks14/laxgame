@@ -25,7 +25,8 @@ import {
 } from '../challenge/ladder';
 import {
   acceptOffer, declineAll, evaluateSeason, expectationFor, generateOffers, legacyScore,
-  newChallengeState, type JobOffer, type Legacy, type Programme, type SeasonVerdict,
+  newChallengeState, promotionReach,
+  type JobOffer, type Legacy, type Programme, type SeasonVerdict,
 } from '../challenge/state';
 import {
   applySituation, situationFor, situationRatingShift, type SituationKey,
@@ -1169,9 +1170,16 @@ export function resolveChallengeSeason(career: Career): SeasonVerdict | null {
   const rng = new Rng(`${career.seed}:offers:${state.totalYears}`);
   if (verdict.outcome === 'promoted') {
     state.offerKind = 'promotion';
-    state.offers = generateOffers(state, 'promotion', challengePool(
-      Math.min(FINAL_STAGE, state.stageIndex + 1),
-    ), rng);
+    // The next rung always. A coach with a real name in the sport is also
+    // offered something two rungs up — a smaller job at a much higher level,
+    // which is a genuine decision rather than a free upgrade.
+    const next = Math.min(FINAL_STAGE, state.stageIndex + 1);
+    const reach = Math.min(FINAL_STAGE, state.stageIndex + promotionReach(state));
+    const offers = generateOffers(state, 'promotion', challengePool(next), rng, reach === next ? 3 : 2, next);
+    if (reach !== next) {
+      offers.push(...generateOffers(state, 'promotion', challengePool(reach), rng, 1, reach));
+    }
+    state.offers = offers.sort((a, b) => (b.stageIndex - a.stageIndex) || (b.prestige - a.prestige));
   } else if (verdict.outcome === 'fired') {
     state.offerKind = 'demotion';
     const target = Math.max(0, state.stageIndex - 1);
@@ -1233,10 +1241,30 @@ export function takeChallengeJob(career: Career, offer: JobOffer): void {
   syncUserTeamRatings(career);
 }
 
-/** Staying where you are when you had the chance to move. */
+/**
+ * Turning everything down. If you still have a job that just means you stay.
+ * If you were SACKED it means a year out of the game — and next spring a new,
+ * weaker set of jobs comes up, because you cannot go back to the programme that
+ * let you go. Two years out and nobody calls again.
+ */
 export function declineChallengeOffers(career: Career): void {
-  if (!career.challenge) return;
-  declineAll(career.challenge);
+  const state = career.challenge;
+  if (!state) return;
+  const wasFired = state.fired;
+  declineAll(state);
+  if (!wasFired || state.complete) return;
+
+  state.reputation = clamp(state.reputation - 4, 0, 100);
+  const rng = new Rng(`${career.seed}:outofwork:${state.totalYears}`);
+  const target = Math.max(0, state.stageIndex - 1);
+  state.offerKind = 'demotion';
+  state.offers = generateOffers(state, 'demotion', challengePool(target), rng)
+    .filter((o) => o.teamId !== career.teamId);
+  if (!state.offers.length) {
+    // Nothing at all: that is the end of it rather than an endless wait.
+    state.complete = true;
+    state.endedReason = 'Nobody would give you a team. The career ended there.';
+  }
 }
 
 /** What the coach's career adds up to, including what he found and developed. */

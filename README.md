@@ -93,7 +93,9 @@ Premier Lacrosse League. This is the long game.
 
 - **You climb by winning championships.** Nothing else moves you up, and even a
   title only gets you *interviews*: which jobs you are offered depends on the
-  reputation you have built, and taking one is a decision.
+  reputation you have built, and taking one is a decision. A coach with a real
+  name in the sport gets offered something *two* rungs up as well — a smaller
+  job at a much higher level, against a bigger job at the next one.
 - **Every job is a mess, and the mess is real.** A rebuild genuinely hands you a
   squad of underclassmen; a goalie problem genuinely means the man in the cage
   cannot stop the ball. The situation is applied to the roster you inherit, and
@@ -128,6 +130,9 @@ Premier Lacrosse League. This is the long game.
   a third of the time somebody else takes him.
 - **Offers are scarce** (three at high school, seven at Division I) and a
   prospect ranked far above your programme is not listening.
+- **The board** sorts into Top Targets, Hidden Gems, Being Scouted, Offers Out,
+  Recruiting Battles and Committed, filterable by position, with a full written
+  scouting report and a breakdown of exactly what he is weighing about you.
 - **The professional draft** spends picks instead of offers, and the players
   nobody took are undrafted free agents you can sign with a camp invite.
 

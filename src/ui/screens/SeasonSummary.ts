@@ -58,6 +58,14 @@ export class SeasonSummaryScreen implements Screen {
           text: `${climb.offers.length} job${climb.offers.length === 1 ? '' : 's'} on the table`,
           on: { click: () => app.replace((a) => new JobOffersScreen(a, career)) },
         }));
+      } else if (climb.fired) {
+        // Sacked with nothing taken: there is no team to advance with.
+        actions.push(h('button', {
+          class: 'btn btn--primary btn--block',
+          style: 'min-height:54px;font-size:18px',
+          text: 'Find a job',
+          on: { click: () => app.replace((a) => new JobOffersScreen(a, career)) },
+        }));
       } else {
         actions.push(h('button', {
           class: 'btn btn--primary btn--block',

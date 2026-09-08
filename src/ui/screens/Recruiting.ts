@@ -17,7 +17,7 @@ import { loadCareer, saveCareer } from '../../state/saves';
 import { recruitContext } from '../../league/career';
 import type { Career, CareerMode } from '../../league/types';
 import {
-  BOARD_LABEL, assignScout, board, classGrade, hireScout, interestFactors,
+  BOARD_LABEL, assignScout, board, boardTabs, classGrade, hireScout, interestFactors,
   makeOffer, maxScouts, offerWord, releaseScout, signUndrafted, trackProspect,
   undrafted, withdrawOffer, type BoardTab,
 } from '../../scouting/recruiting';
@@ -26,15 +26,23 @@ import {
   scoutingReport, type Prospect,
 } from '../../scouting/prospects';
 import { TRAITS, qualityLabel, specialtyLabel, type Scout } from '../../scouting/scouts';
-import { POSITION_LABEL } from '../../data/constants';
+import { POSITION_LABEL, type Position } from '../../data/constants';
 import { LEVELS } from '../../data/levels';
 
-const TABS: BoardTab[] = ['targets', 'gems', 'scouting', 'offers', 'battles', 'committed'];
+const POS_FILTER: { value: Position | 'all'; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'A', label: 'A' },
+  { value: 'M', label: 'M' },
+  { value: 'D', label: 'D' },
+  { value: 'G', label: 'G' },
+  { value: 'FO', label: 'FO' },
+];
 
 export class RecruitingScreen implements Screen {
   el: HTMLElement;
   private body = h('div', { class: 'stack' });
   private tab: BoardTab = 'targets';
+  private pos: Position | 'all' = 'all';
 
   constructor(app: App, mode: CareerMode) {
     const career = loadCareer(mode);
@@ -59,9 +67,15 @@ export class RecruitingScreen implements Screen {
           this.summary(career),
           this.staffPanel(app, career),
           segmented(
-            TABS.map((t) => ({ value: t, label: BOARD_LABEL[t] })),
+            boardTabs(state).map((t) => ({ value: t, label: BOARD_LABEL[t] })),
             this.tab,
             (v) => { this.tab = v; this.render(app, career); },
+            true,
+          ),
+          segmented(
+            POS_FILTER,
+            this.pos,
+            (v) => { this.pos = v; this.render(app, career); },
             true,
           ),
           this.body,
@@ -157,13 +171,17 @@ export class RecruitingScreen implements Screen {
     const state = career.recruiting!;
     const par = levelPar(state.level);
     clear(this.body);
-    const list = board(state, career.teamId, this.tab);
+    const list = board(state, career.teamId, this.tab, this.pos);
 
     if (!list.length) {
       this.body.appendChild(emptyPanel(
         BOARD_LABEL[this.tab],
-        this.emptyText(),
-        [{ label: 'Show the top of the class', primary: true, onClick: () => { this.tab = 'targets'; this.render(app, career); } }],
+        this.pos === 'all' ? this.emptyText() : `Nothing here at ${POSITION_LABEL[this.pos]}. Try another position, or clear the filter.`,
+        [{
+          label: 'Show the top of the class',
+          primary: true,
+          onClick: () => { this.tab = 'targets'; this.pos = 'all'; this.render(app, career); },
+        }],
       ));
       return;
     }
@@ -181,6 +199,7 @@ export class RecruitingScreen implements Screen {
       case 'offers': return 'You have not offered anybody. Offers are scarce; spend them on players you believe in.';
       case 'battles': return 'Nobody is competing with you for a player you have offered. That will change.';
       case 'committed': return 'No commitments yet. They arrive on your roster in the offseason.';
+      case 'undrafted': return 'The draft is still running. Once it finishes, everybody nobody took shows up here.';
       default: return 'The class is empty.';
     }
   }

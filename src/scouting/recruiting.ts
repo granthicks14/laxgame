@@ -149,7 +149,7 @@ export function offerWord(level: Level): { one: string; many: string } {
  * outright — no bidding, because nobody else wants him.
  */
 export function undrafted(state: RecruitingState): Prospect[] {
-  if (!state.invites) return [];
+  if (!state.invites || state.invites <= 0) return [];
   if (state.week < 9) return [];
   return state.prospects
     .filter((p) => !p.committedTo && !p.suitors.length)
@@ -158,7 +158,7 @@ export function undrafted(state: RecruitingState): Prospect[] {
 
 /** Signs an undrafted player straight into the class. */
 export function signUndrafted(state: RecruitingState, id: string, teamId: string): HireResult {
-  if (state.invites <= 0) return { ok: false, reason: 'No camp invites left.' };
+  if (!state.invites || state.invites <= 0) return { ok: false, reason: 'No camp invites left.' };
   const p = state.prospects.find((x) => x.id === id);
   if (!p) return { ok: false, reason: 'No such player.' };
   if (p.committedTo) return { ok: false, reason: 'He has already signed somewhere.' };
@@ -176,7 +176,8 @@ export function signUndrafted(state: RecruitingState, id: string, teamId: string
 
 /* -------------------------------------------------------------- the board */
 
-export type BoardTab = 'targets' | 'gems' | 'scouting' | 'offers' | 'battles' | 'committed';
+export type BoardTab =
+  | 'targets' | 'gems' | 'scouting' | 'offers' | 'battles' | 'committed' | 'undrafted';
 
 export const BOARD_LABEL: Record<BoardTab, string> = {
   targets: 'Top targets',
@@ -185,12 +186,22 @@ export const BOARD_LABEL: Record<BoardTab, string> = {
   offers: 'Offers out',
   battles: 'Recruiting battles',
   committed: 'Committed',
+  undrafted: 'Undrafted',
 };
 
+/** Tabs this level actually has. Only a draft produces undrafted players. */
+export function boardTabs(state: RecruitingState): BoardTab[] {
+  const base: BoardTab[] = ['targets', 'gems', 'scouting', 'offers', 'battles', 'committed'];
+  return state.invites ? [...base, 'undrafted'] : base;
+}
+
 /** The board, sorted the way a coach would actually want each list. */
-export function board(state: RecruitingState, teamId: string, tab: BoardTab): Prospect[] {
+export function board(
+  state: RecruitingState, teamId: string, tab: BoardTab, pos: Position | 'all' = 'all',
+): Prospect[] {
   const par = levelPar(state.level);
-  const open = state.prospects.filter((p) => !p.committedTo);
+  const filter = (list: Prospect[]) => (pos === 'all' ? list : list.filter((p) => p.player.pos === pos));
+  const open = filter(state.prospects.filter((p) => !p.committedTo));
   switch (tab) {
     case 'targets':
       // Everything you have a reason to be interested in: the top of the
@@ -211,7 +222,9 @@ export function board(state: RecruitingState, teamId: string, tab: BoardTab): Pr
       return open.filter((p) => p.offered && p.suitors.length > 0)
         .sort((a, b) => b.suitors.length - a.suitors.length);
     case 'committed':
-      return state.prospects.filter((p) => p.committedTo === teamId);
+      return filter(state.prospects.filter((p) => p.committedTo === teamId));
+    case 'undrafted':
+      return filter(undrafted(state));
   }
 }
 
