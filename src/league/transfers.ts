@@ -112,7 +112,7 @@ export function transferEstimate(c: TransferCandidate): TransferEstimate {
  */
 export type PitchAngle =
   | 'playingtime' | 'championship' | 'starting' | 'development'
-  | 'coaching' | 'prestige' | 'culture' | 'freshstart' | 'system';
+  | 'coaching' | 'prestige' | 'culture' | 'freshstart' | 'biggerrole' | 'system';
 
 export interface PitchAngleInfo {
   key: PitchAngle;
@@ -133,6 +133,9 @@ export const PITCH_ANGLES: Record<PitchAngle, PitchAngleInfo> = {
   starting: { key: 'starting', label: 'A starting role',
     blurb: 'Not minutes — the job. His position, his line.',
     landed: 'The job was the whole pitch.' },
+  biggerrole: { key: 'biggerrole', label: 'A bigger role',
+    blurb: 'He already starts. Here the offence runs through him.',
+    landed: 'He wants the ball, and you promised him the ball.' },
   development: { key: 'development', label: 'Player development',
     blurb: 'He leaves here a better player than he arrived. That is the offer.',
     landed: 'He believes you can make him better.' },
@@ -154,7 +157,7 @@ export const PITCH_ANGLES: Record<PitchAngle, PitchAngleInfo> = {
 };
 
 export const PITCH_ORDER: PitchAngle[] = [
-  'playingtime', 'starting', 'championship', 'development',
+  'playingtime', 'starting', 'biggerrole', 'championship', 'development',
   'coaching', 'prestige', 'culture', 'freshstart', 'system',
 ];
 
@@ -175,6 +178,14 @@ export function angleFit(angle: PitchAngle, c: TransferCandidate, prog: ProgramS
       return c.reason === 'buried' ? 14 : room > 0 ? 8 : -8;
     case 'starting':
       return c.reason === 'buried' || c.reason === 'role' ? (room > 0 ? 16 : 4) : -6;
+    // He is already a starter where he is. What he wants is to be the man, and
+    // that only means anything if he would genuinely be the best you have.
+    case 'biggerrole': {
+      if (c.currentDepth > 0) return -6;
+      const best = Math.max(0, ...prog.roster.filter((p) => p.pos === c.player.pos).map((p) => p.overall));
+      const wouldLead = c.player.overall >= best;
+      return c.reason === 'role' ? (wouldLead ? 15 : 2) : wouldLead ? 8 : -5;
+    }
     case 'championship':
       return c.reason === 'losing' ? (winning || prog.championships > 0 ? 16 : -4) : winning ? 6 : -6;
     case 'development':
