@@ -168,6 +168,14 @@ you have to decide what kind of coach you are. The office reads back the
 identity your spending has actually formed — The Scout, The Recruiter, The
 Developer, The Strategist — rather than leaving it implicit.
 
+**The hall of careers.** A Challenge career ends and its save is gone, so each
+difficulty keeps one line outside any save: the best legacy scored on it, the
+fastest climb to the PLL, the furthest rung reached, and how many careers you
+have run there. It is on the difficulty picker, where the decision to play again
+is actually made, and on the ending, which tells you whether you beat your own
+mark or what still stands. Nothing in it is seeded or awarded — an empty hall is
+an honest hall.
+
 **One rating scale for the whole sport.** A team's `overall` used to be a
 standing *within its own level*, which is why a Division I team could be rated
 94 while a PLL club was 88. Every level now occupies a fixed slice of one
@@ -545,6 +553,12 @@ with a record, deletes a standings row mid-season, throws away the coach's
 profile, spends points that are not there, changes job five times in a row, and
 asks for a bracket that does not exist. Nothing may throw and nothing may
 silently corrupt the career.
+
+`npm run hierarchy` is the guard on the universal rating scale. It builds every
+team and every roster at all six levels, prints the team and player distribution
+for each, and fails the run on any inversion — an average Division I team above
+an average PLL club, a level reaching past its neighbour, or a level outside its
+own band. Run it after touching `overallBand`, `band` or a programme's `tier`.
 
 `npm run stories` prints how often each kind of game story comes up at every
 game length and re-checks every one against the box score it came from. A

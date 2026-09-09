@@ -23,6 +23,8 @@ import {
   MODIFIER_SPECS, TIERS, TIER_ORDER, differencesFrom, tierBelow,
   type ChallengeTier, type ModifierSpec,
 } from '../../challenge/difficulty';
+import { loadHall } from '../../state/hall';
+import { stageAt } from '../../challenge/ladder';
 
 /* ------------------------------------------------------------ the picker */
 
@@ -95,6 +97,7 @@ export class ChallengeDifficultyScreen implements Screen {
     const info = TIERS[tier];
     const below = tierBelow(tier);
     const diffs = differencesFrom(tier);
+    const record = loadHall()[tier];
 
     const head = h('button', {
       class: 'btn btn--block',
@@ -111,7 +114,19 @@ export class ChallengeDifficultyScreen implements Screen {
             text: info.name,
           }),
           selected ? h('span', { class: 'pill pill--green', text: 'SELECTED' }) : null),
-        h('span', { class: 'tiny', style: 'text-transform:none;letter-spacing:0', text: info.tagline })));
+        h('span', { class: 'tiny', style: 'text-transform:none;letter-spacing:0', text: info.tagline }),
+        // What you have already done here, so the choice is a decision about
+        // your own record rather than an abstract one about numbers.
+        record
+          ? h('span', {
+            class: 'tiny',
+            style: 'text-transform:none;letter-spacing:0;color:var(--accent)',
+            text: record.fastestFinish !== null
+              ? `Conquered in ${record.fastestFinish} seasons · best legacy ${record.bestLegacy}`
+              : `${record.careers} career${record.careers === 1 ? '' : 's'} · furthest `
+                + `${stageAt(record.bestRung).short} · best legacy ${record.bestLegacy}`,
+          })
+          : null));
 
     if (!open) return head;
 

@@ -210,6 +210,12 @@ Retune with `npm run careers`, which sweeps all four tiers over the same seeds
 and strategies and FAILS if a harder tier climbs further or buys more of the
 coach tree than an easier one. `TIER=elite npm run careers` runs one.
 
+The hall of careers (`src/state/hall.ts`) is one record per tier, kept outside
+every career save under `lsl.hall.v1`. It is written once, by the ending screen,
+from a career that actually happened. If you change what a career is worth,
+existing hall entries are not recomputed — they are a record of what was
+actually scored at the time, which is the point of them.
+
 ---
 
 ## The ladder — `src/challenge/ladder.ts`, `situations.ts`, `state.ts`

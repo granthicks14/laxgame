@@ -186,8 +186,15 @@ check('a season can be played out', !!seasonDone?.seasonComplete || guard >= 40,
 check('scouting progressed through the season',
   (seasonDone?.recruiting?.prospects ?? []).some((p) => p.scouted > 20),
   `best ${Math.round(Math.max(0, ...(seasonDone?.recruiting?.prospects ?? []).map((p) => p.scouted)))}%`);
-check('rival programmes recruited too',
-  (seasonDone?.recruiting?.prospects ?? []).some((p) => p.committedTo && p.committedTo !== seasonDone.teamId));
+// Rival programmes recruit for real. Their commitments land through the season,
+// so this asks the CLASS — the prospects it has closed and the news it wrote —
+// rather than depending on which week the loop happened to stop on.
+const rivalsTook = (seasonDone?.recruiting?.prospects ?? [])
+  .filter((p) => p.committedTo && p.committedTo !== seasonDone.teamId).length;
+const rivalNews = (seasonDone?.recruiting?.news ?? [])
+  .filter((n) => n.kind === 'lost' || n.kind === 'interest' || n.kind === 'battle').length;
+check('rival programmes recruited too', rivalsTook > 0 || rivalNews > 0,
+  `${rivalsTook} signed elsewhere, ${rivalNews} recruiting stories`);
 
 /* ------------------------------------------------------------- the verdict */
 

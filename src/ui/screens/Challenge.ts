@@ -32,6 +32,7 @@ import { trophyIcon } from '../icons';
 import { ChallengeDifficultyScreen } from './ChallengeDifficulty';
 import { DEFAULT_TIER, tierInfo, type ChallengeTier } from '../../challenge/difficulty';
 import { UPGRADES, identityOf } from '../../challenge/coach';
+import { recordCareer, type HallResult } from '../../state/hall';
 
 /* ------------------------------------------------------------------ entry */
 
@@ -402,6 +403,37 @@ export function openJobSearch(app: App, career: Career): void {
 export class ChallengeEndScreen implements Screen {
   el: HTMLElement;
 
+  /**
+   * Where this career sits against every other one played on the same tier.
+   * A first attempt says so; a personal best says so loudly; and a career that
+   * fell short is told exactly what it has to beat next time.
+   */
+  private hallPanel(tier: ChallengeTier, result: HallResult): HTMLElement {
+    const { entry, previous, bestLegacyEver, fastestEver, furthestEver } = result;
+    const info = tierInfo(tier);
+    const badges: (HTMLElement | null)[] = [
+      bestLegacyEver ? h('span', { class: 'pill pill--green', text: 'BEST LEGACY' }) : null,
+      fastestEver ? h('span', { class: 'pill pill--green', text: 'FASTEST CLIMB' }) : null,
+      furthestEver && !fastestEver ? h('span', { class: 'pill pill--accent', text: 'FURTHEST YET' }) : null,
+    ];
+    return panel(`Your record on ${info.name}`,
+      previous
+        ? h('div', { class: 'row row--wrap', style: 'gap:6px' }, ...badges)
+        : h('div', { class: 'small', text: 'Your first career on this difficulty. Everything below is now the mark to beat.' }),
+      summaryRow('Best legacy', `${entry.bestLegacy}${entry.bestTitle ? ` · ${entry.bestTitle}` : ''}`),
+      summaryRow('Fastest climb to the PLL',
+        entry.fastestFinish === null ? 'Not yet done' : `${entry.fastestFinish} seasons`),
+      summaryRow('Furthest reached', stageAt(entry.bestRung).short),
+      summaryRow('Careers on this tier', `${entry.careers}`),
+      previous && !bestLegacyEver
+        ? h('div', {
+          class: 'tiny',
+          text: `Your ${previous.bestLegacy} still stands. A harder tier multiplies everything `
+            + 'you score on it, so the way past it may be up rather than round again.',
+        })
+        : null);
+  }
+
   constructor(app: App, career: Career) {
     const state = career.challenge!;
     const legacy = challengeLegacy(career)!;
@@ -416,6 +448,18 @@ export class ChallengeEndScreen implements Screen {
     const clubs = new Set(state.steps.map((s) => s.teamShort)).size;
     const reading = career.coach ? identityOf(career.coach) : null;
 
+    // File it. A career that is over leaves nothing behind but this, which is
+    // what makes the next one on a harder tier worth starting.
+    const hall = recordCareer({
+      tier: state.tier,
+      legacy: legacy.score,
+      title: legacy.title,
+      finished: won,
+      seasons: state.totalYears,
+      rung: state.stageIndex,
+      titles,
+    });
+
     this.el = screenEl(
       topbar(app, 'The career', `${state.totalYears} seasons`, () => app.reset((a) => new MainMenuScreen(a))),
       h('div', { class: 'scroll' },
@@ -427,6 +471,8 @@ export class ChallengeEndScreen implements Screen {
               h('div', { class: 'small', style: 'margin-top:6px', text: `You conquered every level of the lacrosse world on ${tierInfo(state.tier).name}.` }),
               h('div', { class: 'row', style: 'justify-content:center;margin-top:8px' }, tierPill(state.tier)))
             : panel('It ends here', h('div', { class: 'small', text: state.endedReason ?? 'The career is over.' })),
+
+          this.hallPanel(state.tier, hall),
 
           reading
             ? panel(reading.identity.name,
