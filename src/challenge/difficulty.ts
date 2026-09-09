@@ -257,6 +257,12 @@ export interface ModifierSpec {
   format: (v: number) => string;
   /** Renders a change against the tier below. */
   delta: (from: number, to: number) => string;
+  /**
+   * How Standard describes itself for this modifier. A generated "Standard
+   * <label>" reads badly for half of them ("Standard your interest builds at"),
+   * and the baseline card is the first thing a new player reads.
+   */
+  baseline: string;
 }
 
 const asPct = (v: number) => `${Math.round(v * 100)}%`;
@@ -273,72 +279,88 @@ export const MODIFIER_SPECS: ModifierSpec[] = [
   {
     label: 'Coach Points earned', group: 'Coach progression', field: 'coachPoints',
     higherIsHarder: false, format: asPct, delta: relPct,
+    baseline: 'Standard Coach Point gain',
   },
   {
     label: 'Coaching experience', group: 'Coach progression', field: 'coachXp',
     higherIsHarder: false, format: asPct, delta: relPct,
+    baseline: 'Standard rate of coaching experience',
   },
   {
     label: 'Coach upgrade cost', group: 'Coach progression', field: 'upgradeCost',
     higherIsHarder: true, format: asPct, delta: relPct,
+    baseline: 'Standard coach upgrade costs',
   },
   {
     label: 'Programme staff cost', group: 'Coach progression', field: 'staffCost',
     higherIsHarder: true, format: asPct, delta: relPct,
+    baseline: 'Standard programme staff costs',
   },
   {
     label: 'Rival recruiting effort', group: 'Recruiting', field: 'rivalPush',
     higherIsHarder: true, format: asPct, delta: relPct,
+    baseline: 'Rivals recruit at a normal intensity',
   },
   {
     label: 'Rival scouting accuracy', group: 'Recruiting', field: 'rivalScouting',
     higherIsHarder: true, format: asPct, delta: (a, b) => `${b > a ? '+' : ''}${Math.round((b - a) * 100)}pts`,
+    baseline: 'Rivals mostly recruit off the public rankings',
   },
   {
     label: 'Your interest builds at', group: 'Recruiting', field: 'interestGain',
     higherIsHarder: false, format: asPct, delta: relPct,
+    baseline: 'Standard rate of building interest with a prospect',
   },
   {
     label: 'Scholarship offers', group: 'Recruiting', field: 'offers',
     higherIsHarder: false, format: (v) => (v === 0 ? 'Standard' : `${v}`), delta: flat,
+    baseline: 'Standard number of scholarship offers',
   },
   {
     label: 'Transfer resistance', group: 'Transfer portal', field: 'pitchResistance',
     higherIsHarder: true, format: (v) => (v === 0 ? 'None' : `-${v} pts`), delta: flat,
+    baseline: 'Transfers listen to a good pitch',
   },
   {
     label: 'Rivals per transfer', group: 'Transfer portal', field: 'portalRivals',
     higherIsHarder: true, format: (v) => (v === 0 ? 'Standard' : `+${v}`), delta: flat,
+    baseline: 'Standard competition in the portal',
   },
   {
     label: 'Your players leaving', group: 'Transfer portal', field: 'outgoingRisk',
     higherIsHarder: true, format: asPct, delta: relPct,
+    baseline: 'Standard risk of your own players leaving',
   },
   {
     label: 'Player development', group: 'Squad', field: 'development',
     higherIsHarder: false, format: asPct, delta: relPct,
+    baseline: 'Standard player development',
   },
   {
     label: 'Breakout seasons', group: 'Squad', field: 'breakouts',
     higherIsHarder: false, format: asPct, delta: relPct,
+    baseline: 'Standard chance of a breakout season',
   },
   {
     label: 'Quality of jobs offered', group: 'The job market', field: 'jobQuality',
     higherIsHarder: false,
     format: (v) => (v === 0 ? 'Standard' : `${Math.round(v * 100)}%`),
     delta: (a, b) => `${Math.round((b - a) * 100)}pts`,
+    baseline: 'Standard range of jobs after a championship',
   },
   {
     label: 'Broken programmes', group: 'The job market', field: 'situationSeverity',
     higherIsHarder: true,
     format: (v) => (v === 0 ? 'Standard' : `+${Math.round(v * 100)}%`),
     delta: (a, b) => `+${Math.round((b - a) * 100)}pts`,
+    baseline: 'Standard mix of programme situations',
   },
   {
     label: 'What they demand of you', group: 'The job market', field: 'expectation',
     higherIsHarder: true,
     format: (v) => (v === 0 ? 'Standard' : `+${Math.round(v * 100)} win%`),
     delta: (a, b) => `+${Math.round((b - a) * 100)} win%`,
+    baseline: 'Standard expectations from the board',
   },
 ];
 

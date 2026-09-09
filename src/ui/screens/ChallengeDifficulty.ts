@@ -141,8 +141,11 @@ export class ChallengeDifficultyScreen implements Screen {
       for (const spec of MODIFIER_SPECS) {
         detail.appendChild(h('div', { class: 'row', style: 'gap:8px;align-items:baseline' },
           h('span', { style: 'color:var(--green)', text: '✓' }),
-          h('span', { class: 'tiny', style: 'text-transform:none;letter-spacing:0;flex:1 1 auto' },
-            `Standard ${spec.label.toLowerCase()}`)));
+          h('span', {
+            class: 'tiny',
+            style: 'text-transform:none;letter-spacing:0;flex:1 1 auto',
+            text: spec.baseline,
+          })));
       }
     } else {
       detail.appendChild(h('div', {
@@ -201,6 +204,7 @@ export class DifficultyCompareScreen implements Screen {
       higherIsHarder: false,
       format: (v: number) => `${v}x`,
       delta: () => '',
+      baseline: 'Standard legacy scoring',
     }])));
 
     body.appendChild(h('div', {
