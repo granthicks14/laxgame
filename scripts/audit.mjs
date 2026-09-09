@@ -139,7 +139,24 @@ const routes = [
   ['Settings', async () => { await sweep('Settings'); }],
   ['Season', async () => { await sweep('Season entry'); }],
   ['Dynasty', async () => { await sweep('Dynasty entry'); }],
-  ['Challenge', async () => { await sweep('Challenge entry', /Take the job|Abandon/i); }],
+  ['Challenge', async () => {
+    // "Start on ..." actually begins a career, and "Abandon" destroys one, so
+    // both are skipped — everything else on these three screens gets clicked.
+    const skip = /Choose your difficulty|Start on|Abandon/i;
+    await sweep('Challenge entry', skip);
+    const pick = page.getByRole('button', { name: /Choose your difficulty/i }).first();
+    if (await pick.count()) {
+      await pick.click();
+      await settle(420);
+      await sweep('Difficulty picker', skip);
+      const compare = page.getByRole('button', { name: /Compare all four/i }).first();
+      if (await compare.count()) {
+        await compare.click();
+        await settle(420);
+        await sweep('Difficulty comparison', skip);
+      }
+    }
+  }],
 ];
 
 for (const [label, fn] of routes) {
