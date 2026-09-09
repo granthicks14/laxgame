@@ -144,11 +144,17 @@ const routes = [
     // both are skipped — everything else on these three screens gets clicked.
     const skip = /Choose your difficulty|Start on|Abandon/i;
     await sweep('Challenge entry', skip);
-    const pick = page.getByRole('button', { name: /Choose your difficulty/i }).first();
-    if (await pick.count()) {
+    const openPicker = async () => {
+      const pick = page.getByRole('button', { name: /Choose your difficulty/i }).first();
+      if (!(await pick.count())) return false;
       await pick.click();
       await settle(420);
-      await sweep('Difficulty picker', skip);
+      return true;
+    };
+    // The comparison screen is a click DEEPER, so it has to be visited before
+    // the picker is swept: a sweep clicks the back arrow too, and by the end of
+    // one we are rarely still on the screen we started from.
+    if (await openPicker()) {
       const compare = page.getByRole('button', { name: /Compare all four/i }).first();
       if (await compare.count()) {
         await compare.click();
@@ -156,6 +162,10 @@ const routes = [
         await sweep('Difficulty comparison', skip);
       }
     }
+    await backToMenu();
+    const entry = page.locator('.menu-btn__label').filter({ hasText: 'Challenge' }).first();
+    if (await entry.count()) { await entry.click(); await settle(400); }
+    if (await openPicker()) await sweep('Difficulty picker', skip);
   }],
 ];
 
