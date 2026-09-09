@@ -19,7 +19,9 @@ import { UPGRADES } from '../challenge/coach';
 import { stageAt } from '../challenge/ladder';
 import { expectationFor } from '../challenge/state';
 import { programmesAt } from '../challenge/ladder';
-import type { Career } from '../league/types';
+import { CAREER_VERSION, type Career } from '../league/types';
+import { migrateCareer } from '../state/saves';
+import { LEVELS } from '../data/levels';
 
 const problems: string[] = [];
 let checks = 0;
@@ -207,6 +209,58 @@ function playGames(career: Career, n: number): number {
     career.postseason.revealed === 0 && !career.postseason.clinchedSeen);
   check('the new season starts with a clean record',
     Object.values(career.standings).every((r) => r.wins + r.losses + r.ties === 0));
+}
+
+/* ------------------------------------- 7. a save from the build before this */
+
+{
+  // The universal rating scale changed every number a save carries. A career
+  // somebody has played for thirty seasons has to survive that, so this puts a
+  // genuinely v7-shaped save through the real migration and checks the squad
+  // comes out the other side as a squad.
+  const career = fresh(2024);
+  playGames(career, 4);
+
+  // Rebuild the save the way v7 wrote it: old-scale ratings, no tier, no
+  // conference split. The endpoints are the old high school band plus players
+  // either side of it, which is what actually broke first.
+  const v7 = JSON.parse(JSON.stringify(career)) as Record<string, unknown>;
+  v7.version = 7;
+  (v7.challenge as Record<string, unknown>).tier = undefined;
+  const OLD = { lo: 60, hi: 91 };
+  const roster = v7.roster as Record<string, unknown>[];
+  roster.forEach((p, i) => {
+    // Spread the squad across the old band and a little outside it at both ends.
+    const value = OLD.lo - 6 + (i / Math.max(1, roster.length - 1)) * (OLD.hi - OLD.lo + 12);
+    p.overall = Math.round(value);
+    p.potential = Math.round(value + 4);
+    const attrs = p.attrs as Record<string, number>;
+    for (const key of Object.keys(attrs)) attrs[key] = Math.round(value);
+  });
+
+  const migrated = migrateCareer(v7) as Record<string, unknown>;
+  const out = migrated.roster as Record<string, unknown>[];
+  const overalls = out.map((p) => p.overall as number);
+  const attrs = out.flatMap((p) => Object.values(p.attrs as Record<string, number>));
+  const band = LEVELS.hs.band;
+
+  check('an old save migrates to the current version', migrated.version === CAREER_VERSION,
+    `v7 -> v${migrated.version}`);
+  check('a career from before difficulties existed is a Standard career',
+    (migrated.challenge as Record<string, unknown>)?.tier === 'standard');
+  check('the squad survives with everybody in it', out.length === roster.length,
+    `${out.length} players`);
+  check('every migrated rating lands on the new scale',
+    overalls.every((o) => o >= band.lo - 6 && o <= band.hi + 4),
+    `${Math.min(...overalls)}-${Math.max(...overalls)} against a ${band.lo}-${band.hi} band`);
+  check('no attribute is mangled into nonsense',
+    attrs.every((a) => a >= 20 && a <= 99), `${Math.min(...attrs)}-${Math.max(...attrs)}`);
+  check('the squad keeps its shape', out.every((p, i) => (
+    i === 0 || (out[i - 1].overall as number) <= (p.overall as number)
+  )), 'relative strength preserved');
+  check('a current save passes through untouched',
+    (migrateCareer(JSON.parse(JSON.stringify(career))) as Record<string, unknown>).version
+      === CAREER_VERSION);
 }
 
 console.log();

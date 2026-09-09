@@ -14,13 +14,17 @@ const MIGRATABLE = [4, 5, 6, 7];
 const key = (mode: CareerMode): string => `lsl.career.${mode}.v${CAREER_VERSION}`;
 
 /**
+ * Exported so `npm run abuse` can put a real old save through it: a migration
+ * that quietly mangles a career is invisible until somebody loads a save they
+ * have played for thirty seasons.
+ *
  * Fills in everything a newer build expects. Version 5 added the coach's
  * office, promotion and relegation, the transfer market and the development
  * report; version 6 added the level system, so a career that predates it is a
  * high school career in its own district. All of them have sensible values, so
  * an in-progress career upgrades rather than being thrown away.
  */
-function migrateCareer(raw: unknown): unknown {
+export function migrateCareer(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const c = raw as Record<string, unknown>;
   const version = typeof c.version === 'number' ? c.version : 0;
@@ -99,13 +103,23 @@ const V7_BANDS: Record<Level, { lo: number; hi: number }> = {
   pll: { lo: 84, hi: 99 },
 };
 
-/** Moves one rating from the old level-relative scale onto the universal one. */
+/**
+ * Moves one rating from the old level-relative scale onto the universal one.
+ *
+ * Ratings outside the old band — a scrub on a bad team, a star on a good one —
+ * are held to the same margins fresh generation uses rather than extrapolated
+ * freely. Without that a player who was eight points below his level's floor
+ * came out of the migration in the low teens, which is not a lacrosse player.
+ */
 function rescale(value: unknown, level: Level): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   const from = V7_BANDS[level] ?? V7_BANDS.hs;
   const to = LEVELS[level]?.band ?? LEVELS.hs.band;
   const t = (value - from.lo) / Math.max(1, from.hi - from.lo);
-  return Math.max(1, Math.min(99, Math.round(to.lo + t * (to.hi - to.lo))));
+  const mapped = to.lo + t * (to.hi - to.lo);
+  return Math.max(1, Math.min(99, Math.round(
+    Math.max(to.lo - 5, Math.min(to.hi + 3, mapped)),
+  )));
 }
 
 const RESCALED_PLAYER_KEYS = ['overall', 'potential'];
