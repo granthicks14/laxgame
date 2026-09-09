@@ -28,7 +28,7 @@ import {
 } from '../challenge/ladder';
 import {
   acceptOffer, declineAll, evaluateSeason, expectationFor, generateOffers, legacyScore,
-  newChallengeState, promotionReach,
+  newChallengeState, PROMOTION_REACH,
   type JobOffer, type Legacy, type Programme, type SeasonVerdict,
 } from '../challenge/state';
 import {
@@ -40,6 +40,9 @@ import {
   buyUpgrade, coachPerks, levelOf, newCoachProfile, seasonXp,
   type CoachPerks, type CoachProfile,
 } from '../challenge/coach';
+import {
+  DEFAULT_TIER, modsFor, type ChallengeModifiers, type ChallengeTier,
+} from '../challenge/difficulty';
 import { DIFFICULTIES, type DifficultyKey } from '../data/difficulty';
 import type { GameLengthKey, Position } from '../data/constants';
 import { buildSchedule, regularSeasonWeeks } from './schedule';
@@ -154,6 +157,7 @@ export function openRecruitingClass(career: Career): RecruitingState {
     perks: perksOf(career),
     shell,
     keepScouts: career.recruiting?.scouts,
+    offers: challengeMods(career).offers,
   });
   career.recruiting = state;
   return state;
@@ -166,13 +170,22 @@ export function recruitContext(career: Career): RecruitContext {
   const fx = coachingOf(career);
   const depth = { A: 0, M: 0, D: 0, G: 0, FO: 0 } as Record<Position, number>;
   for (const p of career.roster) depth[p.pos] = (depth[p.pos] ?? 0) + 1;
+  // A rival's pull is its WITHIN-LEVEL recruiting rating at every level. It
+  // used to be the raw team overall for high school, which stopped meaning the
+  // same thing the moment ratings became universal.
   const pool = career.level === 'hs'
-    ? classMembers(career, career.classKey).map((t) => ({ id: t.id, name: t.short, recruiting: t.overall }))
+    ? classMembers(career, career.classKey).map((t) => ({
+      id: t.id, name: t.short, recruiting: tryWorldTeam(t.id)?.recruiting ?? 50,
+    }))
     : teamsAtLevel(career.level)
       .filter((t) => t.conference === career.conferenceId || t.prestige > 70)
       .map((t) => ({ id: t.id, name: t.short, recruiting: t.recruiting }));
+  const mods = challengeMods(career);
   return {
     perks: perksOf(career),
+    rivalPush: mods.rivalPush,
+    rivalScouting: mods.rivalScouting,
+    interestGain: mods.interestGain,
     commitments: career.recruiting
       ? career.recruiting.prospects.filter((p) => p.committedTo === career.teamId).length
       : 0,
@@ -1032,6 +1045,7 @@ export function runOffseason(career: Career): OffseasonReport {
       losses: row?.losses ?? 0,
       retention: fx.retention,
       rivals,
+      outgoingRisk: challengeMods(career).outgoingRisk,
     });
     report.portalOut = out.left;
     staying.length = 0;
@@ -1041,10 +1055,19 @@ export function runOffseason(career: Career): OffseasonReport {
   // 2. Development. Every returning player gets a real, explicable season of
   //    growth — or, occasionally, a step back.
   const focusKeys = career.focus ? FOCUS_ATTRS[career.focus] : [];
+  // Difficulty is applied HERE and nowhere near the field. A harder tier makes
+  // players grow more slowly and break out less often — it never touches a
+  // rating during a game, and it never gives the opposition anything.
+  const devMods = challengeMods(career);
+  const devFx = {
+    ...fx,
+    developmentRate: fx.developmentRate * devMods.development,
+    breakoutRate: fx.breakoutRate * devMods.breakouts,
+  };
   for (const p of staying) {
     // A professional veteran stays a veteran; everyone else moves up a year.
     if (!(pro && p.grade >= 12)) p.grade = (p.grade + 1) as Grade;
-    const res = developPlayer(p, rng, fx, focusKeys, level);
+    const res = developPlayer(p, rng, devFx, focusKeys, level);
     p.xp = 0;
     p.season = emptyStats();
     const entry: DevelopmentEntry = {
@@ -1232,7 +1255,11 @@ export function pitchTo(
   if (c.status === 'committed' || c.status === 'declined' || c.status === 'lost') return null;
 
   const rng = new Rng(`${career.seed}:pitch:${career.year}:${c.id}:${c.attempts}`);
-  const result = pitch(c, programSnapshot(career), rng, angle, perksOf(career));
+  const mods = challengeMods(career);
+  const result = pitch(c, programSnapshot(career), rng, angle, perksOf(career), {
+    resistance: mods.pitchResistance,
+    rivals: mods.portalRivals,
+  });
   c.attempts++;
   c.lastAngle = angle;
   career.pitchesLeft--;
@@ -1336,7 +1363,7 @@ export function coachingOf(career: Career): CoachEffects {
 /** Buys an upgrade. Points live on the coach, so this survives a job change. */
 export function buyCoachUpgrade(career: Career, key: string): boolean {
   const profile = coachProfile(career);
-  const ok = buyUpgrade(profile, key);
+  const ok = buyUpgrade(profile, key, challengeMods(career).upgradeCost);
   if (ok) career.coachingPoints = profile.points;
   return ok;
 }
@@ -1351,11 +1378,36 @@ export function spendCoachPoints(career: Career, points: number): boolean {
 }
 
 /** Keeps the legacy Coach Points field and the profile in step. */
+/**
+ * The Challenge difficulty this career is being played on, as numbers every
+ * system can read. A Dynasty career has no tier and gets the Standard table, so
+ * nothing outside Challenge Mode changes behaviour.
+ */
+export function challengeMods(career: Career): ChallengeModifiers {
+  return modsFor(career.challenge?.tier);
+}
+
+/**
+ * Coach Points and experience, scaled by difficulty. This is the single place
+ * either is awarded, which is what makes "Coach Points are harder to earn" a
+ * real property of the career rather than a claim on a menu.
+ */
 export function awardCoachPoints(career: Career, points: number, xp: number): void {
+  const mods = challengeMods(career);
   const profile = coachProfile(career);
-  profile.points += points;
-  profile.xp += xp;
+  profile.points += Math.max(points > 0 ? 1 : 0, Math.round(points * mods.coachPoints));
+  profile.xp += xp * mods.coachXp;
   career.coachingPoints = profile.points;
+}
+
+/** What one of the coach's own upgrades costs this career. */
+export function coachUpgradeCost(career: Career, base: number): number {
+  return Math.max(1, Math.round(base * challengeMods(career).upgradeCost));
+}
+
+/** What the next level of a programme staff track costs this career. */
+export function staffUpgradeCost(career: Career, base: number | null): number | null {
+  return base === null ? null : Math.max(1, Math.round(base * challengeMods(career).staffCost));
 }
 
 /** Writes the current job into the coach's history before he leaves it. */
@@ -1382,7 +1434,9 @@ function openJob(career: Career, stageKey: string): void {
 
 export function startChallenge(opts: {
   difficulty: DifficultyKey; gameLength: GameLengthKey; teamId?: string; seed?: number;
+  tier?: ChallengeTier;
 }): Career {
+  const tier = opts.tier ?? DEFAULT_TIER;
   const seed = opts.seed ?? (Date.now() ^ Math.floor(Math.random() * 0xffffff));
   const rng = new Rng(`${seed}:challenge`);
   const stage = stageAt(0);
@@ -1391,7 +1445,7 @@ export function startChallenge(opts: {
     ?? [...pool].sort((a, b) => a.prestige - b.prestige)[0]?.id
     ?? 'lake-highlands';
   const prestige = pool.find((p) => p.id === teamId)?.prestige ?? 50;
-  const situation = situationFor(prestige, rng);
+  const situation = situationFor(prestige, rng, modsFor(tier).situationSeverity);
 
   const career = createCareer({
     mode: 'challenge',
@@ -1401,7 +1455,9 @@ export function startChallenge(opts: {
     seed,
     level: stage.level,
   });
-  career.challenge = newChallengeState(0, situation, expectationFor(stage, prestige, situation, 22));
+  career.challenge = newChallengeState(
+    0, situation, expectationFor(stage, prestige, situation, 22, tier), tier,
+  );
   career.coach = newCoachProfile(career.coachingPoints);
   openJob(career, stage.key);
   applyChallengeSituation(career, situation);
@@ -1474,15 +1530,12 @@ export function resolveChallengeSeason(career: Career): SeasonVerdict | null {
   const rng = new Rng(`${career.seed}:offers:${state.totalYears}`);
   if (verdict.outcome === 'promoted') {
     state.offerKind = 'promotion';
-    // The next rung always. A coach with a real name in the sport is also
-    // offered something two rungs up — a smaller job at a much higher level,
-    // which is a genuine decision rather than a free upgrade.
-    const next = Math.min(FINAL_STAGE, state.stageIndex + 1);
-    const reach = Math.min(FINAL_STAGE, state.stageIndex + promotionReach(state));
-    const offers = generateOffers(state, 'promotion', challengePool(next), rng, reach === next ? 3 : 2, next);
-    if (reach !== next) {
-      offers.push(...generateOffers(state, 'promotion', challengePool(reach), rng, 1, reach));
-    }
+    // THE NEXT RUNG, AND ONLY THE NEXT RUNG. A championship is a promotion to
+    // the level directly above, never past it: winning Division III opens
+    // Division II jobs and nothing else. The choice a coach gets is WHICH
+    // programme at that level, not how far up the ladder to jump.
+    const next = Math.min(FINAL_STAGE, state.stageIndex + PROMOTION_REACH);
+    const offers = generateOffers(state, 'promotion', challengePool(next), rng, 3, next);
     if (!offers.length) {
       // Reputation decides WHICH jobs, never WHETHER there are any. Winning a
       // championship is the promise this mode is built on, and an empty list

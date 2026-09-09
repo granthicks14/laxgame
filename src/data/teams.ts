@@ -35,6 +35,7 @@
  * ------------------------------------------------------------------------- */
 
 import { OFFICIAL_ROSTERS, rosterImportProblems } from './rosters';
+import { universalOverall } from './levels';
 
 export type ClassKey = 'a' | 'b' | 'c-east' | 'c-west' | 'd';
 
@@ -137,7 +138,7 @@ export interface TeamData extends GameTeam {
 }
 
 /* eslint-disable max-len */
-export const TEAMS: TeamData[] = [
+const AUTHORED_TEAMS: TeamData[] = [
   // ============================================================== CLASS A
   {
     id: 'highland-park', name: 'Highland Park', short: 'Highland Park', abbr: 'HP', mascot: 'Scots',
@@ -511,6 +512,43 @@ export const TEAMS: TeamData[] = [
   },
 ];
 /* eslint-enable max-len */
+
+/* -------------------------------------------------- the universal scale */
+
+/**
+ * The ratings above are authored as STANDINGS WITHIN THE DISTRICT — Highland
+ * Park at 89 means "one of the two best programmes in the district", not "as
+ * good as a Division I team". They are written that way because that is how a
+ * person editing this file thinks, and how the placement research reads.
+ *
+ * The rest of the game needs one scale for the whole sport, so the district's
+ * range is mapped onto high school's slice of it (see `overallBand` in
+ * levels.ts) exactly once, here, at module load. Edit the numbers above in
+ * district terms; every consumer sees universal ones.
+ *
+ * The map is linear and monotonic, so relative strength inside the district —
+ * the thing Dynasty balance actually rests on — is preserved exactly.
+ */
+const AUTHORED_SPAN = (() => {
+  const all = AUTHORED_TEAMS.map((t) => t.overall);
+  return { min: Math.min(...all), max: Math.max(...all) };
+})();
+
+const RATING_KEYS: (keyof TeamRatings)[] = [
+  'overall', 'offense', 'defense', 'goalie', 'attack', 'midfield', 'faceoff', 'speed',
+];
+
+function toUniversal(team: TeamData): TeamData {
+  const out = { ...team };
+  for (const key of RATING_KEYS) {
+    out[key] = Math.round(universalOverall('hs', team[key], AUTHORED_SPAN));
+  }
+  // Chemistry is not a strength rating — it is how well a squad plays together,
+  // and it is already read as a 0-99 percentage everywhere. It stays as written.
+  return out;
+}
+
+export const TEAMS: TeamData[] = AUTHORED_TEAMS.map(toUniversal);
 
 /**
  * SIXES. The district also runs a 6v6 short-field competition. This game

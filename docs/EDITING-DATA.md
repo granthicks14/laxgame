@@ -95,28 +95,59 @@ plays QF → SF → F and a 4-team field plays SF → F with no other changes.
 
 ## Levels — `src/data/levels.ts`
 
-The six tiers of the sport. A team's `overall` is a rating *within its own
-level*; what turns that into a squad is the level's **player band**, which is
-the range of actual attribute values its players are drawn from.
+The six tiers of the sport, and **one rating scale across all of them**.
+
+Every level owns a fixed slice of a single universal 0-99 scale. A programme's
+standing *within* its own level (its `tier`, or for the district its authored
+rating) is mapped onto that slice, so `overall` means the same thing in Class D
+as it does in the PLL.
 
 ```ts
-d1: { band: { lo: 74, hi: 99 }, rosterSize: 28, minDifficulty: 'allstate', crowdScale: 1.7, ... }
+d1: { overallBand: { lo: 75, hi: 92 }, band: { lo: 72, hi: 96 }, rosterSize: 28, ... }
 ```
 
-High school has `band: null`, meaning *identity* — high school ratings ARE the
-player scale, and every other level is measured from it. Do not give high school
-a band: Dynasty balance and every save in existence depend on it staying the
-yardstick.
+| | teams | players |
+| --- | --- | --- |
+| High school | 40-80 | 38-84 |
+| Division III | 55-83 | 52-88 |
+| Division II | 65-87 | 62-92 |
+| Division I | 75-92 | 72-96 |
+| Semi-pro | 80-94 | 77-97 |
+| PLL | 88-99 | 85-99 |
+
+`overallBand` is the team rating; `band` is a little wider at both ends because
+a squad contains players better and worse than the team they add up to.
+
+**This used to be wrong and the way it was wrong is worth knowing.** `overall`
+was a standing *within* a level, so Division III ran 38-95 and the PLL ran
+83-96 — which let a college side be rated 94 against a professional club's 88.
+Two functions fix it and both live here:
+
+- `universalOverall(level, tier, tierSpan)` — a within-level standing becomes a
+  universal rating. Used by `world.ts` for every college and professional
+  programme, and by `teams.ts` for the district.
+- `withinLevelStanding(level, overall)` — the inverse. **Prestige, recruiting
+  pull and staff quality are within-level ideas** — the best team in Class D has
+  enormous pull *in Class D* — so anything of that kind reads a standing, never
+  the raw universal rating. Getting this backwards is what collapsed every
+  Class D programme into "broken rebuild" the first time.
+
+The bands OVERLAP deliberately: the best high school team in Texas rates
+alongside a decent Division III side, and the worst PLL club still beats any
+college programme. What is never allowed is a level reaching *past* its
+neighbour. **Run `npm run hierarchy` after touching any of this** — it builds
+every team and every roster at every level and fails on an inversion.
 
 `minDifficulty` floors the AI's decision quality, so a professional opponent
 genuinely thinks better rather than only having better numbers. `crowdScale`
-sizes the stands. Run `npm run ladder` after any change: it prints the actual
-player pools each level produces.
+sizes the stands.
 
 Because goalies are judged against `Match.par` — the average overall of the two
-squads on the field — raising a band does **not** silently strangle scoring at
-that level. Run `npm run levels` to confirm; it plays real matches at every tier
-and prints goals, shooting and save percentages.
+squads on the field — moving a band does **not** silently strangle scoring at
+that level. The one constant that does care is `SHOOTING_REFERENCE` in
+`src/match/Match.ts`, which re-centres keepers onto the scale the shooting model
+was tuned against, and `SIM.ratingCentre` in `constants.ts`, which anchors run
+speed. Move a band and re-measure both with `npm run levels`.
 
 ## The world — `src/data/world/programs.ts`
 
@@ -140,6 +171,47 @@ there are, how many are non-conference, how big the conference tournament and
 national bracket are, and what the trophy is called. High school reproduces
 exactly what the district already did.
 
+## Challenge difficulty — `src/challenge/difficulty.ts`
+
+Four tiers. `STANDARD_MODS` is the baseline and is defined as *everything at
+1.0*, so retuning the baseline moves the whole ladder with it. Every other tier
+is a departure from it.
+
+The design rule: **difficulty is never a bonus on the opponent's rating.** No
+tier gives a rival programme a player, a point of rating or a resource the coach
+does not have. What changes is decisions (rivals scout and chase better) and
+resources (fewer Coach Points, dearer upgrades, contested transfers, slower
+development, worse jobs). `npm run hierarchy` fails the build if a difficulty
+setting ever bends the rating hierarchy.
+
+`MODIFIER_SPECS` is the single description of what each field means, how to
+format it and which direction is harder. **The difficulty screen, the comparison
+table and `differencesFrom()` are all generated from it**, so the numbers a
+player is shown are the numbers the simulation uses — there is no second copy to
+drift. Adding a modifier means adding a field, a spec entry and the one call
+site that reads it; the UI needs no change.
+
+Where each field is read:
+
+| field | read by |
+| --- | --- |
+| `coachPoints`, `coachXp` | `awardCoachPoints` in `career.ts` — the only place either is granted |
+| `upgradeCost`, `staffCost` | `coachUpgradeCost` / `staffUpgradeCost`, and `buyUpgrade` in `coach.ts` |
+| `rivalPush`, `rivalScouting`, `interestGain` | `advanceRecruitingWeek` via `RecruitContext` |
+| `offers` | `newRecruitingClass` |
+| `pitchResistance`, `portalRivals` | `pitch()` in `transfers.ts` |
+| `outgoingRisk` | `runOutgoing` |
+| `development`, `breakouts` | the offseason in `career.ts`, applied to a copy of the coach effects so it can never reach the field |
+| `jobQuality`, `situationSeverity` | `generateOffers` and `situationFor` |
+| `expectation` | `expectationFor` |
+| `legacy` | `legacyScore` |
+
+Retune with `npm run careers`, which sweeps all four tiers over the same seeds
+and strategies and FAILS if a harder tier climbs further or buys more of the
+coach tree than an easier one. `TIER=elite npm run careers` runs one.
+
+---
+
 ## The ladder — `src/challenge/ladder.ts`, `situations.ts`, `state.ts`
 
 `STAGES` is the nine rungs of Challenge Mode. `parWinPct` is roughly what a
@@ -153,10 +225,20 @@ roster, not to the team rating** — team ratings are derived from the roster, s
 shifting both double-counts the problem and makes it permanent. Chemistry is the
 one exception, because it does not live in any player.
 
-`state.ts` holds reputation, heat and offers. `promotionReach` decides whether a
-championship carries you one rung or two; without the two-rung path a nine-rung
-ladder takes eighty seasons and nobody finishes it. Run `RUNS=10 npm run
-challenge` after touching any of it.
+`state.ts` holds reputation, heat and offers. `PROMOTION_REACH` is **1, always**:
+a championship opens the level directly above and nothing past it. There used to
+be a two-rung path for a well-known coach, added to stop a nine-rung ladder
+taking eighty seasons; it was the wrong fix, because skipping a level skips the
+point of the mode. `generateOffers` clamps the target stage itself rather than
+trusting callers, so a skip is unwritable, and `npm run stages` asserts it
+across every rung and reputation.
+
+The pace lever that replaced it is the **offer window** in `generateOffers`: a
+coach who has just won a championship shops higher up the prestige order, so he
+arrives at the next level with a programme that can contend rather than one he
+must rebuild first. Move `standing`/`width` there and re-measure with the
+per-rung table in `npm run careers` — that table is the honest picture of where
+a career's seasons actually go.
 
 ## Scouting — `src/scouting/`
 

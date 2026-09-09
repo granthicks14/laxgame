@@ -31,7 +31,7 @@ import {
 } from '../data/players';
 import type { GameTeam, TeamData } from '../data/teams';
 import { teamsInConference as WORLD_TEAMS_IN, tryWorldTeam } from '../data/world';
-import type { Level } from '../data/levels';
+import { LEVELS, type Level } from '../data/levels';
 import { coachEffects, type CoachStaff } from './coaching';
 import type { CoachPerks } from '../challenge/coach';
 
@@ -348,7 +348,7 @@ export function buildMarket(
       for (let depth = 0; depth < list.length; depth++) {
         const p = list[depth];
         if (p.grade >= 12) continue; // seniors are gone anyway
-        const reason = pickReason(p, depth, losing, rng);
+        const reason = pickReason(p, depth, losing, rng, level);
         if (!reason) continue;
         pool.push({
           id: `${team.id}:${p.id}`,
@@ -428,7 +428,12 @@ export interface OutgoingResult {
  */
 export function runOutgoing(
   roster: PlayerData[], level: Level, rng: Rng,
-  ctx: { wins: number; losses: number; retention: number; rivals: GameTeam[] },
+  ctx: {
+    wins: number; losses: number; retention: number; rivals: GameTeam[];
+    /** Challenge difficulty: how much more likely your own players are to look
+     *  elsewhere. 1 on Standard. */
+    outgoingRisk?: number;
+  },
 ): OutgoingResult {
   const info = marketFor(level);
   // A COPY, always. Returning the caller's own array let career.ts empty the
@@ -467,7 +472,8 @@ export function runOutgoing(
       if (p.potential - p.overall > 8) chance += 0.05;
       // Culture is the whole point of the culture track.
       chance *= clamp(1 - ctx.retention * 0.65, 0.3, 1);
-      if (rng.next() > clamp(chance, 0, 0.45)) { stayed.push(p); continue; }
+      chance *= ctx.outgoingRisk ?? 1;
+      if (rng.next() > clamp(chance, 0, 0.6)) { stayed.push(p); continue; }
 
       remaining--;
       const to = ctx.rivals.length ? rng.pick(ctx.rivals) : null;
@@ -490,14 +496,27 @@ function weight(c: TransferCandidate): number {
   return c.player.overall + (c.reason === 'buried' ? 8 : 0) + c.currentDepth * 2;
 }
 
+/**
+ * Why this player would leave — or that he would not.
+ *
+ * The thresholds are RELATIVE TO HIS LEVEL, which they have to be: they were
+ * once absolute numbers written against high school ratings, and the moment
+ * ratings became universal (levels.ts) a high school window emptied out
+ * completely, because almost nobody at that level clears 60 any more. They were
+ * also silently wrong at the top, where every professional cleared all three.
+ *
+ * "Good enough that somebody else would take him" is a question about his
+ * peers, so it is asked in those terms.
+ */
 function pickReason(
-  p: PlayerData, depth: number, losing: boolean, rng: Rng,
+  p: PlayerData, depth: number, losing: boolean, rng: Rng, level: Level,
 ): TransferReason | null {
+  const par = (LEVELS[level].band.lo + LEVELS[level].band.hi) / 2;
   // A starter on a decent team has no reason to go anywhere.
   if (depth === 0 && !losing) return rng.next() < 0.04 ? 'role' : null;
-  if (depth >= 2 && p.overall >= 60) return rng.next() < 0.55 ? 'buried' : null;
-  if (depth === 1 && p.overall >= 68) return rng.next() < 0.3 ? 'buried' : null;
-  if (losing && p.overall >= 70) return rng.next() < 0.28 ? 'losing' : null;
+  if (depth >= 2 && p.overall >= par - 15) return rng.next() < 0.55 ? 'buried' : null;
+  if (depth === 1 && p.overall >= par - 7) return rng.next() < 0.3 ? 'buried' : null;
+  if (losing && p.overall >= par - 5) return rng.next() < 0.28 ? 'losing' : null;
   if (p.potential - p.overall >= 10) return rng.next() < 0.16 ? 'development' : null;
   return null;
 }
@@ -600,6 +619,9 @@ export interface PitchResult {
 export function pitch(
   c: TransferCandidate, prog: ProgramSnapshot, rng: Rng,
   angle: PitchAngle = 'development', perks?: CoachPerks,
+  /** Challenge difficulty: interest points every pitch has to overcome, and
+   *  how many rival programmes are also in for him. */
+  difficulty: { resistance: number; rivals: number } = { resistance: 0, rivals: 0 },
 ): PitchResult {
   const { score } = interestIn(c, prog);
   const bonus = c.status === 'considering' ? 12 : 0;
@@ -610,7 +632,14 @@ export function pitch(
   // He has already heard this one. Saying the same thing louder is not a pitch.
   if (c.lastAngle === angle) fit = Math.min(fit, 0) + Math.max(0, fit) * 0.25 - 6;
   const power = perks?.pitchPower ?? 1;
-  const chance = clamp(((score + bonus + fit - fatigue) / 130) * power, 0.02, 0.93);
+  // Difficulty makes a transfer a CONTEST rather than a formality: a flat
+  // resistance he has to be talked past, plus the programmes queuing up behind
+  // you. Neither touches how good the player is — only how hard he is to get.
+  const contested = difficulty.rivals * 3.5;
+  const chance = clamp(
+    ((score + bonus + fit - fatigue - difficulty.resistance - contested) / 130) * power,
+    0.02, 0.93,
+  );
   const roll = rng.next();
 
   if (roll < chance) {
@@ -629,8 +658,9 @@ export function pitch(
           : 'He is thinking about it, but that was not what he wanted to hear.',
     };
   }
-  // Somebody else in the league takes him: a rival with a real need.
-  if (rng.next() < 0.3) {
+  // Somebody else in the league takes him: a rival with a real need. The more
+  // programmes are in for him, the more often that is how it ends.
+  if (rng.next() < clamp(0.3 + difficulty.rivals * 0.09, 0, 0.72)) {
     const rivals = rivalProgrammes(c.fromTeamId)
       .filter((t) => t.id !== c.fromTeamId && t.id !== prog.team.id);
     const to = rivals.length ? rng.pick(rivals) : null;

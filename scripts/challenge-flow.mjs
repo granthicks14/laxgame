@@ -65,10 +65,47 @@ await settle();
 check('the ladder is on the entry screen', await page.locator('.rung').count() === 9,
   `${await page.locator('.rung').count()} rungs`);
 
-await clickText(/Take the job/);
-await settle(700);
+/* ----------------------------------------------------- choosing a difficulty */
+
+// A career now starts by choosing how hard it is, and the choice is permanent,
+// so it gets its own screen before the first job.
+await clickText(/Choose your difficulty/);
+await settle(500);
+const tiers = await page.locator('.panel, .btn').allInnerTexts();
+const tierText = tiers.join(' ').toLowerCase();
+check('all four difficulties are offered',
+  ['standard challenge', 'elite challenge', 'impossible challenge', 'final challenge']
+    .every((t) => tierText.includes(t)));
+
+// Tapping a tier has to say what it changes, in numbers.
+await clickText(/^Elite Challenge/i);
+await settle(400);
+const eliteDetail = (await page.locator('.wrapper').innerText());
+check('a harder tier explains what it changes',
+  /what makes this harder than standard challenge\?/i.test(eliteDetail));
+check('the explanation is quantified, not adjectives',
+  (eliteDetail.match(/[+-]\d+%/g) ?? []).length >= 5,
+  `${(eliteDetail.match(/[+-]\d+%/g) ?? []).length} numbers`);
+check('it names the legacy multiplier', /legacy score ×/i.test(eliteDetail));
+
+// And the comparison screen carries every tier side by side.
+await clickText(/Compare all four/);
+await settle(500);
+const compare = (await page.locator('.wrapper').innerText()).toLowerCase();
+check('the comparison screen lists every tier',
+  ['standard', 'elite', 'impossible', 'final'].every((t) => compare.includes(t)));
+check('the comparison covers every system',
+  ['coach points earned', 'coach upgrade cost', 'rival recruiting effort', 'transfer resistance',
+    'player development', 'quality of jobs offered'].every((r) => compare.includes(r)));
+await back();
+await settle(400);
+
+await clickText(/^Start on/);
+await settle(900);
 const started = await save();
 check('a Challenge career starts', !!started && !!started.challenge);
+check('the career records the difficulty it was started on',
+  started?.challenge?.tier === 'elite', started?.challenge?.tier);
 check('it starts at the bottom rung', started?.challenge?.stageIndex === 0,
   `rung ${started?.challenge?.stageIndex}`);
 check('it starts in Class D', started?.classKey === 'd', started?.classKey);

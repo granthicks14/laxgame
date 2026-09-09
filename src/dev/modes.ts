@@ -80,12 +80,26 @@ function auditCareer(label: string, career: Career): void {
   // --- offseason
   const before = career.roster.length;
   const yearBefore = career.year;
+  // A squad handed to you as a rebuild is entirely underclassmen, so "somebody
+  // must graduate" is not a property of a correct offseason — it is a property
+  // of the squad you happened to inherit. What must ALWAYS hold is that the
+  // seniors who were there are gone, that everybody else aged, and that anyone
+  // who left was replaced.
+  const seniorsBefore = career.roster.filter((x) => x.grade >= 12).map((x) => x.id);
+  const idsBefore = new Set(career.roster.map((x) => x.id));
   const report = runOffseason(career);
   check(p('the offseason advanced the year'), career.year === yearBefore + 1);
   check(p('players developed'), report.development.length > 0, `${report.development.length} reports`);
-  check(p('players graduated or moved on'), report.graduated.length + report.portalOut.length > 0,
-    `${report.graduated.length} out, ${report.portalOut.length} through the portal`);
-  check(p('new players arrived'), report.arrived.length > 0, `${report.arrived.length} arrivals`);
+  check(p('every senior moved on'),
+    seniorsBefore.every((id) => !career.roster.some((x) => x.id === id)),
+    `${seniorsBefore.length} seniors`);
+  check(p('the squad aged a year'),
+    career.roster.filter((x) => idsBefore.has(x.id)).every((x) => x.grade > 9)
+    || career.roster.every((x) => !idsBefore.has(x.id)),
+    'returning players moved up a grade');
+  const left = report.graduated.length + report.portalOut.length;
+  check(p('everyone who left was replaced'), left === 0 || report.arrived.length > 0,
+    `${left} out, ${report.arrived.length} in`);
   check(p('the squad is still whole'), career.roster.length >= 18, `${before} → ${career.roster.length}`);
   check(p('a new schedule was drawn'), career.schedule.every((g) => !g.played));
   check(p('history was recorded'), career.history.length > 0, `${career.history.length} seasons`);

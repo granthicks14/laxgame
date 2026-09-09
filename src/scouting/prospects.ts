@@ -104,7 +104,7 @@ const CLASS_SHAPE: Position[] = ['A', 'A', 'M', 'M', 'M', 'M', 'D', 'D', 'D', 'G
 /** The par overall for a level, used for ceilings and for reading a report. */
 export function levelPar(level: Level): number {
   const band = LEVELS[level].band;
-  return band ? (band.lo + band.hi) / 2 : 62;
+  return (band.lo + band.hi) / 2;
 }
 
 export interface ClassOptions {

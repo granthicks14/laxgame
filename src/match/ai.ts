@@ -257,7 +257,7 @@ function shotQuality(m: Match, p: MatchPlayer): number {
   const lateral = Math.abs(p.y - goal.y);
   const angleScore = clamp(1 - lateral / (along * 1.5 + 7), 0.08, 1);
 
-  const distScore = clamp(1 - (d - 3) / (16 + (m.par - 66) * 0.14), 0.05, 1);
+  const distScore = clamp(1 - (d - 3) / (16 + (m.par - SIM.parReference) * 0.14), 0.05, 1);
   const pressureF = clamp(1 - m.pressureOn(p) * 0.45, 0.25, 1);
   const laneF = clamp(1 - m.laneRisk(p.x, p.y, goal.x, goal.y, p.side) * 0.45, 0.4, 1);
 
@@ -318,7 +318,7 @@ function carrierAI(m: Match, p: MatchPlayer, dt: number): void {
   // straighter — not to stop shooting. Without this the ladder is not even
   // monotonic: Division I, whose floor is All-State, produced fewer goals than
   // Division II, whose floor is Varsity.
-  const parEase = clamp(1 - (m.par - 66) / 100, 0.7, 1);
+  const parEase = clamp(1 - (m.par - SIM.parReference) / 100, 0.7, 1);
   const shootThreshold = (d.shotGreed / Math.max(0.4, t.shotGreed)) * urgency * parEase;
   const clockPanic = m.shotClock < 7;
 
@@ -356,7 +356,7 @@ function carrierAI(m: Match, p: MatchPlayer, dt: number): void {
 
   // --- dodge?
   if (markerDist < 2.6 && p.dodgeCd <= 0 && p.stamina > SIM.dodgeStamina + 6) {
-    const edge = (p.data.attrs.dodging - (marker?.data.attrs.defense ?? 60)) / 100;
+    const edge = (p.data.attrs.dodging - (marker?.data.attrs.defense ?? m.par)) / 100;
     if (m.rng.next() < clamp(0.3 + edge + (t.key === 'aggressive' ? 0.22 : 0), 0.08, 0.85)) {
       // Dodge past the marker, toward the goal.
       const toGoal = normalize(goal.x - p.x, goal.y - p.y);

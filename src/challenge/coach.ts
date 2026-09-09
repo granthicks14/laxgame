@@ -235,18 +235,23 @@ export function owns(profile: CoachProfile, key: string): boolean {
 
 export type LockReason = 'owned' | 'level' | 'requires' | 'cost' | null;
 
-export function lockReason(profile: CoachProfile, u: UpgradeInfo): LockReason {
+/** What an upgrade actually costs, after the Challenge difficulty multiplier. */
+export function priceOf(u: UpgradeInfo, costScale = 1): number {
+  return Math.max(1, Math.round(u.cost * costScale));
+}
+
+export function lockReason(profile: CoachProfile, u: UpgradeInfo, costScale = 1): LockReason {
   if (owns(profile, u.key)) return 'owned';
   if (levelOf(profile.xp) < u.level) return 'level';
   if (!u.requires.every((r) => owns(profile, r))) return 'requires';
-  if (profile.points < u.cost) return 'cost';
+  if (profile.points < priceOf(u, costScale)) return 'cost';
   return null;
 }
 
-export function buyUpgrade(profile: CoachProfile, key: string): boolean {
+export function buyUpgrade(profile: CoachProfile, key: string, costScale = 1): boolean {
   const u = upgrade(key);
-  if (!u || lockReason(profile, u) !== null) return false;
-  profile.points -= u.cost;
+  if (!u || lockReason(profile, u, costScale) !== null) return false;
+  profile.points -= priceOf(u, costScale);
   profile.owned.push(key);
   return true;
 }
@@ -357,4 +362,112 @@ export function coachPerks(profile: CoachProfile | null | undefined): CoachPerks
 /** What one season is worth in experience, before the result. */
 export function seasonXp(wins: number, losses: number, champion: boolean, stageIndex: number): number {
   return 8 + wins * 2 + losses * 0.5 + (champion ? 25 + stageIndex * 4 : 0);
+}
+
+/* ------------------------------------------------------------- identities */
+
+/**
+ * WHAT KIND OF COACH DID YOU BECOME?
+ *
+ * On Standard a long career can afford most of the tree. On the harder tiers it
+ * cannot — Coach Points arrive more slowly and every upgrade costs more — so
+ * spending stops being a shopping list and becomes a decision about what your
+ * programmes are going to be good at.
+ *
+ * This does not gate anything. It reads the tree a coach has actually bought
+ * and names the coach he has become, so the choice he has been making all
+ * career is visible to him rather than buried in a purchase history.
+ */
+export type CoachIdentity = 'scout' | 'developer' | 'recruiter' | 'strategist' | 'allrounder';
+
+export interface IdentityInfo {
+  key: CoachIdentity;
+  name: string;
+  blurb: string;
+  /** Branches whose upgrades count toward this identity. */
+  branches: UpgradeBranch[];
+}
+
+export const IDENTITIES: Record<CoachIdentity, IdentityInfo> = {
+  scout: {
+    key: 'scout',
+    name: 'The Scout',
+    blurb: 'You find them before anybody else does. Your classes are full of players the '
+      + 'rankings missed, and you knew what they were when nobody else did.',
+    branches: ['scouting'],
+  },
+  recruiter: {
+    key: 'recruiter',
+    name: 'The Recruiter',
+    blurb: 'You get the players you want, wherever they are. Nobody out-works you on a '
+      + 'commitment and nobody out-talks you in the portal.',
+    branches: ['recruiting', 'transfers'],
+  },
+  developer: {
+    key: 'developer',
+    name: 'The Developer',
+    blurb: 'Players leave your programme better than anybody expected. You do not need the '
+      + 'best recruits, because you do not have them for long before they are.',
+    branches: ['development'],
+  },
+  strategist: {
+    key: 'strategist',
+    name: 'The Strategist',
+    blurb: 'You win with what you have. Your teams are prepared, they hold together, and they '
+      + 'are a step ahead on the field.',
+    branches: ['gameday'],
+  },
+  allrounder: {
+    key: 'allrounder',
+    name: 'The Complete Coach',
+    blurb: 'No weakness anywhere. It takes a very long career, on a forgiving difficulty, to '
+      + 'become this — and it is its own kind of achievement.',
+    branches: [],
+  },
+};
+
+export interface IdentityReading {
+  identity: IdentityInfo;
+  /** Points spent per branch, so the reading can be shown as a shape. */
+  spend: Record<UpgradeBranch, number>;
+  /** How committed the coach is: 0 = spread thin, 1 = entirely one branch. */
+  focus: number;
+  owned: number;
+}
+
+/**
+ * Reads a coach's identity off what he has actually bought. A coach who has
+ * spent nothing has no identity yet, which is honest — he is a coach who has
+ * not decided.
+ */
+export function identityOf(profile: CoachProfile): IdentityReading | null {
+  const spend = Object.fromEntries(BRANCH_ORDER.map((b) => [b, 0])) as Record<UpgradeBranch, number>;
+  for (const key of profile.owned) {
+    const u = upgrade(key);
+    if (u) spend[u.branch] += u.cost;
+  }
+  const total = BRANCH_ORDER.reduce((n, b) => n + spend[b], 0);
+  if (total <= 0) return null;
+
+  // Score each identity by the share of everything he has spent that went into
+  // its branches. "The Recruiter" spans two branches, so it is measured across
+  // both rather than being penalised for the split.
+  let best: CoachIdentity = 'allrounder';
+  let bestShare = 0;
+  for (const info of Object.values(IDENTITIES)) {
+    if (!info.branches.length) continue;
+    const share = info.branches.reduce((n, b) => n + spend[b], 0) / total;
+    // A two-branch identity has to clear a higher bar to count as a focus.
+    const bar = info.branches.length > 1 ? 0.5 : 0.38;
+    if (share > bestShare && share >= bar) {
+      bestShare = share;
+      best = info.key;
+    }
+  }
+  return {
+    identity: IDENTITIES[best],
+    spend,
+    focus: bestShare,
+    owned: profile.owned.length,
+  };
 }

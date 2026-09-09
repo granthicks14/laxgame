@@ -14,7 +14,7 @@
 
 import { Rng } from '../core/rng';
 import { clamp } from '../core/math';
-import { LEVELS, bandFor, type Level } from './levels';
+import { LEVELS, bandFor, universalOverall, withinLevelStanding, type Level } from './levels';
 import { setLevelSpan, type LevelSpan } from './levelSpan';
 import {
   ALL_CONFERENCES, PROGRAMS_BY_LEVEL, type ConferenceInfo, type ProgramRow, type Region,
@@ -98,8 +98,25 @@ const DESCRIPTORS: Record<TeamIdentity, string[]> = {
   balanced: ['No obvious weakness and no easy way through.', 'Well coached, well drilled, and hard to surprise.'],
 };
 
-function ratingsFrom(row: ProgramRow, identity: TeamIdentity, rng: Rng) {
-  const base = row.tier;
+/**
+ * The range of `tier` values each level's table actually uses. A programme's
+ * standing is relative to its own level, so this is what turns it into a
+ * universal rating — measured rather than assumed, because editing one row in
+ * programs.ts must not silently shift every other team at that level.
+ */
+const TIER_SPANS: Record<string, { min: number; max: number }> = (() => {
+  const out: Record<string, { min: number; max: number }> = {};
+  for (const [level, rows] of Object.entries(PROGRAMS_BY_LEVEL)) {
+    const tiers = rows.map((r) => r.tier);
+    out[level] = { min: Math.min(...tiers), max: Math.max(...tiers) };
+  }
+  return out;
+})();
+
+function ratingsFrom(row: ProgramRow, level: Level, identity: TeamIdentity, rng: Rng) {
+  // The one line that makes the world coherent: a programme's standing among
+  // its peers becomes a rating on the same scale the whole sport uses.
+  const base = universalOverall(level, row.tier, TIER_SPANS[level] ?? { min: 30, max: 99 });
   const lean = (a: number) => clamp(Math.round(base + a + rng.gauss(0, 3)), 25, 99);
   const b: Record<TeamIdentity, { off: number; def: number; gk: number; fo: number; sp: number }> = {
     offense: { off: 6, def: -5, gk: -2, fo: 0, sp: 2 },
@@ -118,16 +135,20 @@ function ratingsFrom(row: ProgramRow, identity: TeamIdentity, rng: Rng) {
   const faceoff = lean(t.fo);
   const speed = lean(t.sp);
   const chemistry = clamp(Math.round(base * 0.55 + 32 + rng.gauss(0, 6)), 35, 96);
-  const overall = Math.round(
+  // The components carry identity leans and noise, so their weighted sum drifts
+  // off the level's slice of the universal scale. The level's band is the
+  // contract the rest of the world relies on, so the sum is held inside it.
+  const band = LEVELS[level].overallBand;
+  const overall = clamp(Math.round(
     offense * 0.32 + defense * 0.3 + goalie * 0.16 + faceoff * 0.08 + midfield * 0.14,
-  );
+  ), band.lo, band.hi);
   return { overall, offense, defense, goalie, attack, midfield, faceoff, speed, chemistry };
 }
 
 function buildProgram(row: ProgramRow, level: Level): WorldTeam {
   const rng = new Rng(`world:${row.id}`);
   const identity = identityFor(row, rng);
-  const ratings = ratingsFrom(row, identity, rng);
+  const ratings = ratingsFrom(row, level, identity, rng);
   const short = row.name;
   return {
     id: row.id,
@@ -145,6 +166,10 @@ function buildProgram(row: ProgramRow, level: Level): WorldTeam {
     level,
     conference: row.conference,
     region: row.region,
+    // Prestige, recruiting pull and staff quality stay on the WITHIN-LEVEL
+    // scale: they say how this programme ranks against its own peers, which is
+    // what the job market, the recruiting model and the AI all want to know.
+    // Only playing strength is universal.
     prestige: row.tier,
     recruiting: clamp(Math.round(row.tier * 0.85 + 10 + rng.gauss(0, 5)), 20, 99),
     coaching: clamp(Math.round(row.tier * 0.7 + 20 + rng.gauss(0, 7)), 25, 99),
@@ -174,16 +199,26 @@ function assignRivals(teams: WorldTeam[]): void {
 /* ------------------------------------------------------------- the world */
 
 function hsToWorld(t: TeamData): WorldTeam {
+  // `overall` is universal, so a strong high school programme rates in the
+  // seventies against the whole sport. Prestige, recruiting pull and staff are
+  // WITHIN-LEVEL ideas — the best team in Class D has enormous pull in Class D
+  // — so they are read off its standing among its own peers, plus the weight
+  // of the class it plays in.
+  const standing = withinLevelStanding('hs', t.overall);
+  // These three formulas were tuned against the district's own authored 60-91
+  // ratings, and everything downstream of them — expectations, job offers,
+  // recruiting appeal, which situation a programme is in — was balanced on the
+  // numbers they produced. `standing` is the same information on a 0-99 scale,
+  // so it is put back into those units rather than re-tuning the whole chain.
+  const districtRating = 60 + (standing / 99) * 31;
   return {
     ...t,
     level: 'hs',
     conference: t.classKey,
     region: 'texas',
-    // A high school programme's standing comes from the strength of the class
-    // it plays in and how it does inside it.
-    prestige: clamp(Math.round(t.overall * 0.7 + hsClassBonus(t.classKey)), 20, 95),
-    recruiting: clamp(Math.round(t.overall * 0.6 + 20), 20, 92),
-    coaching: clamp(Math.round(t.overall * 0.5 + 25), 20, 90),
+    prestige: clamp(Math.round(districtRating * 0.7 + hsClassBonus(t.classKey)), 20, 95),
+    recruiting: clamp(Math.round(districtRating * 0.6 + 20), 20, 92),
+    coaching: clamp(Math.round(districtRating * 0.5 + 25), 20, 90),
   };
 }
 

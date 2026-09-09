@@ -29,6 +29,9 @@ import { GAME_LENGTHS, type GameLengthKey } from '../../data/constants';
 import { SeasonHubScreen } from './SeasonHub';
 import { MainMenuScreen } from './MainMenu';
 import { trophyIcon } from '../icons';
+import { ChallengeDifficultyScreen } from './ChallengeDifficulty';
+import { DEFAULT_TIER, tierInfo, type ChallengeTier } from '../../challenge/difficulty';
+import { UPGRADES, identityOf } from '../../challenge/coach';
 
 /* ------------------------------------------------------------------ entry */
 
@@ -40,12 +43,20 @@ export class ChallengeEntryScreen implements Screen {
     const draft = {
       difficulty: (existing?.difficulty ?? app.settings.difficulty) as DifficultyKey,
       gameLength: (existing?.gameLength ?? app.settings.gameLength) as GameLengthKey,
+      tier: (app.settings.challengeTier ?? DEFAULT_TIER) as ChallengeTier,
     };
 
+    // Choosing the difficulty is its own screen, because it is the single
+    // biggest decision in the mode and it cannot be changed afterwards.
     const start = () => {
-      const career = startChallenge({ difficulty: draft.difficulty, gameLength: draft.gameLength });
-      saveCareer(career);
-      app.replace((a) => new SeasonHubScreen(a, 'challenge'));
+      app.push((a) => new ChallengeDifficultyScreen(a, draft.tier, (tier) => {
+        a.updateSettings({ challengeTier: tier });
+        const career = startChallenge({
+          difficulty: draft.difficulty, gameLength: draft.gameLength, tier,
+        });
+        saveCareer(career);
+        a.reset((b) => new SeasonHubScreen(b, 'challenge'));
+      }));
     };
 
     const body: (HTMLElement | null)[] = [];
@@ -60,6 +71,7 @@ export class ChallengeEntryScreen implements Screen {
             h('div', { class: 'display', style: 'font-size:20px', text: userTeam(existing).name }),
             h('div', { class: 'small', text: `${stage.name} · season ${state.totalYears + 1}` }),
             h('div', { class: 'row row--wrap', style: 'gap:6px' },
+              tierPill(state.tier),
               h('span', { class: 'pill pill--accent', text: `Rung ${state.stageIndex + 1} of ${STAGES.length}` }),
               h('span', { class: 'pill', text: `Reputation ${Math.round(state.reputation)}` }),
               h('span', {
@@ -127,7 +139,7 @@ export class ChallengeEntryScreen implements Screen {
       body.push(h('button', {
         class: 'btn btn--primary btn--block',
         style: 'min-height:54px;font-size:18px',
-        text: 'Take the job',
+        text: 'Choose your difficulty',
         on: { click: start },
       }));
     }
@@ -137,6 +149,16 @@ export class ChallengeEntryScreen implements Screen {
       h('div', { class: 'scroll' }, h('div', { class: 'wrapper stack' }, ...body)),
     );
   }
+}
+
+/** The difficulty mark. The same pill wherever a career is described. */
+export function tierPill(tier: ChallengeTier | null | undefined): HTMLElement {
+  const info = tierInfo(tier);
+  return h('span', {
+    class: 'pill',
+    style: `color:${info.colour};border-color:${info.colour}`,
+    text: info.mark,
+  });
 }
 
 function bullet(title: string, text: string): HTMLElement {
@@ -231,6 +253,7 @@ export class ChallengeTrackerScreen implements Screen {
             h('div', { class: 'display', style: 'font-size:22px', text: stage.name }),
             h('div', { class: 'small', text: `${userTeam(career).name} · ${stageDivisionName(state.stageIndex)}` }),
             h('div', { class: 'row row--wrap', style: 'gap:6px;margin-top:4px' },
+              tierPill(state.tier),
               h('span', { class: 'pill pill--accent', text: `Reputation ${Math.round(state.reputation)}` }),
               h('span', { class: 'pill', text: `${state.tenure} season${state.tenure === 1 ? '' : 's'} in the job` }),
               h('span', {
@@ -391,6 +414,7 @@ export class ChallengeEndScreen implements Screen {
     const wins = state.steps.reduce((n, s) => n + s.wins, 0);
     const losses = state.steps.reduce((n, s) => n + s.losses, 0);
     const clubs = new Set(state.steps.map((s) => s.teamShort)).size;
+    const reading = career.coach ? identityOf(career.coach) : null;
 
     this.el = screenEl(
       topbar(app, 'The career', `${state.totalYears} seasons`, () => app.reset((a) => new MainMenuScreen(a))),
@@ -400,10 +424,21 @@ export class ChallengeEndScreen implements Screen {
             ? h('div', { class: 'trophy' },
               h('div', { class: 'trophy__icon' }, trophyIcon(58)),
               h('div', { class: 'trophy__title', text: 'Legendary coaching journey complete' }),
-              h('div', { class: 'small', style: 'margin-top:6px', text: 'You conquered every level of the lacrosse world.' }))
+              h('div', { class: 'small', style: 'margin-top:6px', text: `You conquered every level of the lacrosse world on ${tierInfo(state.tier).name}.` }),
+              h('div', { class: 'row', style: 'justify-content:center;margin-top:8px' }, tierPill(state.tier)))
             : panel('It ends here', h('div', { class: 'small', text: state.endedReason ?? 'The career is over.' })),
 
+          reading
+            ? panel(reading.identity.name,
+              h('div', { class: 'small', text: reading.identity.blurb }),
+              h('div', {
+                class: 'tiny',
+                text: `${reading.owned} of ${UPGRADES.length} upgrades bought over ${state.totalYears} seasons.`,
+              }))
+            : null,
+
           panel('The career in numbers',
+            summaryRow('Difficulty', tierInfo(state.tier).name),
             summaryRow('Career length', `${state.totalYears} years`),
             summaryRow('Career record', `${wins}-${losses}`),
             summaryRow('Championships', `${titles}`),

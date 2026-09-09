@@ -49,13 +49,30 @@ export const POSITION_LABEL: Record<Position, string> = {
 
 /** Physics + feel tuning. All speeds are yards/second unless noted. */
 export const SIM = {
-  /** Base run speed at speed rating 50. Rating 99 lands near 9.2 yd/s. */
+  /**
+   * Where the physical scale is anchored. Attribute ratings are universal
+   * across the whole sport (see levels.ts), so a high schooler sits near 57 and
+   * a professional near 93 — a far wider spread than when every level was rated
+   * against its own peers. The centre and the per-point rates are set together
+   * so that a high school game runs at exactly the speed it always has, while
+   * the gap up to the professional game stays the same size it was.
+   */
+  ratingCentre: 35,
+  /**
+   * The par rating the shooting, shot-selection and save models were tuned
+   * against. Everything that asks "how good is this game compared with the one
+   * I was balanced on?" measures from here — the keeper re-centring in Match,
+   * and the shot-quality and shot-greed curves in ai.ts. It is a single
+   * constant precisely so those three can never drift apart.
+   */
+  parReference: 62,
+  /** Base run speed at the centre rating. A 99 lands near 9.4 yd/s. */
   baseSpeed: 6.4,
-  speedPerRating: 0.065,
+  speedPerRating: 0.047,
   sprintMultiplier: 1.32,
   /** How fast a player reaches target velocity (higher = snappier). */
   accelBase: 16,
-  accelPerRating: 0.14,
+  accelPerRating: 0.101,
   turnRate: 11,
 
   /** Air drag while the ball is off the ground. */

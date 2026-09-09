@@ -72,6 +72,7 @@ function cycle(level: Level, teamId: string, scouts: number, seed: number): {
   const depth = { A: 3, M: 5, D: 4, G: 1, FO: 1 } as Record<Position, number>;
   const ctx: RecruitContext = {
     perks: coachPerks(null),
+    rivalPush: 1, rivalScouting: 0.35, interestGain: 1,
     commitments: 0,
     teamId,
     teamName: shell.short,
@@ -148,6 +149,7 @@ line('AI PROGRAMMES — do gems get taken if you leave them alone?');
     const state = newRecruitingClass({ seed: 5000 + i, cycle: 1, level: 'd1', prestige: 40, shell });
     const ctx: RecruitContext = {
       perks: coachPerks(null), commitments: 0,
+      rivalPush: 1, rivalScouting: 0.35, interestGain: 1,
       teamId: 'me', teamName: 'Me', prestige: 40, appeal: 0, wins: 2, losses: 10, championships: 0,
       depth: { A: 6, M: 9, D: 8, G: 3, FO: 2 } as Record<Position, number>,
       rivals: [

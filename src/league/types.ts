@@ -168,4 +168,4 @@ export interface Career {
   finish: string | null;
 }
 
-export const CAREER_VERSION = 7;
+export const CAREER_VERSION = 8;

@@ -3,11 +3,13 @@ import { CAREER_VERSION, type Career, type CareerMode } from '../league/types';
 import { tryGetTeam } from '../data/teams';
 import { tryWorldTeam } from '../data/world';
 import { EMPTY_STAFF } from '../league/coaching';
+import { LEVELS, type Level } from '../data/levels';
+import { DEFAULT_TIER } from '../challenge/difficulty';
 
 const RETIRED_KEY = 'lsl.retiredSave';
 
 /** Versions this build can read and upgrade in place. */
-const MIGRATABLE = [4, 5, 6];
+const MIGRATABLE = [4, 5, 6, 7];
 
 const key = (mode: CareerMode): string => `lsl.career.${mode}.v${CAREER_VERSION}`;
 
@@ -61,8 +63,115 @@ function migrateCareer(raw: unknown): unknown {
       if (typeof row.confTies !== 'number') row.confTies = row.ties ?? 0;
     }
   }
+  // v7 -> v8: ONE RATING SCALE FOR THE WHOLE SPORT. Team ratings used to be a
+  // standing within a level, so a Division III side could be rated 95 and a PLL
+  // club 88. Every level now occupies a fixed slice of one universal scale
+  // (levels.ts), which means every rating a save carries — the squad, the
+  // players who left, the drift on other programmes — is written in units that
+  // no longer exist. They are remapped here rather than thrown away, so a
+  // career in progress keeps its squad, its stars and its relative strength.
+  if (version <= 7) {
+    const level = (typeof c.level === 'string' ? c.level : 'hs') as Level;
+    rescaleSave(c, level);
+  }
+  // Challenge difficulty arrived with v8. Everything that came before it was
+  // played on what is now the Standard tier, which is exactly what it was.
+  const challenge = c.challenge as Record<string, unknown> | null | undefined;
+  if (challenge && typeof challenge === 'object' && !challenge.tier) {
+    challenge.tier = DEFAULT_TIER;
+  }
+
   c.version = CAREER_VERSION;
   return c;
+}
+
+/**
+ * The player-attribute ranges each level used BEFORE the universal scale. Kept
+ * here, in the migration, because this is the only place they still mean
+ * anything — levels.ts must not carry two generations of numbers.
+ */
+const V7_BANDS: Record<Level, { lo: number; hi: number }> = {
+  hs: { lo: 60, hi: 91 },
+  d3: { lo: 62, hi: 93 },
+  d2: { lo: 68, hi: 95 },
+  d1: { lo: 74, hi: 99 },
+  semipro: { lo: 78, hi: 97 },
+  pll: { lo: 84, hi: 99 },
+};
+
+/** Moves one rating from the old level-relative scale onto the universal one. */
+function rescale(value: unknown, level: Level): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  const from = V7_BANDS[level] ?? V7_BANDS.hs;
+  const to = LEVELS[level]?.band ?? LEVELS.hs.band;
+  const t = (value - from.lo) / Math.max(1, from.hi - from.lo);
+  return Math.max(1, Math.min(99, Math.round(to.lo + t * (to.hi - to.lo))));
+}
+
+const RESCALED_PLAYER_KEYS = ['overall', 'potential'];
+
+/** Rewrites every rating a saved career carries onto the universal scale. */
+function rescaleSave(c: Record<string, unknown>, level: Level): void {
+  const player = (p: unknown) => {
+    if (!p || typeof p !== 'object') return;
+    const rec = p as Record<string, unknown>;
+    for (const key of RESCALED_PLAYER_KEYS) {
+      const next = rescale(rec[key], level);
+      if (next !== undefined) rec[key] = next;
+    }
+    const attrs = rec.attrs as Record<string, unknown> | undefined;
+    if (attrs && typeof attrs === 'object') {
+      for (const key of Object.keys(attrs)) {
+        const next = rescale(attrs[key], level);
+        if (next !== undefined) attrs[key] = next;
+      }
+    }
+    // A development history records where a rating came from and went to, and
+    // both ends have to move with it or the report reads as a collapse.
+    const dev = rec.dev as Record<string, unknown> | undefined;
+    const history = dev?.history;
+    if (Array.isArray(history)) {
+      for (const entry of history) {
+        if (!entry || typeof entry !== 'object') continue;
+        const e = entry as Record<string, unknown>;
+        for (const key of ['from', 'to']) {
+          const next = rescale(e[key], level);
+          if (next !== undefined) e[key] = next;
+        }
+      }
+    }
+  };
+
+  if (Array.isArray(c.roster)) c.roster.forEach(player);
+  if (Array.isArray(c.market)) {
+    for (const cand of c.market) {
+      if (cand && typeof cand === 'object') player((cand as Record<string, unknown>).player);
+    }
+  }
+  const recruiting = c.recruiting as Record<string, unknown> | null | undefined;
+  if (recruiting && Array.isArray(recruiting.prospects)) {
+    for (const p of recruiting.prospects) {
+      if (!p || typeof p !== 'object') continue;
+      const rec = p as Record<string, unknown>;
+      player(rec.player);
+      const hype = rescale(rec.hype, level);
+      if (hype !== undefined) rec.hype = hype;
+    }
+  }
+
+  // Drift the career has applied to other programmes' team ratings.
+  const overrides = c.ratingOverrides as Record<string, Record<string, unknown>> | undefined;
+  if (overrides && typeof overrides === 'object') {
+    for (const row of Object.values(overrides)) {
+      if (!row || typeof row !== 'object') continue;
+      for (const key of Object.keys(row)) {
+        // Chemistry was never on the rating scale — it is a percentage.
+        if (key === 'chemistry') continue;
+        const next = rescale(row[key], level);
+        if (next !== undefined) row[key] = next;
+      }
+    }
+  }
 }
 
 /** Basic structural validation so a corrupt or outdated save never white-screens. */

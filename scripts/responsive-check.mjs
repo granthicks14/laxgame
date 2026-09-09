@@ -74,8 +74,22 @@ for (const [device, width, height] of SIZES) {
   await page.waitForTimeout(360);
   await measure(page, `${device} · Challenge entry`);
 
-  await click(/Take the job/);
-  await page.waitForTimeout(600);
+  // Choosing a difficulty is its own screen now, and it carries a lot of text
+  // and a wide table — exactly the kind of screen this suite exists to catch.
+  await click(/Choose your difficulty/);
+  await page.waitForTimeout(420);
+  await measure(page, `${device} · Difficulty picker`);
+  await click(/^Impossible Challenge/i);
+  await page.waitForTimeout(360);
+  await measure(page, `${device} · Difficulty detail`);
+  await click(/Compare all four/);
+  await page.waitForTimeout(420);
+  await measure(page, `${device} · Difficulty comparison`);
+  await page.locator('.topbar button').first().click();
+  await page.waitForTimeout(360);
+
+  await click(/^Start on/);
+  await page.waitForTimeout(700);
   await measure(page, `${device} · Season hub`);
 
   await click(/Recruiting board/);

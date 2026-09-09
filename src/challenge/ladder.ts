@@ -22,7 +22,7 @@ import type { Level } from '../data/levels';
 import { LEVELS } from '../data/levels';
 import type { ClassKey } from '../data/teams';
 import { CLASSES, TEAMS } from '../data/teams';
-import { teamsAtLevel, type WorldTeam } from '../data/world';
+import { teamsAtLevel, tryWorldTeam, type WorldTeam } from '../data/world';
 
 export interface Stage {
   key: string;
@@ -151,8 +151,17 @@ export function programmesAt(index: number): { id: string; name: string; short: 
   const stage = stageAt(index);
   if (stage.level === 'hs') {
     const keys: ClassKey[] = stage.classKey === 'c-west' ? ['c-west', 'c-east'] : [stage.classKey!];
+    // PRESTIGE IS A WITHIN-LEVEL IDEA — how this programme ranks among its own
+    // peers — and it drives the job market, expectations and which situation a
+    // job is in. Using the raw team rating worked only while ratings were
+    // themselves within-level; once they became universal it dropped every
+    // Class D school into "broken programme" territory. The world registry
+    // already computes the right number, so use it.
     return TEAMS.filter((t) => keys.includes(t.classKey)).map((t) => ({
-      id: t.id, name: t.name, short: t.short, prestige: t.overall,
+      id: t.id,
+      name: t.name,
+      short: t.short,
+      prestige: tryWorldTeam(t.id)?.prestige ?? 50,
     }));
   }
   return teamsAtLevel(stage.level).map((t: WorldTeam) => ({

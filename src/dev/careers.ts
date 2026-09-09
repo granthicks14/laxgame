@@ -13,8 +13,8 @@
 import {
   advancePhase, bracketRounds, buyCoachUpgrade, champion, coachProfile, declineChallengeOffers,
   nextUserGame, perksOf, pitchTo, postseasonStatus, resolveChallengeSeason, runOffseason,
-  seasonFormat, simulateUserGame, spendCoachPoints, standingsSorted, startChallenge,
-  takeChallengeJob, userTeam, validateRecords, winPct,
+  coachUpgradeCost, seasonFormat, simulateUserGame, spendCoachPoints, staffUpgradeCost,
+  standingsSorted, startChallenge, takeChallengeJob, userTeam, validateRecords, winPct,
 } from '../league/career';
 import { fixtureStory } from '../league/fixture';
 import { UPGRADES, levelOf } from '../challenge/coach';
@@ -25,11 +25,14 @@ import { PITCH_ORDER, suggestedAngle } from '../league/transfers';
 import { programSnapshot } from '../league/career';
 import { upgradeCost, TRACK_ORDER } from '../league/coaching';
 import type { Career } from '../league/types';
+import { TIERS, type ChallengeTier } from '../challenge/difficulty';
 
 const env = (globalThis as { process?: { env?: Record<string, string | undefined>; argv?: string[]; exit(n: number): void } }).process;
 const RUNS = Number(env?.env?.RUNS ?? 8);
 const YEARS = Number(env?.env?.YEARS ?? 40);
 const VERBOSE = (env?.argv ?? []).includes('--verbose');
+/** TIER=elite runs one tier; unset sweeps all four. */
+const TIER = env?.env?.TIER ?? '';
 
 interface Bug { kind: string; detail: string; run: number; year: number }
 const bugs: Bug[] = [];
@@ -167,14 +170,16 @@ function spend(career: Career, strategy: Strategy): void {
       if (profile.owned.includes(u.key)) continue;
       if (levelOf(profile.xp) < u.level) continue;
       if (!u.requires.every((r) => profile.owned.includes(r))) continue;
-      if (profile.points < u.cost) continue;
+      // The PRICE, not the list cost: harder tiers charge a multiple, and
+      // affordability has to be asked in the units actually charged.
+      if (profile.points < coachUpgradeCost(career, u.cost)) continue;
       if (!buyCoachUpgrade(career, u.key)) bug('coach', 'an affordable upgrade could not be bought');
     }
   }
   if (strategy === 'upgrades') return;
   for (const track of TRACK_ORDER) {
     for (;;) {
-      const cost = upgradeCost(career.staff[track]);
+      const cost = staffUpgradeCost(career, upgradeCost(career.staff[track]));
       if (cost === null || career.coachingPoints < cost) break;
       if (!spendCoachPoints(career, cost)) break;
       career.staff[track]++;
@@ -269,21 +274,42 @@ function playSeason(career: Career, strategy: Strategy): void {
 const STRATEGIES: Strategy[] = ['balanced', 'upgrades', 'nothing', 'recruiting', 'transfers', 'wanderer'];
 
 interface RunResult {
+  tier: ChallengeTier;
   strategy: Strategy; years: number; stage: number; titles: number;
   jobs: number; upgrades: number; points: number; level: number; ended: string;
+  /** Seasons spent out of work, and jobs lost — the shape of a hard career. */
+  fired: number;
+  /** Recruiting and transfer battles the coach LOST, which is what should make
+   *  a hard tier hard rather than a rating penalty. */
+  lostRecruits: number;
+  lostTransfers: number;
+  /** Seasons spent at each rung, indexed by stage. */
+  perRung: number[];
 }
 const runs: RunResult[] = [];
 
+// Every tier gets the same strategies and the same seeds, so a difference in
+// the table below is the difficulty and nothing else.
+const TIERS_TESTED: ChallengeTier[] = TIER
+  ? [TIER as ChallengeTier]
+  : ['standard', 'elite', 'impossible', 'final'];
+
+for (const tier of TIERS_TESTED) {
 for (run = 1; run <= RUNS; run++) {
   const strategy = STRATEGIES[(run - 1) % STRATEGIES.length];
   const career = startChallenge({
-    difficulty: 'varsity', gameLength: 'short', seed: 90000 + run * 613,
+    difficulty: 'varsity', gameLength: 'short', seed: 90000 + run * 613, tier,
   });
+  let fired = 0;
+  let lostRecruits = 0;
+  let lostTransfers = 0;
+  const perRung: number[] = STAGES.map(() => 0);
   const state = career.challenge!;
   let jobs = 1;
 
   while (!state.complete && state.totalYears < YEARS) {
     year = state.totalYears + 1;
+    perRung[state.stageIndex]++;
     spend(career, strategy);
     recruit(career, strategy);
     checkRoster(career, `year ${year} preseason`);
@@ -297,6 +323,16 @@ for (run = 1; run <= RUNS; run++) {
     const before = snapshotCoach(career);
     const verdict = resolveChallengeSeason(career);
     if (!verdict) bug('career', `year ${year}: a completed season was not graded`);
+    if (verdict?.outcome === 'fired') fired++;
+    // Recruiting battles have to be counted while the class is still open: the
+    // career only ever holds the CURRENT one, so a total taken at the end is
+    // the last season's, not the career's.
+    for (const pr of career.recruiting?.prospects ?? []) {
+      if (pr.offered && pr.committedTo && pr.committedTo !== career.teamId) lostRecruits++;
+    }
+    for (const c of career.market) {
+      if (c.attempts > 0 && c.status !== 'committed') lostTransfers++;
+    }
     if (state.complete && state.stageIndex < STAGES.length - 1) {
       bug('career', `year ${year}: the career ended at ${stageAt(state.stageIndex).key}`);
       break;
@@ -341,6 +377,11 @@ for (run = 1; run <= RUNS; run++) {
 
   const profile = coachProfile(career);
   runs.push({
+    tier,
+    perRung,
+    fired,
+    lostRecruits,
+    lostTransfers,
     strategy,
     years: state.totalYears,
     stage: state.stageIndex,
@@ -358,18 +399,115 @@ for (run = 1; run <= RUNS; run++) {
   void perksOf(career);
   void userTeam(career);
 }
+}
 
 /* ---------------------------------------------------------------- report */
 
-console.log(`CHALLENGE MODE STRESS TEST — ${RUNS} careers, up to ${YEARS} seasons each\n`);
-console.log('strategy     years  rung  titles  jobs  upgrades  level  points  ending');
-for (const r of runs) {
+console.log(
+  `CHALLENGE MODE STRESS TEST — ${TIERS_TESTED.length} tier(s) x ${RUNS} careers, `
+  + `up to ${YEARS} seasons each\n`,
+);
+for (const tier of TIERS_TESTED) {
+  const mine = runs.filter((r) => r.tier === tier);
+  console.log(`${TIERS[tier].name.toUpperCase()}`);
+  console.log('  strategy     years  rung  titles  jobs  upgr  lvl  sacked  lost  ending');
+  for (const r of mine) {
+    console.log(
+      `  ${r.strategy.padEnd(12)} ${String(r.years).padStart(5)}  `
+      + `${stageAt(r.stage).short.padEnd(5)} ${String(r.titles).padStart(6)}  `
+      + `${String(r.jobs).padStart(4)}  ${String(r.upgrades).padStart(4)}  `
+      + `${String(r.level).padStart(3)}  ${String(r.fired).padStart(6)}  `
+      + `${String(r.lostRecruits + r.lostTransfers).padStart(4)}  ${r.ended}`,
+    );
+  }
+  console.log();
+}
+
+/* ------------------------------------------------- is the ladder ordered? */
+
+const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+interface TierSummary {
+  tier: ChallengeTier;
+  finished: number;
+  of: number;
+  /** Seasons taken by the careers that FINISHED — the number that matters. */
+  seasonsToFinish: number;
+  rung: number;
+  upgrades: number;
+  sacked: number;
+  /** Recruiting and transfer battles lost across the whole career. */
+  lost: number;
+}
+const summaries: TierSummary[] = TIERS_TESTED.map((tier) => {
+  const mine = runs.filter((r) => r.tier === tier);
+  const done = mine.filter((r) => r.ended.includes('Premier'));
+  return {
+    tier,
+    finished: done.length,
+    of: mine.length,
+    seasonsToFinish: avg(done.map((r) => r.years)),
+    rung: avg(mine.map((r) => r.stage + 1)),
+    upgrades: avg(mine.map((r) => r.upgrades)),
+    sacked: avg(mine.map((r) => r.fired)),
+    lost: avg(mine.map((r) => r.lostRecruits + r.lostTransfers)),
+  };
+});
+
+// Where the seasons actually go. With strict one-rung-at-a-time promotion the
+// whole climb is nine championships, so "seasons per rung" is the single number
+// that decides how long a career runs — and the one to move when retuning pace.
+console.log('SEASONS SPENT PER RUNG\n');
+console.log(`tier          ${STAGES.map((st) => st.short.padStart(7)).join('')}`);
+for (const tier of TIERS_TESTED) {
+  const mine = runs.filter((r) => r.tier === tier);
+  const cells = STAGES.map((_, i) => {
+    const spans = mine.map((r) => r.perRung[i]).filter((n): n is number => n !== undefined && n > 0);
+    return (spans.length ? avg(spans).toFixed(1) : '—').padStart(7);
+  });
+  console.log(`${TIERS[tier].mark.padEnd(13)} ${cells.join('')}`);
+}
+
+console.log(
+  '\ntier          finished   seasons to PLL   avg rung   avg upgrades   sacked   battles lost',
+);
+for (const s of summaries) {
   console.log(
-    `${r.strategy.padEnd(12)} ${String(r.years).padStart(5)}  `
-    + `${stageAt(r.stage).short.padEnd(5)} ${String(r.titles).padStart(6)}  `
-    + `${String(r.jobs).padStart(4)}  ${String(r.upgrades).padStart(8)}  `
-    + `${String(r.level).padStart(5)}  ${String(r.points).padStart(6)}  ${r.ended}`,
+    `${TIERS[s.tier].mark.padEnd(13)} ${`${s.finished}/${s.of}`.padStart(8)}   `
+    + `${(s.seasonsToFinish ? s.seasonsToFinish.toFixed(1) : '—').padStart(14)}   `
+    + `${s.rung.toFixed(1).padStart(8)}   `
+    + `${s.upgrades.toFixed(1).padStart(12)}   ${s.sacked.toFixed(1).padStart(6)}   `
+    + `${s.lost.toFixed(0).padStart(12)}`,
   );
+}
+
+// The ladder has to be ORDERED. A harder tier that finishes faster, or lets a
+// coach buy more of the tree, is not a harder tier — it is a mislabelled one.
+if (TIERS_TESTED.length > 1) {
+  console.log();
+  for (let i = 1; i < summaries.length; i++) {
+    const below = summaries[i - 1];
+    const here = summaries[i];
+    const problems: string[] = [];
+    if (here.rung > below.rung + 0.4) {
+      problems.push(`climbs further (${here.rung.toFixed(1)} vs ${below.rung.toFixed(1)})`);
+    }
+    if (here.upgrades > below.upgrades + 0.6) {
+      problems.push(`buys more of the tree (${here.upgrades.toFixed(1)} vs ${below.upgrades.toFixed(1)})`);
+    }
+    const ok = problems.length === 0;
+    console.log(
+      `${ok ? 'PASS' : 'FAIL'}  ${TIERS[below.tier].mark} -> ${TIERS[here.tier].mark}`
+      + `${ok ? '   harder in every measure' : `   ${problems.join('; ')}`}`,
+    );
+    if (!ok) bug('difficulty', `${TIERS[here.tier].mark} is not harder than ${TIERS[below.tier].mark}: ${problems.join('; ')}`);
+  }
+
+  // And every tier has to remain POSSIBLE. A difficulty nobody can finish is a
+  // wall, not a challenge — the brief was "extremely difficult but possible".
+  const hardest = summaries[summaries.length - 1];
+  if (hardest.finished === 0 && hardest.rung < 5) {
+    bug('difficulty', `${TIERS[hardest.tier].mark} never got past rung ${hardest.rung.toFixed(1)}`);
+  }
 }
 
 const byKind = new Map<string, number>();

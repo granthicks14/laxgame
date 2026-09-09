@@ -27,8 +27,10 @@ import { marketFor } from '../league/transfers';
 import { board, classGrade } from '../scouting/recruiting';
 import { STAGES, programmesAt, stageAt, stageDivisionName } from '../challenge/ladder';
 import {
-  completesChapter, chapterOf, evaluateSeason, expectationFor, newChallengeState, type JobOffer,
+  completesChapter, chapterOf, evaluateSeason, expectationFor, generateOffers, newChallengeState,
+  type JobOffer,
 } from '../challenge/state';
+import { Rng } from '../core/rng';
 import { teamsAtLevel, teamsInConference } from '../data/world';
 import { archetype } from '../data/archetypes';
 import type { Career } from '../league/types';
@@ -251,6 +253,51 @@ if (ONLY === null) {
   }
   console.log(`
 INVARIANT — a career may only end at the PLL: ${cases - violations}/${cases} cases hold`);
+
+  /**
+   * The second rule: NO LEVEL MAY EVER BE SKIPPED. Winning Division III opens
+   * Division II jobs and nothing above them. Every reputation, at every rung,
+   * for both a championship and a sacking — because a skip is invisible in a
+   * screenshot and this mode is the climb.
+   */
+  let skips = 0;
+  let offerCases = 0;
+  let emptyLists = 0;
+  for (let stage = 0; stage < STAGES.length; stage++) {
+    for (const reputation of [0, 25, 50, 70, 85, 100]) {
+      for (const kind of ['promotion', 'demotion', 'rehire'] as const) {
+        const st = newChallengeState(stage, 'stable', expectationFor(stageAt(stage), 60, 'stable', 40));
+        st.stageIndex = stage;
+        st.reputation = reputation;
+        const target = kind === 'promotion' ? Math.min(STAGES.length - 1, stage + 1)
+          : kind === 'demotion' ? Math.max(0, stage - 1) : stage;
+        const offers = generateOffers(
+          st, kind, programmesAt(target).map((p) => ({
+            id: p.id, name: p.name, short: p.short, prestige: p.prestige,
+          })), new Rng(`skip:${stage}:${reputation}:${kind}`), 3, target,
+        );
+        offerCases++;
+        if (!offers.length) emptyLists++;
+        for (const o of offers) {
+          // One rung up is the ceiling, whatever the coach has achieved.
+          if (o.stageIndex > stage + 1) skips++;
+        }
+      }
+    }
+  }
+  console.log(
+    `INVARIANT — no level may be skipped: ${offerCases - skips}/${offerCases} offer sets hold`,
+  );
+  results.push({
+    stage: -1, name: 'a championship never offers a job more than one rung up',
+    ok: skips === 0, detail: `${skips} skips in ${offerCases} sets`,
+  });
+  // A promotion with no jobs in it would silently end a career at the rung the
+  // coach just conquered, which is the same bug wearing a different hat.
+  results.push({
+    stage: -1, name: 'every offer set has a job in it',
+    ok: emptyLists === 0, detail: `${emptyLists} empty lists`,
+  });
   if (violations) results.push({ stage: -1, name: 'a career ends only at the PLL', ok: false, detail: `${violations} violations` });
   else results.push({ stage: -1, name: 'a career ends only at the PLL', ok: true, detail: `${cases} cases` });
 }

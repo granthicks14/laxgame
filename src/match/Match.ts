@@ -33,7 +33,11 @@ const CREASE_PAD = 0.15;
  * and faceoff constant in this engine was tuned against players on that scale,
  * so it is the yardstick a higher level is measured back to.
  */
-const HS_PAR = 66;
+/**
+ * The rating the shooting and save model was tuned against. Lives in SIM so
+ * that Match and ai.ts read the same number — see `SIM.parReference`.
+ */
+const SHOOTING_REFERENCE = SIM.parReference;
 
 export class Match {
   readonly cfg: MatchConfig;
@@ -116,7 +120,7 @@ export class Match {
     this.commentary = new Commentary(this.rng.seed);
     this.setups = { home: cfg.home, away: cfg.away };
     const all = [...cfg.home.roster, ...cfg.away.roster];
-    this.par = all.length ? all.reduce((n, p) => n + p.overall, 0) / all.length : HS_PAR;
+    this.par = all.length ? all.reduce((n, p) => n + p.overall, 0) / all.length : SHOOTING_REFERENCE;
     this.humanSide = cfg.home.human ? 'home' : cfg.away.human ? 'away' : null;
     this.clock = cfg.quarterSeconds;
 
@@ -283,13 +287,13 @@ export class Match {
     return this.teams[otherSide(p.side)];
   }
   /**
-   * A keeper's rating for save purposes, re-centred on the high school scale
-   * the shooting model was tuned against. A professional keeper is still better
-   * than a high school one — his own squad's par pulls him back only as far as
-   * the shooters he is facing.
+   * A keeper's rating for save purposes, re-centred on the scale the shooting
+   * model was tuned against. A professional keeper is still better than a high
+   * school one — his own squad's par pulls him back only as far as the shooters
+   * he is facing.
    */
   keeperRating(g: MatchPlayer): number {
-    return clamp(g.data.attrs.goalie - (this.par - HS_PAR) * 0.85, 25, 99);
+    return clamp(g.data.attrs.goalie - (this.par - SHOOTING_REFERENCE) * 0.85, 25, 99);
   }
 
   goalieOf(side: Side): MatchPlayer {
@@ -806,7 +810,7 @@ export class Match {
 
   maxSpeed(p: MatchPlayer): number {
     const rating = p.data.attrs.speed;
-    let s = SIM.baseSpeed + (rating - 50) * SIM.speedPerRating;
+    let s = SIM.baseSpeed + (rating - SIM.ratingCentre) * SIM.speedPerRating;
     if (p.slot === 'G') s *= 0.72;
     if (this.ball.carrier === p) s *= 0.94; // carrying costs a little
     const fatigue = p.stamina < SIM.lowStaminaThreshold ? 0.78 + (p.stamina / SIM.lowStaminaThreshold) * 0.22 : 1;
@@ -815,7 +819,7 @@ export class Match {
   }
 
   private accelOf(p: MatchPlayer): number {
-    let a = SIM.accelBase + (p.data.attrs.acceleration - 50) * SIM.accelPerRating;
+    let a = SIM.accelBase + (p.data.attrs.acceleration - SIM.ratingCentre) * SIM.accelPerRating;
     if (p.beaten > 0) a *= 0.55;
     if (p.stamina < SIM.lowStaminaThreshold) a *= 0.8;
     return a;

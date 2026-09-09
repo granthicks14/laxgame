@@ -26,6 +26,7 @@ import type { Rng } from '../core/rng';
 import { clamp } from '../core/math';
 import { STAGES, FINAL_STAGE, stageAt, type Stage } from './ladder';
 import { SITUATIONS, situationFor, type SituationKey } from './situations';
+import { DEFAULT_TIER, modsFor, tierInfo, type ChallengeTier } from './difficulty';
 
 export interface Expectation {
   /** Win percentage the programme considers acceptable. */
@@ -63,6 +64,10 @@ export interface ChallengeStep {
 export type OfferKind = 'promotion' | 'demotion' | 'rehire';
 
 export interface ChallengeState {
+  /** How hard this career is. Chosen once, before the first job, and fixed for
+   *  the life of the coach — the whole point is that the record says what it
+   *  was won under. */
+  tier: ChallengeTier;
   stageIndex: number;
   /** Seasons coached, including ones spent out of work. */
   totalYears: number;
@@ -98,12 +103,15 @@ export interface ChallengeState {
  */
 export function expectationFor(
   stage: Stage, prestige: number, situation: SituationKey, reputation: number,
+  tier: ChallengeTier = DEFAULT_TIER,
 ): Expectation {
   const relief = SITUATIONS[situation].expectationRelief;
   // A big reputation raises what people want from you. Success has a cost.
   const fame = clamp((reputation - 50) / 100, -0.06, 0.08);
   const strength = clamp((prestige - 55) / 90, -0.12, 0.18);
-  const winPct = clamp(stage.parWinPct + strength + fame - relief, 0.2, 0.78);
+  // Harder tiers put you in front of boards with less patience.
+  const demand = modsFor(tier).expectation;
+  const winPct = clamp(stage.parWinPct + strength + fame + demand - relief, 0.2, 0.82);
   const title = prestige >= 85 && stage.parWinPct >= 0.5;
   const text = title
     ? 'Win the championship. Anything else is a failed season.'
@@ -116,8 +124,10 @@ export function expectationFor(
 
 export function newChallengeState(
   stageIndex: number, situation: SituationKey, expectation: Expectation,
+  tier: ChallengeTier = DEFAULT_TIER,
 ): ChallengeState {
   return {
+    tier,
     stageIndex,
     totalYears: 0,
     reputation: 22,
@@ -262,16 +272,32 @@ export function generateOffers(
     ? Math.min(FINAL_STAGE, state.stageIndex + 1)
     : kind === 'demotion' ? Math.max(0, state.stageIndex - 1) : state.stageIndex,
 ): JobOffer[] {
+  // THE LADDER HAS NO SHORTCUTS. Clamping here rather than trusting callers is
+  // deliberate: a skipped level is the one bug in this mode that cannot be
+  // noticed from a screenshot, so it is made unwritable instead of watched for.
+  targetStage = Math.max(0, Math.min(state.stageIndex + PROMOTION_REACH, targetStage));
   const stage = stageAt(targetStage);
 
   // Reputation decides WHERE IN THE POOL you can shop, not an absolute rating —
   // a pool of six Class D schools and a pool of seventy D-I programmes have to
   // behave the same way. A coach nobody knows shops at the bottom; a coach with
   // a name has the whole market open to him.
+  const mods = modsFor(state.tier);
   const sorted = [...pool].sort((a, b) => a.prestige - b.prestige);
-  const rep = clamp(state.reputation / 100, 0, 1) + (kind === 'promotion' ? 0.12 : -0.06);
-  const top = clamp(0.3 + rep * 0.8, 0.22, 1);
-  const bottom = clamp(top - 0.5, 0, 0.85);
+  const rep = clamp(state.reputation / 100, 0, 1);
+  // A COACH WHO HAS JUST WON A CHAMPIONSHIP IS A HOT NAME. With promotion
+  // strictly one rung at a time, the whole climb is nine titles, so arriving at
+  // a new level with a programme that cannot contend is nine seasons of
+  // rebuilding rather than one. A champion shops higher up the order; a sacked
+  // coach shops lower. This is the main pace lever for the mode — see the
+  // per-rung table in `npm run careers`.
+  const standing = kind === 'promotion' ? 0.44 : kind === 'demotion' ? 0.16 : 0.3;
+  const width = kind === 'promotion' ? 0.38 : 0.5;
+  // On the harder tiers the programmes that come calling are the ones nobody
+  // else would take. The window slides down the prestige order rather than
+  // closing: there is always a job, it is just rarely a good one.
+  const top = clamp(standing + rep * 0.72 + mods.jobQuality, 0.16, 1);
+  const bottom = clamp(top - width, 0, 0.9);
   const last = Math.max(0, sorted.length - 1);
   const lo = Math.floor(bottom * last);
   const hi = Math.max(lo, Math.ceil(top * last));
@@ -280,7 +306,7 @@ export function generateOffers(
   if (!picked.length && sorted.length) picked.push(sorted[0]);
 
   return picked.map((p) => {
-    const situation = situationFor(p.prestige, rng);
+    const situation = situationFor(p.prestige, rng, mods.situationSeverity);
     return {
       teamId: p.id,
       teamName: p.name,
@@ -288,21 +314,26 @@ export function generateOffers(
       stageIndex: targetStage,
       prestige: Math.round(p.prestige),
       situation,
-      expectation: expectationFor(stage, p.prestige, situation, state.reputation),
+      expectation: expectationFor(stage, p.prestige, situation, state.reputation, state.tier),
       note: SITUATIONS[situation].blurb,
     };
   }).sort((a, b) => (b.stageIndex - a.stageIndex) || (b.prestige - a.prestige));
 }
 
 /**
- * How far a championship can carry you. Normally one rung. A coach with a real
- * name in the sport can be hired two rungs up — a dominant high school programme
- * does produce college head coaches — which is what keeps a nine-rung ladder to
- * a career a person can actually finish.
+ * How far a championship carries you: EXACTLY ONE RUNG, always.
+ *
+ * There used to be a two-rung path for a well-known coach, added to stop a
+ * nine-rung ladder taking eighty seasons. It was the wrong fix. Skipping a
+ * level is skipping the entire point of the mode — a Division III title
+ * producing a Division I job means the coach never has to prove he can build a
+ * Division II programme, and the climb stops being a climb. The pace problem
+ * belongs to the pace levers (see `parWinPct` and the difficulty tiers), not to
+ * the structure of the ladder.
+ *
+ * Every level must be earned, one championship at a time.
  */
-export function promotionReach(state: ChallengeState): number {
-  return state.reputation >= 70 && state.stageIndex < FINAL_STAGE - 1 ? 2 : 1;
-}
+export const PROMOTION_REACH = 1;
 
 /* ---------------------------------------------------------------- chapters */
 
@@ -452,14 +483,34 @@ export function legacyScore(state: ChallengeState, extra: { gems: number; develo
     lines.push({ label: 'Players developed into stars', value: `${extra.developed}`, points: dp });
   }
 
+  // DIFFICULTY. Everything above is what the coach did; this is what it was
+  // done under. A Final Challenge career is worth well over twice a Standard
+  // one, because at that tier every one of those championships was won with
+  // fewer Coach Points, a contested portal and a squad that grew slowly.
+  const mult = modsFor(state.tier).legacy;
+  if (mult !== 1) {
+    const before = score;
+    score = Math.round(score * mult);
+    lines.push({
+      label: `${tierInfo(state.tier).name}`,
+      value: `${mult}x`,
+      points: score - before,
+    });
+  }
+
   // Calibrated against simulated careers: a coach who climbs to Division I and
   // wins there is a Legend; Immortal means the ladder was finished.
-  const title = score >= 1500 ? 'Immortal'
-    : score >= 1100 ? 'Legend'
-      : score >= 800 ? 'Great'
-        : score >= 500 ? 'Respected'
-          : score >= 280 ? 'Established'
-            : score >= 110 ? 'Journeyman' : 'Footnote';
+  // The TITLE describes the career; the SCORE describes the career weighted by
+  // what it was won under. So the thresholds move with the multiplier — a
+  // Footnote on Final is still a Footnote — while the number a coach compares
+  // against his last run reflects the tier he chose.
+  const bar = (n: number) => n * mult;
+  const title = score >= bar(1500) ? 'Immortal'
+    : score >= bar(1100) ? 'Legend'
+      : score >= bar(800) ? 'Great'
+        : score >= bar(500) ? 'Respected'
+          : score >= bar(280) ? 'Established'
+            : score >= bar(110) ? 'Journeyman' : 'Footnote';
 
   return { score: Math.round(score), title, lines };
 }

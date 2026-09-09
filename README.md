@@ -101,11 +101,14 @@ on top. Nothing is missing because the mode is called something else; `npm run
 checklist` prints the compatibility table and `npm run modes` proves it by
 driving a full season and offseason in each.
 
-- **You climb by winning championships.** Nothing else moves you up, and even a
-  title only gets you *interviews*: which jobs you are offered depends on the
-  reputation you have built, and taking one is a decision. A coach with a real
-  name in the sport gets offered something *two* rungs up as well — a smaller
-  job at a much higher level, against a bigger job at the next one.
+- **You climb one level at a time, and never more.** Winning Division III opens
+  Division II jobs and nothing above them. There is no path that skips a rung,
+  by reputation or otherwise — `npm run stages` asserts it across every rung at
+  every reputation, for promotions, demotions and rehires alike, because a
+  skipped level is invisible in a screenshot and the climb is the entire mode.
+- **A championship gets you interviews, not a promotion.** Which jobs depends on
+  the reputation you have built, and taking one is a decision: the strongest
+  programme in the list is reliably the one in the deepest trouble.
 - **Every job is a mess, and the mess is real.** A rebuild genuinely hands you a
   squad of underclassmen; a goalie problem genuinely means the man in the cage
   cannot stop the ball. The situation is applied to the roster you inherit, and
@@ -137,6 +140,43 @@ driving a full season and offseason in each.
 | NCAA Division I | 66 | 10 |
 | Continental Lacrosse League | 12 | 2 |
 | Premier Lacrosse League | 8 | 1 |
+
+**Four difficulties, chosen once before the first job.** They are not a bonus on
+the opposition's rating — no tier gives a rival programme a player, a point of
+rating or a resource you do not have. What changes is DECISIONS and RESOURCES.
+
+| | Standard | Elite | Impossible | Final |
+| --- | --- | --- | --- | --- |
+| Coach Points earned | 100% | 82% | 64% | 50% |
+| Coach upgrade cost | 100% | 130% | 170% | 215% |
+| Rival recruiting effort | 100% | 125% | 155% | 190% |
+| Rival scouting accuracy | 35% | 55% | 75% | 92% |
+| Transfer resistance | none | −6 | −13 | −20 |
+| Rivals per transfer | — | +1 | +2 | +3 |
+| Player development | 100% | 92% | 84% | 76% |
+| Quality of jobs offered | standard | −12pts | −24pts | −34pts |
+| Legacy multiplier | 1.0× | 1.35× | 1.8× | 2.4× |
+
+That table is not written down twice. The difficulty screen, the comparison
+screen and the simulation all read the same `MODIFIER_SPECS` list in
+`src/challenge/difficulty.ts`, so the game cannot tell you one thing and do
+another. Tapping a tier answers one question — *what makes this harder than the
+tier below it?* — with every modifier it changes, signed and quantified.
+
+On the harder tiers the coach tree **cannot be finished**, which is the point:
+you have to decide what kind of coach you are. The office reads back the
+identity your spending has actually formed — The Scout, The Recruiter, The
+Developer, The Strategist — rather than leaving it implicit.
+
+**One rating scale for the whole sport.** A team's `overall` used to be a
+standing *within its own level*, which is why a Division I team could be rated
+94 while a PLL club was 88. Every level now occupies a fixed slice of one
+universal scale — high school 40-80, D-III 55-83, D-II 65-87, D-I 75-92,
+semi-pro 80-94, PLL 88-99 — and a programme's standing among its own peers
+decides where in that slice it lands. The slices overlap on purpose, because
+reality does; what is never allowed is a level reaching past its neighbour.
+`npm run hierarchy` builds every team and every roster at every level and fails
+the run on any inversion.
 
 **The coach is one person for the whole career.** Everything he has earned lives
 in `career.coach` — a `CoachProfile` held on the save beside the career, never
@@ -469,15 +509,36 @@ about to refill.
 
 `npm run checklist` prints the mode compatibility table and what each level gets.
 
-`npm run careers` is the Challenge Mode stress test: twelve careers, up to
-forty-five seasons each, played by six different spending strategies (a coach who
-buys everything, one who buys nothing, one who only recruits, one who changes job
-at every opportunity). It re-derives the record from the schedule after **every
-game**, checks the standings, the squad shape, the bracket and the coach's
-profile across every job change, and reports the rung, titles, jobs, upgrades and
-level each career reached. It is what caught the offseason cutting every goalie
-on the roster, the transfer window stripping the midfield to two, and a coach's
+`npm run careers` is the Challenge Mode stress test. It sweeps **all four
+difficulties** over the same seeds and the same six spending strategies (a coach
+who buys everything, one who buys nothing, one who only recruits, one who
+changes job at every opportunity), so a difference between tiers is the
+difficulty and nothing else. It re-derives the record from the schedule after
+**every game**, checks the standings, the squad shape, the bracket and the
+coach's profile across every job change, prints how many seasons a career spends
+at each rung, and FAILS if a harder tier climbs further or buys more of the coach
+tree than an easier one. It is what caught the offseason cutting every goalie on
+the roster, the transfer window stripping the midfield to two, and a coach's
 upgrades being halved when he changed programme.
+
+Measured over eight careers per tier, fifty seasons each:
+
+| tier | reached the PLL | seasons to finish | avg rung | coach upgrades | sackings | battles lost |
+| --- | --- | --- | --- | --- | --- | --- |
+| Standard | 5/8 | 33.8 | 8.1 | 17.9 | 0.1 | 18 |
+| Elite | 5/8 | 35.6 | 7.9 | 16.4 | 0.4 | 27 |
+| Impossible | 3/8 | 42.0 | 7.3 | 12.4 | 0.6 | 42 |
+| Final | 1/8 | 47.0 | 6.3 | 10.4 | 1.0 | 61 |
+
+Every measure moves the right way, and Final is genuinely finishable rather than
+a wall. Those are figures for a crude automated coach that recruits and trades
+mechanically — a person who plays the systems well finishes considerably faster.
+
+`npm run hierarchy` builds every team and every roster at all six levels and
+prints the team and player rating distribution for each, then fails the run if
+the hierarchy inverts anywhere — an average Division I team above an average PLL
+club, a level reaching past its neighbour, or a level outside its own band. It is
+the guard on the universal rating scale.
 
 `npm run abuse` does the things a real save eventually does anyway: it tampers
 with a record, deletes a standings row mid-season, throws away the coach's

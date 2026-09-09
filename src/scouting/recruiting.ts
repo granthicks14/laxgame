@@ -114,6 +114,8 @@ export interface NewClassOptions {
   shell: GameTeam;
   /** Scouts carried over from last cycle. */
   keepScouts?: Scout[];
+  /** Challenge difficulty: change to the number of offers you may hold out. */
+  offers?: number;
 }
 
 export function newRecruitingClass(opts: NewClassOptions): RecruitingState {
@@ -126,6 +128,7 @@ export function newRecruitingClass(opts: NewClassOptions): RecruitingState {
     shell: opts.shell,
   });
   const scouts = (opts.keepScouts ?? []).map((s) => ({ ...s, assignedTo: null }));
+  const budget = Math.max(1, offerBudget(opts.level) + (perks?.extraOffers ?? 0) + (opts.offers ?? 0));
   return {
     cycle: opts.cycle,
     level: opts.level,
@@ -133,8 +136,11 @@ export function newRecruitingClass(opts: NewClassOptions): RecruitingState {
     scouts,
     market: scoutMarket(`${key}:market`, opts.level, opts.prestige),
     extraScouts: perks?.extraScouts ?? 0,
-    offersLeft: offerBudget(opts.level) + (perks?.extraOffers ?? 0),
-    maxOffers: offerBudget(opts.level) + (perks?.extraOffers ?? 0),
+    // Offers are the scarcest thing in recruiting, so difficulty takes one or
+    // two away rather than nudging a percentage: on the hard tiers you cannot
+    // cover your mistakes by offering everybody.
+    offersLeft: budget,
+    maxOffers: budget,
     signed: [],
     news: [],
     week: 0,
@@ -341,6 +347,15 @@ export function withdrawOffer(state: RecruitingState, id: string): void {
 export interface RecruitContext {
   /** What the coach's own upgrades are worth. */
   perks: CoachPerks;
+  /**
+   * The Challenge difficulty, as the three numbers recruiting cares about.
+   * Rivals never get better PLAYERS on a harder tier — they get better at
+   * chasing the right ones and at seeing through a bad ranking, which is a
+   * decision, not a cheat.
+   */
+  rivalPush: number;
+  rivalScouting: number;
+  interestGain: number;
   teamId: string;
   teamName: string;
   prestige: number;
@@ -490,10 +505,16 @@ export function advanceRecruitingWeek(
       // A well-resourced programme scouts too and will eventually see through a
       // ranking — but it takes them most of a cycle, which is the window you
       // are racing. Find him early and he is yours; dither and he is not.
+      //
+      // `rivalScouting` is the difficulty lever: at the top tiers they see a
+      // gem for what he is almost as fast as a fully staffed department does,
+      // so the sleeper you were saving offers for is gone by week nine.
       const insight = p.gem
-        ? clamp((rival.recruiting - 68) / 240, 0, 0.055) * (0.25 + state.week / 14)
+        ? clamp((rival.recruiting - 68) / 240, 0, 0.055)
+          * (0.25 + state.week / 14)
+          * (1 + ctx.rivalScouting * 4)
         : 0;
-      const chance = fit * 0.06 + insight;
+      const chance = (fit * 0.06 + insight) * ctx.rivalPush;
       if (rng.next() < chance) {
         p.suitors.push({ teamId: rival.id, push: rng.range(25, 60) });
         if (p.tracked && p.scouted >= 40) {
@@ -515,8 +536,14 @@ export function advanceRecruitingWeek(
   for (const p of state.prospects) {
     if (p.committedTo) continue;
     const target = interestTarget(p, ctx, state.level);
-    p.interest = clamp(p.interest + (target - p.interest) * 0.28 + rng.gauss(0, 2.5), 0, 100);
-    for (const s of p.suitors) s.push = clamp(s.push + rng.gauss(1.5, 4), 0, 100);
+    p.interest = clamp(
+      p.interest + (target - p.interest) * 0.28 * ctx.interestGain + rng.gauss(0, 2.5), 0, 100,
+    );
+    // Rival programmes push harder on the higher tiers, which is what turns a
+    // comfortable lead into a recruiting battle you can lose.
+    for (const s of p.suitors) {
+      s.push = clamp(s.push + rng.gauss(1.5 * ctx.rivalPush, 4), 0, 100);
+    }
   }
 
   // 4. Commitments. The class closes from the top down, so waiting on a

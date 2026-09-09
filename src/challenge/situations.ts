@@ -210,7 +210,17 @@ export function situationRatingShift(key: SituationKey): Partial<Record<
  * to be broken; strong ones are more likely to be stable but can still be one
  * graduating class away from trouble.
  */
-export function situationFor(prestige: number, rng: Rng): SituationKey {
+/**
+ * What kind of mess this programme is in.
+ *
+ * `severity` comes from the Challenge difficulty (0 on Standard, 1 on Final).
+ * It does not invent worse situations — every tier draws from the same list of
+ * real problems — it simply stops handing out the settled ones. On Final, a
+ * coach walking into a job walks into something genuinely broken almost every
+ * time, which is the difficulty doing its work through the roster he inherits
+ * rather than through a number on the opposition.
+ */
+export function situationFor(prestige: number, rng: Rng, severity = 0): SituationKey {
   const weak = prestige < 55;
   const strong = prestige > 78;
   const pool: SituationKey[] = weak
@@ -218,5 +228,12 @@ export function situationFor(prestige: number, rng: Rng): SituationKey {
     : strong
       ? ['stable', 'graduation', 'chemistry', 'stable', 'goalie', 'defense']
       : ['rebuild', 'chemistry', 'graduation', 'defense', 'offense', 'goalie', 'underdog', 'stable'];
-  return rng.pick(pool);
+  if (severity <= 0) return rng.pick(pool);
+
+  // Sort the pool by how much of an allowance the situation earns you — the
+  // bigger the relief, the worse the mess — and bias the draw toward the top.
+  const worst = [...pool].sort((a, b) => SITUATIONS[b].expectationRelief - SITUATIONS[a].expectationRelief);
+  const bias = Math.min(1, severity);
+  const roll = rng.next() ** (1 + bias * 2.2);
+  return worst[Math.min(worst.length - 1, Math.floor(roll * worst.length))];
 }

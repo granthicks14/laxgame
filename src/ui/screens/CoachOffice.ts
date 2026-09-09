@@ -5,10 +5,11 @@ import { MODE_LABEL } from '../../league/modes';
 import { screenEl, topbar, panel, emptyPanel, segmented } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
 import {
-  buyCoachUpgrade, coachProfile, spendCoachPoints, syncUserTeamRatings, userTeam,
+  buyCoachUpgrade, challengeMods, coachProfile, coachUpgradeCost, spendCoachPoints,
+  staffUpgradeCost, syncUserTeamRatings, userTeam,
 } from '../../league/career';
 import {
-  BRANCHES, BRANCH_ORDER, UPGRADES, coachTitle, levelOf, lockReason, upgrade,
+  BRANCHES, BRANCH_ORDER, UPGRADES, coachTitle, identityOf, levelOf, lockReason, upgrade,
   upgradesIn, xpForNextLevel, type UpgradeBranch,
 } from '../../challenge/coach';
 import { isClimbMode } from '../../league/modes';
@@ -110,6 +111,7 @@ export class CoachOfficeScreen implements Screen {
   /** The coach himself: level, experience, and what his career adds up to. */
   private coachPanel(career: Career): HTMLElement {
     const profile = coachProfile(career);
+    const reading = identityOf(profile);
     const level = levelOf(profile.xp);
     const { into, needed } = xpForNextLevel(profile.xp);
     const bar = h('div', { class: 'interest' },
@@ -131,6 +133,32 @@ export class CoachOfficeScreen implements Screen {
         h('span', { class: 'pill', text: `${profile.seasons} season${profile.seasons === 1 ? '' : 's'}` }),
         h('span', { class: 'pill', text: `${jobs} programme${jobs === 1 ? '' : 's'}` }),
         h('span', { class: 'pill', text: `${profile.owned.length}/${UPGRADES.length} upgrades` })),
+      // What kind of coach the spending has actually made him. On the harder
+      // tiers the tree cannot be finished, so this is the decision the career
+      // has been making all along — named, rather than left implicit.
+      reading
+        ? h('div', { class: 'stack', style: 'gap:1px;margin-top:6px' },
+          h('div', { class: 'eyebrow', text: 'What kind of coach you are' }),
+          h('div', {
+            class: 'small',
+            style: 'color:var(--accent)',
+            text: `${reading.identity.name}${reading.focus >= 0.55 ? '' : ' (still deciding)'}`,
+          }),
+          h('div', { class: 'tiny', text: reading.identity.blurb }),
+          h('div', {
+            class: 'tiny',
+            text: BRANCH_ORDER
+              .filter((b) => reading.spend[b] > 0)
+              .sort((a, b) => reading.spend[b] - reading.spend[a])
+              .map((b) => `${BRANCHES[b].label} ${reading.spend[b]}`)
+              .join(' · '),
+          }))
+        : h('div', {
+          class: 'tiny',
+          style: 'margin-top:6px',
+          text: 'You have not bought anything yet. What you spend on decides what kind of '
+            + 'coach you become — and on the harder tiers you cannot buy it all.',
+        }),
       profile.jobs.length > 1
         ? h('div', { class: 'stack', style: 'gap:1px;margin-top:4px' },
           h('div', { class: 'eyebrow', text: 'Where you have been' }),
@@ -146,13 +174,15 @@ export class CoachOfficeScreen implements Screen {
   private branchPanel(app: App, career: Career, branch: UpgradeBranch, render: () => void): HTMLElement {
     const profile = coachProfile(career);
     const info = BRANCHES[branch];
+    const scale = challengeMods(career).upgradeCost;
     const rows = upgradesIn(branch).map((u) => {
-      const reason = lockReason(profile, u);
+      const price = coachUpgradeCost(career, u.cost);
+      const reason = lockReason(profile, u, scale);
       const owned = reason === 'owned';
       const why = reason === 'level' ? `Coach level ${u.level}`
         : reason === 'requires'
           ? `Needs ${u.requires.map((r) => upgrade(r)?.label ?? r).join(' + ')}`
-          : reason === 'cost' ? `${u.cost} CP` : `${u.cost} CP`;
+          : `${price} CP`;
       return h('div', {
         class: 'row',
         style: `gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--line-soft)${owned ? ';opacity:.85' : ''}`,
@@ -160,7 +190,7 @@ export class CoachOfficeScreen implements Screen {
         h('span', {
           class: owned ? 'pill pill--green' : reason ? 'pill' : 'pill pill--accent',
           style: 'flex:0 0 auto',
-          text: owned ? 'OWNED' : reason === 'level' ? `LV ${u.level}` : `${u.cost} CP`,
+          text: owned ? 'OWNED' : reason === 'level' ? `LV ${u.level}` : `${price} CP`,
         }),
         h('div', { class: 'stack', style: 'gap:1px;flex:1 1 auto;min-width:0' },
           h('div', { class: 'small', style: 'color:var(--text)', text: u.label }),
@@ -190,7 +220,7 @@ export class CoachOfficeScreen implements Screen {
   private trackPanel(app: App, career: Career, track: CoachTrack, render: () => void): HTMLElement {
     const info = TRACKS[track];
     const level = career.staff[track];
-    const cost = upgradeCost(level);
+    const cost = staffUpgradeCost(career, upgradeCost(level));
     const maxed = cost === null;
     const afford = !maxed && career.coachingPoints >= cost;
 

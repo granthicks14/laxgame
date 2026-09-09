@@ -12,6 +12,9 @@ export interface Settings {
   seenTutorial: boolean;
   /** The recruiting walkthrough opens once, then lives behind a button. */
   seenRecruiting: boolean;
+  /** The Challenge difficulty offered first next time. Not the career's own —
+   *  that is fixed on the save the moment the career starts. */
+  challengeTier: string;
   /** Show a highlight replay after each goal. */
   goalReplays: boolean;
   /** 'auto' picks touch controls on touch devices. */
@@ -32,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showHints: true,
   seenTutorial: false,
   seenRecruiting: false,
+  challengeTier: 'standard',
   goalReplays: true,
   controls: 'auto',
   simDetails: false,
