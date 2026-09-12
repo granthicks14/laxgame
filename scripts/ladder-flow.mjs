@@ -222,10 +222,11 @@ await settle(700);
 const endScreen = (await page.locator('.wrapper').innerText()).toLowerCase();
 check('the final completion screen is shown', /legendary coaching journey complete/.test(endScreen),
   endScreen.split('\n').filter((l) => l.trim()).slice(0, 4).join(' / '));
-check('the ending names the difficulty it was won on', /standard challenge/.test(endScreen));
+// The baseline tier is called "Standard" now, not "Standard Challenge".
+check('the ending names the difficulty it was won on', /\bstandard\b/.test(endScreen));
 // A finished career is filed, so the next one on a harder tier has something to
-// beat. Without this the four difficulties are four ways to have one evening.
-check('the career is filed in the hall', /your record on standard challenge/.test(endScreen));
+// beat. Without this the five difficulties are five ways to have one evening.
+check('the career is filed in the hall', /your record on standard/.test(endScreen));
 check('the hall records the climb', /fastest climb to the pll/.test(endScreen));
 
 console.log(`\n${results.filter(Boolean).length}/${results.length} checks passed`);
