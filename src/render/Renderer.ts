@@ -119,8 +119,12 @@ export class Renderer {
     const theme = this.theme!;
     const jerseys = this.jerseys!;
 
-    // Camera target: the ball, or the celebration point after a goal.
-    const focus = match.focus ?? { x: match.ball.x, y: match.ball.y };
+    // Camera target: the replay's cinematic point, the ball, or the celebration
+    // point after a goal. A presentation override drives both the camera and the
+    // crop from one world point, so the framing it asks for is the framing shown.
+    const focus = view
+      ? { x: view.focusX, y: view.focusY }
+      : match.focus ?? { x: match.ball.x, y: match.ball.y };
     const carrier = match.ball.carrier;
     const lead = carrier ? Math.max(-9, Math.min(9, carrier.vx * 0.55)) : 0;
     this.cam.follow(

@@ -17,7 +17,7 @@ import { updateAI, updateGoalie, saveRadius } from './ai';
 
 /** A team with no programme behind it coaches to the baseline. */
 const NO_COACHING: CoachEffects = coachEffects(EMPTY_STAFF);
-import { ReplayBuffer } from './replay';
+import { ReplayBuffer, pickAngle, type ReplayAngle, type ReplayCut } from './replay';
 import type {
   Ball, InputState, MatchConfig, MatchEvents, MatchPhase, MatchPlayer, ScoreEntry,
   ShotInfo, ShotOutcome, SlotKey, TeamMatchStats, TeamSetup,
@@ -108,6 +108,10 @@ export class Match {
   replayDuration = 0;
   /** Current playback rate, so the HUD can show the slow-motion beat. */
   replaySpeed = 1;
+  /** Who and what the clip is about, so the camera can frame the right thing. */
+  replayCut: ReplayCut | null = null;
+  /** Framing for the current clip. Varies from goal to goal. */
+  replayAngle: ReplayAngle | null = null;
 
   /** Practice drill scoring. Unused in a normal game. */
   practice = { reps: 0, success: 0 };
@@ -614,6 +618,9 @@ export class Match {
     this.replayTime = 0;
     this.replaySpeed = 1;
     this.focus = null;
+    // A fresh framing every goal, chosen from the seed rather than the live
+    // random stream, so watching replays cannot change what happens next.
+    this.replayAngle = pickAngle(this.rng.seed, this.scoring.length, this.replayAngle);
   }
 
   /** Ends the replay early; the next phase runs exactly as if it had finished. */
@@ -1164,6 +1171,7 @@ export class Match {
     };
     this.scoring.push(entry);
     this.lastGoal = entry;
+    this.replayCut = { scorer: shooter, keeper, goalX: goal.x, goalY: goal.y };
 
     this.settleShot('goal');
     this.events.emit('goal', { side, scorer: shooter!, assist, distance });

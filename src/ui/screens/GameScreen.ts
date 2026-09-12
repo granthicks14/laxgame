@@ -2,6 +2,7 @@ import { audio } from '../../audio/Audio';
 import { Match } from '../../match/Match';
 import type { MatchConfig } from '../../match/types';
 import { Renderer, type AimHint, type ViewOverride } from '../../render/Renderer';
+import { ANGLE_LABELS, replayCamera } from '../../match/replay';
 import { InputManager, type ButtonId } from '../../input/Input';
 import { h, clear } from '../dom';
 import type { App, Screen } from '../App';
@@ -70,6 +71,7 @@ export class GameScreen implements Screen {
   private elReplayFx!: HTMLElement;
   private elReplaySkip!: HTMLElement;
   private elReplaySlow!: HTMLElement;
+  private elReplayAngle!: HTMLElement;
   private replayShown = false;
   /** True while the pregame card is up: the world renders, the clock does not run. */
   private introHold = false;
@@ -158,12 +160,14 @@ export class GameScreen implements Screen {
     this.elTicker = h('div', { class: 'ticker', style: 'display:none' });
     this.elShotFeed = h('div', { class: 'shotfeed', style: 'display:none' });
     this.elReplaySlow = h('span', { class: 'replay-tag__slow' });
+    this.elReplayAngle = h('span', { class: 'replay-tag__angle' });
     this.elReplayFx = h('div', { class: 'replay-fx' },
       h('div', { class: 'replay-fx__bar replay-fx__bar--top' }),
       h('div', { class: 'replay-fx__bar replay-fx__bar--bottom' }),
       h('div', { class: 'replay-tag' },
         h('span', { class: 'replay-tag__dot' }),
         h('span', { text: 'Replay' }),
+        this.elReplayAngle,
         this.elReplaySlow));
     this.elReplaySkip = h('button', {
       class: 'replay-skip', text: 'Skip ▸',
@@ -386,27 +390,63 @@ export class GameScreen implements Screen {
       this.elReplayFx.classList.toggle('is-on', on);
       this.elReplaySkip.classList.toggle('is-on', on);
       this.elTouch.classList.toggle('is-hidden', on);
-      if (on) this.input.releaseAll();
+      if (on) {
+        this.input.releaseAll();
+        this.replayFinished = false;
+        // A hard cut into the clip, the way a broadcast would switch feeds.
+        this.renderer.effects.screenFlash('#ffffff', 0.22);
+      }
     }
     // Recomputed every frame so pausing during a replay behaves correctly.
     this.input.suspended = on || this.paused || this.finished;
     if (!on) return null;
 
+    const angle = m.replayAngle ?? 'ball';
     const slow = m.replaySpeed < 0.9;
+    const label = ANGLE_LABELS[angle];
+    if (this.elReplayAngle.textContent !== label) this.elReplayAngle.textContent = label;
     const slowText = slow ? 'Slow motion' : '';
     if (this.elReplaySlow.textContent !== slowText) this.elReplaySlow.textContent = slowText;
 
-    // Ease the zoom in over the clip and push in harder for the finish.
+    const cut = m.replayCut;
     const t = m.replayDuration > 0 ? m.replayTime / m.replayDuration : 0;
-    const zoom = 1.18 + Math.min(1, t) * 0.24 + (slow ? 0.18 : 0);
+    const shot = replayCamera(angle, {
+      ballX: m.ball.x,
+      ballY: m.ball.y,
+      shooterX: cut?.scorer?.x ?? m.ball.x,
+      shooterY: cut?.scorer?.y ?? m.ball.y,
+      goalieX: cut?.keeper.x ?? m.ball.x,
+      goalieY: cut?.keeper.y ?? m.ball.y,
+      goalX: cut?.goalX ?? m.ball.x,
+      goalY: cut?.goalY ?? m.ball.y,
+      t,
+      slow,
+    });
+
+    // The net, a second time: the clip runs to the moment the ball goes in, so
+    // the jolt and the crowd belong at the end of it, not the start.
+    if (!this.replayFinished && m.replayTime >= m.replayDuration) {
+      this.replayFinished = true;
+      this.renderer.cam.addShake(7);
+      audio.play('crowdUp');
+      if (cut && m.lastGoal) {
+        const team = this.opts.config[m.lastGoal.side].team;
+        this.renderer.effects.burst(cut.goalX, cut.goalY, 22,
+          [team.primary, team.secondary, '#ffffff'], 8);
+      }
+    }
+
     return {
-      zoom,
-      focusX: m.ball.x,
-      focusY: m.ball.y,
-      followRate: 9,
+      zoom: shot.zoom,
+      focusX: shot.x,
+      focusY: shot.y,
+      followRate: shot.rate,
       presentation: true,
     };
   }
+
+  /** One jolt per clip, at the finish. */
+  private replayFinished = false;
 
   private showShotFeed(label: string, tone: 'good' | 'bad' | 'neutral'): void {
     this.elShotFeed.textContent = label;

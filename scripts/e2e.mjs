@@ -80,6 +80,76 @@ async function desktop(browser) {
   });
   check('clock runs and the controlled player moves', !!moved && moved.clock < 120 && moved.x !== null);
 
+  // --- the goal replay, in the browser it actually runs in
+  // A clip needs footage, so the faceoff has to be clamped and the ball has to
+  // be live for a couple of seconds first. The goal itself is forced: waiting
+  // for the AI to score costs a minute of wall clock, and what is under test is
+  // the presentation, not the shooting.
+  async function forceGoal() {
+    for (let i = 0; i < 6; i++) {
+      const phase = await page.evaluate(() => window.loneStarLax.match.phase);
+      if (phase === 'live') break;
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(450);
+    }
+    const footage = await page.evaluate(async () => {
+      const m = window.loneStarLax.match;
+      const t0 = Date.now();
+      while ((m.phase !== 'live' || m.replay.seconds < 2.2) && Date.now() - t0 < 20000) {
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      return m.replay.seconds;
+    });
+    await page.evaluate(() => {
+      const m = window.loneStarLax.match;
+      m.ball.lastCarrier = m.teams.home.find((p) => p.slot === 'A1');
+      m.scoreGoal('home');
+    });
+    // The celebration runs for two seconds before the clip starts.
+    await page.waitForTimeout(2500);
+    return footage;
+  }
+
+  const footage = await forceGoal();
+  const replay = await page.evaluate(() => {
+    const m = window.loneStarLax.match;
+    const tag = document.querySelector('.replay-tag__angle');
+    const card = document.querySelector('.goalcard__scorer');
+    return {
+      phase: m.phase,
+      angle: m.replayAngle,
+      label: tag ? tag.textContent : '',
+      letterboxed: !!document.querySelector('.replay-fx.is-on'),
+      skippable: !!document.querySelector('.replay-skip.is-on'),
+      scorer: card ? card.textContent : '',
+      duration: m.replayDuration,
+    };
+  });
+  check('a goal rolls into a replay', replay.phase === 'replay',
+    `${replay.phase}, ${footage.toFixed(1)}s of footage`);
+  check('the replay names its camera angle', !!replay.angle && replay.label.length > 0,
+    `${replay.angle} / "${replay.label}"`);
+  check('the replay is letterboxed and skippable', replay.letterboxed && replay.skippable);
+  check('the scorer is named over the replay', replay.scorer.length > 0, replay.scorer);
+  check('the camera is cropped in for the clip', await page.evaluate(() => {
+    const m = window.loneStarLax.match;
+    const c = window.loneStarLax.renderer;
+    return m.phase === 'replay' && c.cam.ppy > 0;
+  }));
+
+  await page.getByRole('button', { name: /Skip/i }).click();
+  await page.waitForTimeout(400);
+  const afterSkip = await page.evaluate(() => window.loneStarLax.match.phase);
+  check('the skip button ends the replay', afterSkip !== 'replay', afterSkip);
+
+  // Two goals running must not be framed the same way.
+  await forceGoal();
+  const second = await page.evaluate(() => window.loneStarLax.match.replayAngle);
+  check('consecutive replays use different cameras', !!second && second !== replay.angle,
+    `${replay.angle} -> ${second}`);
+  await page.evaluate(() => window.loneStarLax.match.skipReplay());
+  await page.waitForTimeout(300);
+
   // pause, resume, quit
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);

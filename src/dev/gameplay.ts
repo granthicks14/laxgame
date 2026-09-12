@@ -16,6 +16,9 @@ import { Match } from '../match/Match';
 import { makeMatchConfig } from '../league/matchSetup';
 import { getTeam } from '../data/teams';
 import type { MatchPlayer } from '../match/types';
+import {
+  MAX_REPLAY_ZOOM, REPLAY_ANGLES, pickAngle, replayCamera, type ReplayAngle,
+} from '../match/replay';
 
 const env = (globalThis as { process?: { exit(n: number): void } }).process;
 const problems: string[] = [];
@@ -182,6 +185,113 @@ const goalieOf = (m: Match, side: 'home' | 'away'): MatchPlayer => m.goalieOf(si
   check('somebody is actually setting it',
     m.teams.home.some((p) => p !== carrier && p.screenTimer > 0));
   check('calling twice in a row is on cooldown', !m.callScreen(carrier));
+}
+
+/* ------------------------------------- 7. the goal replay is actually a replay
+ * Seven framings of the same footage. The things worth asserting are that the
+ * choice varies, that every framing is a different picture, and that each one
+ * tightens onto the cage for the finish instead of wandering off it.
+ * -------------------------------------------------------------------------- */
+
+{
+  // 1. the framing changes from goal to goal, and never repeats back to back.
+  const seen = new Set<ReplayAngle>();
+  let repeats = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    let prev: ReplayAngle | null = null;
+    for (let goal = 0; goal < 12; goal++) {
+      const a = pickAngle(seed * 7919, goal, prev);
+      if (a === prev) repeats++;
+      seen.add(a);
+      prev = a;
+    }
+  }
+  check('every camera angle gets used', seen.size === REPLAY_ANGLES.length,
+    `${seen.size}/${REPLAY_ANGLES.length}: ${[...seen].join(', ')}`);
+  check('the same angle never runs twice in a row', repeats === 0, `${repeats} repeats`);
+  check('the same goal always replays the same way',
+    pickAngle(12345, 3, 'ball') === pickAngle(12345, 3, 'ball'));
+
+  // 2. a real goal mouth, a real shooter and a real keeper, mid-flight.
+  const subject = (t: number, slow: boolean) => ({
+    ballX: 88, ballY: 26, shooterX: 84, shooterY: 22,
+    goalieX: 94.4, goalieY: 30, goalX: 95, goalY: 30, t, slow,
+  });
+  const frames = new Set<string>();
+  for (const angle of REPLAY_ANGLES) {
+    const open = replayCamera(angle, subject(0, false));
+    const close = replayCamera(angle, subject(1, true));
+    frames.add(`${open.x.toFixed(2)},${open.y.toFixed(2)},${open.zoom.toFixed(2)}`);
+
+    const finite = [open.x, open.y, open.zoom, open.rate, close.x, close.y, close.zoom]
+      .every((n) => Number.isFinite(n));
+    check(`${angle}: produces a usable camera`, finite);
+    check(`${angle}: stays inside the zoom the pixel grid can take`,
+      open.zoom >= 1 && close.zoom <= MAX_REPLAY_ZOOM + 1e-9,
+      `${open.zoom.toFixed(2)} -> ${close.zoom.toFixed(2)}`);
+    check(`${angle}: pushes in over the clip`, close.zoom > open.zoom + 0.05,
+      `${open.zoom.toFixed(2)} -> ${close.zoom.toFixed(2)}`);
+    // The finish either tightens onto the cage or was already sat on it — the
+    // end-line camera lives behind the net and stays there.
+    const d0 = Math.hypot(open.x - 95, open.y - 30);
+    const d1 = Math.hypot(close.x - 95, close.y - 30);
+    check(`${angle}: frames the cage for the finish`, d1 <= Math.max(d0, 4) + 0.01,
+      `${d0.toFixed(1)} -> ${d1.toFixed(1)} yards off the goal`);
+    // Nothing should try to look at the car park.
+    check(`${angle}: keeps the camera on the venue`,
+      open.x > -15 && open.x < 125 && open.y > -15 && open.y < 75,
+      `${open.x.toFixed(1)}, ${open.y.toFixed(1)}`);
+  }
+  check('each angle is a different picture', frames.size === REPLAY_ANGLES.length,
+    `${frames.size} distinct openings of ${REPLAY_ANGLES.length}`);
+
+  // 3. a goal in a real match arms the clip with the right people in it.
+  const m = freshMatch();
+  m.cfg.replays = true;
+  toLive(m);
+  // Whoever scores first is the one to check: the engine decides, not the test.
+  let guard = 0;
+  while (!m.lastGoal && guard++ < 60 * 600) m.update(DT);
+  check('the engine scored a goal to replay', !!m.lastGoal, `after ${(guard / 60) | 0}s`);
+  const side = m.lastGoal?.side ?? 'home';
+  const beaten = side === 'home' ? 'away' : 'home';
+  const cage = side === 'home' ? 95 : 15;
+  const cut = m.replayCut;
+  check('the clip knows who scored it', !!cut && !!cut.scorer, cut?.scorer?.data.last ?? 'nobody');
+  check('the clip knows which keeper was beaten',
+    !!cut && cut.keeper === m.goalieOf(beaten), cut?.keeper.data.last ?? 'nobody');
+  check('the clip knows which cage it went into',
+    !!cut && Math.abs(cut.goalX - cage) < 0.01 && Math.abs(cut.goalY - 30) < 0.01,
+    cut ? `${cut.goalX}, ${cut.goalY}` : 'no cut');
+
+  // The celebration runs, then the replay; it must pick a framing and it must
+  // end on its own rather than hanging the game.
+  let steps = 0;
+  while (m.phase !== 'replay' && steps++ < 60 * 10) m.update(DT);
+  check('a goal rolls into a replay', m.phase === 'replay', m.phase);
+  check('the replay picked a framing', !!m.replayAngle, m.replayAngle ?? 'none');
+  check('the replay has footage to show', m.replayDuration > 1, `${m.replayDuration.toFixed(1)}s`);
+  let slowSeen = false;
+  steps = 0;
+  while (m.phase === 'replay' && steps++ < 60 * 30) {
+    m.update(DT);
+    if (m.replaySpeed < 0.9) slowSeen = true;
+  }
+  check('the replay drops into slow motion for the finish', slowSeen);
+  check('the replay ends and play resumes', m.phase !== 'replay', m.phase);
+
+  // Skipping has to land in exactly the same place.
+  const m2 = freshMatch();
+  m2.cfg.replays = true;
+  toLive(m2);
+  let g2 = 0;
+  while (m2.phase !== 'replay' && g2++ < 60 * 600) m2.update(DT);
+  if (m2.phase === 'replay') {
+    m2.skipReplay();
+    check('skipping a replay resumes the game', m2.phase !== 'replay', m2.phase);
+  } else {
+    check('skipping a replay resumes the game', false, 'never reached a replay');
+  }
 }
 
 console.log();

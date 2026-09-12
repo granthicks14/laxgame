@@ -1,3 +1,4 @@
+import { FIELD } from '../data/constants';
 import type { MatchPlayer } from './types';
 
 /* ---------------------------------------------------------------------------
@@ -145,5 +146,162 @@ export class ReplayBuffer {
   /** Approximate memory footprint, for the performance notes. */
   get bytes(): number {
     return this.data.byteLength;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * REPLAY CAMERAS
+ *
+ * A goal replay that always frames the ball the same way stops being worth
+ * watching after the second one. These are seven framings of the same recorded
+ * footage — the clip is identical, the camera is not.
+ *
+ * The functions are pure: a subject (where the ball, the shooter, the beaten
+ * keeper and the cage are, right now in the clip) goes in, a camera target
+ * comes out. That keeps them testable without a canvas, and keeps the choice
+ * out of the simulation's random stream so replays never change what happens
+ * next on the field.
+ * ------------------------------------------------------------------------- */
+
+export type ReplayAngle =
+  | 'broadcast' | 'sideline' | 'shooter' | 'behind' | 'goalie' | 'ball' | 'closeup';
+
+export const REPLAY_ANGLES: readonly ReplayAngle[] =
+  ['broadcast', 'sideline', 'shooter', 'behind', 'goalie', 'ball', 'closeup'];
+
+/** Shown on the REC tag so the viewer knows what they are looking at. */
+export const ANGLE_LABELS: Record<ReplayAngle, string> = {
+  broadcast: 'Broadcast',
+  sideline: 'Sideline',
+  shooter: 'Shooter cam',
+  behind: 'End line',
+  goalie: 'Goalie cam',
+  ball: 'Ball cam',
+  closeup: 'Close up',
+};
+
+/** Who and what the current clip is about. Set when the goal is scored. */
+export interface ReplayCut {
+  scorer: MatchPlayer | null;
+  keeper: MatchPlayer;
+  goalX: number;
+  goalY: number;
+}
+
+/** Live positions during playback — the buffer writes history onto the entities. */
+export interface ReplaySubject {
+  ballX: number;
+  ballY: number;
+  shooterX: number;
+  shooterY: number;
+  goalieX: number;
+  goalieY: number;
+  goalX: number;
+  goalY: number;
+  /** 0..1 through the clip. */
+  t: number;
+  /** True once playback has dropped into slow motion for the finish. */
+  slow: boolean;
+}
+
+export interface ReplayCameraShot {
+  /** World point to keep centred. */
+  x: number;
+  y: number;
+  /** 1 = no crop. The renderer crops the buffer, so this stays modest. */
+  zoom: number;
+  /** Camera follow rate; higher is snappier. */
+  rate: number;
+}
+
+/** Cropping past this turns the pixel grid to mush. */
+export const MAX_REPLAY_ZOOM = 1.95;
+
+/**
+ * Picks the framing for a goal. Deterministic in the game seed and the goal
+ * number — the same goal always replays the same way — and never the same
+ * framing twice running, which is the whole point.
+ */
+export function pickAngle(seed: number, index: number, previous?: ReplayAngle | null): ReplayAngle {
+  let h = (Math.abs(Math.trunc(seed)) ^ Math.imul(index + 1, 0x9e3779b1)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
+  h = Math.imul(h ^ (h >>> 12), 0x297a2d39) >>> 0;
+  h = (h ^ (h >>> 15)) >>> 0;
+  const pool = previous ? REPLAY_ANGLES.filter((a) => a !== previous) : REPLAY_ANGLES;
+  return pool[h % pool.length];
+}
+
+const mix = (a: number, b: number, k: number): number => a + (b - a) * k;
+
+export function replayCamera(angle: ReplayAngle, s: ReplaySubject): ReplayCameraShot {
+  const t = s.t < 0 ? 0 : s.t > 1 ? 1 : s.t;
+  // Squared, so the clip opens on a wide frame and tightens late.
+  const push = t * t;
+  const finish = s.slow ? 1 : 0;
+  // Whichever end the cage is at, this is the direction of the end line.
+  const out = s.goalX >= FIELD.centerX ? 1 : -1;
+  const tight = (base: number, gain: number): number =>
+    Math.min(MAX_REPLAY_ZOOM, base + push * gain + finish * 0.12);
+
+  switch (angle) {
+    // Pulled back, ball and cage both in frame: the angle a broadcast opens on.
+    case 'broadcast':
+      return {
+        x: mix(s.ballX, s.goalX, 0.22 + finish * 0.34),
+        y: mix(s.ballY, s.goalY, 0.18 + finish * 0.34),
+        zoom: tight(1.04, 0.18),
+        rate: 4,
+      };
+    // Sat down the near touchline, so play runs across the frame rather than
+    // through the middle of it.
+    case 'sideline': {
+      const near = s.ballY < FIELD.centerY ? 5 : FIELD.width - 5;
+      return {
+        x: mix(s.ballX, s.goalX, 0.12 + finish * 0.4),
+        y: mix(mix(s.ballY, near, 0.3), s.goalY, finish * 0.5),
+        zoom: tight(1.26, 0.2),
+        rate: 5,
+      };
+    }
+    // Stays with the man who scored it, drifting onto the ball as it leaves him.
+    case 'shooter':
+      return {
+        x: mix(s.shooterX, s.ballX, 0.3 + finish * 0.45),
+        y: mix(s.shooterY, s.ballY, 0.3 + finish * 0.45),
+        zoom: tight(1.38, 0.22),
+        rate: 7,
+      };
+    // Behind the cage looking back up the field.
+    case 'behind':
+      return {
+        x: mix(s.goalX + out * 2.5, s.ballX, 0.24 * (1 - finish)),
+        y: mix(s.goalY, s.ballY, 0.3 * (1 - finish)),
+        zoom: tight(1.42, 0.2),
+        rate: 5,
+      };
+    // Over the keeper's shoulder: the ball comes at the camera.
+    case 'goalie':
+      return {
+        x: mix(s.goalieX, s.ballX, 0.32 * (1 - finish * 0.5)),
+        y: mix(s.goalieY, s.ballY, 0.32 * (1 - finish * 0.5)),
+        zoom: tight(1.56, 0.22),
+        rate: 8,
+      };
+    // Hard in on the finish.
+    case 'closeup':
+      return {
+        x: mix(s.ballX, s.goalX, finish * 0.5),
+        y: mix(s.ballY, s.goalY, finish * 0.5),
+        zoom: tight(1.5, 0.3),
+        rate: 10,
+      };
+    case 'ball':
+    default:
+      return {
+        x: mix(s.ballX, s.goalX, finish * 0.25),
+        y: mix(s.ballY, s.goalY, finish * 0.25),
+        zoom: tight(1.18, 0.24),
+        rate: 9,
+      };
   }
 }
