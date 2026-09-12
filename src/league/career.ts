@@ -33,7 +33,8 @@ import {
   type JobOffer, type Legacy, type Programme, type SeasonVerdict,
 } from '../challenge/state';
 import {
-  applySituation, situationFor, situationRatingShift, type SituationKey,
+  applyBottomOfTheClass, applySituation, BOTTOM_CHEMISTRY_HIT, situationFor,
+  situationRatingShift, type SituationKey,
 } from '../challenge/situations';
 import { difficultyFor } from '../data/levels';
 import { STAR_OVERALL } from '../data/players';
@@ -1471,7 +1472,27 @@ export function startChallenge(opts: {
   career.coach = newCoachProfile(career.coachingPoints);
   openJob(career, stage.key);
   applyChallengeSituation(career, situation);
+  // The first job is the worst job in the district. The situation is the story;
+  // this is the part that makes the story true on the field.
+  sinkStartingProgramme(career, modsFor(tier).startingHole);
   return career;
+}
+
+/**
+ * Puts the programme you are starting from at the bottom of its class, where a
+ * climb has to begin. Runs AFTER the situation, so a full rebuild at the worst
+ * programme in the district is both of those things at once.
+ */
+function sinkStartingProgramme(career: Career, points: number): void {
+  if (points <= 0) return;
+  const rng = new Rng(`${career.seed}:bottom:${career.teamId}`);
+  career.roster = applyBottomOfTheClass(career.roster, rng, points);
+  syncUserTeamRatings(career);
+  const derived = career.ratingOverrides[career.teamId] ?? {};
+  career.ratingOverrides[career.teamId] = {
+    ...derived,
+    chemistry: Math.round(clamp((derived.chemistry ?? 60) - BOTTOM_CHEMISTRY_HIT, 25, 99)),
+  };
 }
 
 /** Applies a situation to the squad you have just inherited. */

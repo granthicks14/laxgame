@@ -31,6 +31,7 @@
     "stages": "esbuild src/dev/stages.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-stages.mjs --log-level=error && node node_modules/.cache/lsl-stages.mjs",
     "seed-save": "esbuild src/dev/seed-save.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-seed.mjs --log-level=error && node node_modules/.cache/lsl-seed.mjs",
     "test:ladder": "node scripts/ladder-flow.mjs",
+    "start-check": "esbuild src/dev/start.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-start.mjs --log-level=error && node node_modules/.cache/lsl-start.mjs",
     "careers": "esbuild src/dev/careers.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-careers.mjs --log-level=error && node node_modules/.cache/lsl-careers.mjs",
     "stories": "esbuild src/dev/stories.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-stories.mjs --log-level=error && node node_modules/.cache/lsl-stories.mjs",
     "abuse": "esbuild src/dev/abuse.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-abuse.mjs --log-level=error && node node_modules/.cache/lsl-abuse.mjs",

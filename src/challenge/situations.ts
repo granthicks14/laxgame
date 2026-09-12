@@ -237,3 +237,53 @@ export function situationFor(prestige: number, rng: Rng, severity = 0): Situatio
   const roll = rng.next() ** (1 + bias * 2.2);
   return worst[Math.min(worst.length - 1, Math.floor(roll * worst.length))];
 }
+
+/* ---------------------------------------------------------------------------
+ * THE PROGRAMME NOBODY ELSE WANTED
+ *
+ * The first job in a climb is the worst job in the district, and "worst" has to
+ * mean something. Class D is six programmes sitting inside five rating points
+ * of each other, so a squad that is merely average-with-a-problem wins the
+ * class in its first season roughly a third of the time, on bracket luck alone.
+ * That is not the bottom of a ladder, it is a head start.
+ *
+ * So the squad you inherit is put where it belongs: last, by a clear margin.
+ * Unevenly, too — the starters keep enough to be worth coaching, the bench does
+ * not, because depth is what a bottom programme really lacks. What is NOT
+ * touched is ceilings. Every one of these players can still become what he was
+ * always going to become, which is the whole promise of taking the job.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Sinks a freshly-inherited squad by roughly `points` of team rating.
+ *
+ * `points` comes from the difficulty tier, so the hole is deeper the harder the
+ * climb — and it is the same number the difficulty screens show, because both
+ * read it from the same table.
+ */
+export function applyBottomOfTheClass(
+  roster: PlayerData[], rng: Rng, points: number,
+): PlayerData[] {
+  if (points <= 0) return roster;
+  const ranked = [...roster].sort((a, b) => b.overall - a.overall);
+  const keys = Object.keys(ranked[0]?.attrs ?? {}) as (keyof PlayerData['attrs'])[];
+  ranked.forEach((p, i) => {
+    // Team ratings come off the best few at each position, so the starters carry
+    // the rating. The bench is cut harder: that is the depth gap, and it is felt
+    // in the fourth quarter rather than on the team card.
+    const depth = i < 8 ? 1 : i < 14 ? 1.3 : 1.6;
+    const cut = points * depth * rng.range(0.8, 1.2);
+    for (const k of keys) {
+      p.attrs[k] = Math.round(clamp(p.attrs[k] - cut, 20, 99));
+    }
+    // The ceiling is untouched, so the hole is a coaching problem and not a
+    // life sentence — but a sunk player must not read as already finished.
+    p.potential = Math.round(clamp(p.potential, p.overall, 99));
+    refreshOverall(p);
+    p.potential = Math.round(clamp(p.potential, p.overall, 99));
+  });
+  return sortDepthChart(roster);
+}
+
+/** How cold the room is at a programme that has not won in years. */
+export const BOTTOM_CHEMISTRY_HIT = 8;

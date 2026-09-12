@@ -61,6 +61,11 @@ export interface ChallengeModifiers {
   outgoingRisk: number;
 
   /* --- the squad ------------------------------------------------------- */
+  /**
+   * Rating points the programme you START the climb with sits below its class.
+   * The first job is the worst job in the district and has to feel like it.
+   */
+  startingHole: number;
   /** Multiplies player growth over an offseason. */
   development: number;
   /** Multiplies the chance a young player breaks out. */
@@ -112,6 +117,7 @@ const STANDARD_MODS: ChallengeModifiers = {
   pitchResistance: 0,
   portalRivals: 0,
   outgoingRisk: 1,
+  startingHole: 6,
   development: 1,
   breakouts: 1,
   jobQuality: 0,
@@ -156,6 +162,7 @@ export const TIERS: Record<ChallengeTier, TierInfo> = {
       pitchResistance: 6,
       portalRivals: 1,
       outgoingRisk: 1.2,
+      startingHole: 7,
       development: 0.92,
       breakouts: 0.85,
       jobQuality: -0.12,
@@ -188,6 +195,7 @@ export const TIERS: Record<ChallengeTier, TierInfo> = {
       pitchResistance: 9,
       portalRivals: 2,
       outgoingRisk: 1.32,
+      startingHole: 8,
       development: 0.88,
       breakouts: 0.77,
       jobQuality: -0.18,
@@ -220,6 +228,7 @@ export const TIERS: Record<ChallengeTier, TierInfo> = {
       pitchResistance: 13,
       portalRivals: 2,
       outgoingRisk: 1.45,
+      startingHole: 10,
       development: 0.84,
       breakouts: 0.7,
       jobQuality: -0.24,
@@ -252,6 +261,7 @@ export const TIERS: Record<ChallengeTier, TierInfo> = {
       pitchResistance: 20,
       portalRivals: 3,
       outgoingRisk: 1.7,
+      startingHole: 12,
       development: 0.76,
       breakouts: 0.55,
       jobQuality: -0.34,
@@ -381,6 +391,13 @@ export const MODIFIER_SPECS: ModifierSpec[] = [
     format: (v) => (v === 0 ? 'Standard' : `${Math.round(v * 100)}%`),
     delta: (a, b) => `${Math.round((b - a) * 100)}pts`,
     baseline: 'Standard range of jobs after a championship',
+  },
+  {
+    label: 'The squad you start with', group: 'Squad', field: 'startingHole',
+    higherIsHarder: true,
+    format: (v) => `${Math.round(v)} OVR below the class`,
+    delta: (a, b) => `${b > a ? '+' : ''}${Math.round(b - a)} OVR further behind`,
+    baseline: 'The worst squad in the district, by a clear margin',
   },
   {
     label: 'Broken programmes', group: 'The job market', field: 'situationSeverity',
