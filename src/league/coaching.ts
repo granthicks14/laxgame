@@ -144,6 +144,28 @@ export interface CoachEffects {
   retention: number;
   /** 0..1 — how appealing the programme is to a transfer. */
   appeal: number;
+
+  /* --- what the coach himself brings, on top of the staff he hired -------- */
+
+  /** Multiplier on winning loose balls. 1 is the untrained baseline. */
+  groundBalls: number;
+  /** Multiplier on clearing the ball out of the defensive end. */
+  clearing: number;
+  /** Multiplier on the faceoff share. */
+  faceoffs: number;
+  /** Multiplier on how often a shot becomes a goal. */
+  shotQuality: number;
+  /** Multiplier on the keeper's save rate. */
+  saveSupport: number;
+  /** Multiplier on how much a practice week moves an attribute. */
+  trainingGain: number;
+  /**
+   * How much a squad's DEPTH contributes. A programme that develops its bench
+   * loses less when the starters tire or a man goes down.
+   */
+  depth: number;
+  /** Extra performance in the fourth quarter and when trailing, 0..1. */
+  lateGame: number;
 }
 
 export function coachEffects(staff: CoachStaff): CoachEffects {
@@ -155,6 +177,17 @@ export function coachEffects(staff: CoachStaff): CoachEffects {
     breakoutRate: 1 + f(staff.development) * 1.3,
     staminaRate: 1 + f(staff.conditioning) * 0.5,
     athleticGrowth: f(staff.conditioning),
+    // The staff moves none of these on its own; they are the coach's own
+    // upgrades, folded in by `withPerks`. Neutral here so a Dynasty programme
+    // with no coach tree behaves exactly as it always has.
+    groundBalls: 1,
+    clearing: 1,
+    faceoffs: 1,
+    shotQuality: 1,
+    saveSupport: 1,
+    trainingGain: 1,
+    depth: 1,
+    lateGame: 0,
     chemistryGain: f(staff.culture) * 3.2,
     retention: f(staff.culture),
     appeal: f(staff.culture) * 0.7 + f(staff.development) * 0.3,
@@ -170,13 +203,23 @@ export function withPerks(fx: CoachEffects, perks: CoachPerks): CoachEffects {
   const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
   return {
     ...fx,
-    offenseIQ: clamp01(fx.offenseIQ + perks.gameday),
-    defenseIQ: clamp01(fx.defenseIQ + perks.gameday),
+    offenseIQ: clamp01(fx.offenseIQ + perks.gameday + perks.offenseIQ),
+    defenseIQ: clamp01(fx.defenseIQ + perks.gameday + perks.defenseIQ),
     developmentRate: fx.developmentRate * perks.development,
     breakoutRate: fx.breakoutRate * perks.breakouts,
+    staminaRate: fx.staminaRate * perks.stamina,
+    athleticGrowth: fx.athleticGrowth + perks.athletic,
     chemistryGain: fx.chemistryGain + perks.chemistry,
     retention: clamp01(fx.retention + perks.retention),
     appeal: clamp01(fx.appeal + perks.interestFloor / 60),
+    groundBalls: fx.groundBalls * perks.groundBalls,
+    clearing: fx.clearing * perks.clearing,
+    faceoffs: fx.faceoffs * perks.faceoffs,
+    shotQuality: fx.shotQuality * perks.shotQuality,
+    saveSupport: fx.saveSupport * perks.saveSupport,
+    trainingGain: fx.trainingGain * perks.trainingGain,
+    depth: fx.depth * perks.depth,
+    lateGame: clamp01(fx.lateGame + perks.lateGame),
   };
 }
 

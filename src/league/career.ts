@@ -908,9 +908,11 @@ export function trainPlayer(career: Career, playerId: string, attr: keyof Player
 export function rosterForMatch(career: Career): PlayerData[] {
   if (!career.focus) return career.roster;
   const keys = FOCUS_ATTRS[career.focus];
+  // A coach who has learned to run a practice gets more out of the same week.
+  const gain = Math.round(3 * perksOf(career).trainingGain);
   return career.roster.map((p) => {
     const attrs = { ...p.attrs };
-    for (const k of keys) attrs[k] = clamp(attrs[k] + 3, 1, 99);
+    for (const k of keys) attrs[k] = clamp(attrs[k] + gain, 1, 99);
     const copy: PlayerData = { ...p, attrs };
     refreshOverall(copy);
     return copy;

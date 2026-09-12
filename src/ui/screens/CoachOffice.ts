@@ -9,7 +9,7 @@ import {
   staffUpgradeCost, syncUserTeamRatings, userTeam,
 } from '../../league/career';
 import {
-  BRANCHES, BRANCH_ORDER, UPGRADES, coachTitle, identityOf, levelOf, lockReason, upgrade,
+  BRANCHES, BRANCH_ORDER, MAX_COACH_LEVEL, UPGRADES, coachTitle, identityOf, levelOf, lockReason, upgrade,
   upgradesIn, xpForNextLevel, type UpgradeBranch,
 } from '../../challenge/coach';
 import { isClimbMode } from '../../league/modes';
@@ -125,7 +125,7 @@ export class CoachOfficeScreen implements Screen {
         h('div', { class: 'display', style: 'font-size:20px', text: coachTitle(level) }),
         h('span', { class: 'pill pill--accent', text: `Level ${level}` })),
       bar,
-      h('div', { class: 'tiny', text: level >= 12 ? 'Nothing left to learn.' : `${Math.round(into)} / ${needed} experience to level ${level + 1}` }),
+      h('div', { class: 'tiny', text: level >= MAX_COACH_LEVEL ? 'Nothing left to learn.' : `${Math.round(into)} / ${needed} experience to level ${level + 1}` }),
       h('div', { class: 'row row--wrap', style: 'gap:6px;margin-top:4px' },
         h('span', { class: 'pill pill--green', text: `${profile.points} CP` }),
         h('span', { class: 'pill', text: `${profile.careerWins}-${profile.careerLosses} career` }),

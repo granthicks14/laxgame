@@ -17,7 +17,9 @@ import {
   standingsSorted, startChallenge, takeChallengeJob, userTeam, validateRecords, winPct,
 } from '../league/career';
 import { fixtureStory } from '../league/fixture';
-import { UPGRADES, levelOf } from '../challenge/coach';
+import {
+  BRANCH_ORDER, MAX_COACH_LEVEL, UPGRADES, coachPerks, levelOf,
+} from '../challenge/coach';
 import { STAGES, stageAt } from '../challenge/ladder';
 import { assignScout, board, hireScout, makeOffer } from '../scouting/recruiting';
 import { estimateOf, levelPar } from '../scouting/prospects';
@@ -399,6 +401,49 @@ for (run = 1; run <= RUNS; run++) {
   void perksOf(career);
   void userTeam(career);
 }
+}
+
+/* ----------------------------------------------- the tree is real, all of it */
+
+/**
+ * EVERY UPGRADE MUST DO SOMETHING.
+ *
+ * A tree this size is exactly where a label with nothing behind it hides: the
+ * blurb reads well, the button charges the points, and no system ever asks for
+ * the perk. Every upgrade is bought in isolation here and the resulting perks
+ * are compared against the untouched set — if nothing moved, it is decoration.
+ */
+{
+  const base = coachPerks(null);
+  const dead: string[] = [];
+  const unreachable: string[] = [];
+  for (const u of UPGRADES) {
+    const solo = coachPerks({
+      points: 0, xp: 0, owned: [u.key],
+      careerWins: 0, careerLosses: 0, championships: 0, seasons: 0, jobs: [],
+    });
+    const moved = (Object.keys(base) as (keyof typeof base)[])
+      .some((k) => solo[k] !== base[k]);
+    if (!moved) dead.push(u.key);
+    // And every prerequisite has to exist, or a branch is walled off forever.
+    for (const r of u.requires) {
+      if (!UPGRADES.some((x) => x.key === r)) unreachable.push(`${u.key} needs missing ${r}`);
+    }
+    if (u.level > MAX_COACH_LEVEL) unreachable.push(`${u.key} needs level ${u.level}`);
+  }
+  for (const k of dead) bug('coach', `upgrade "${k}" changes nothing`);
+  for (const k of unreachable) bug('coach', k);
+  // Keys must be unique: two upgrades sharing one would make the second
+  // unbuyable and silently free.
+  const seen = new Set<string>();
+  for (const u of UPGRADES) {
+    if (seen.has(u.key)) bug('coach', `duplicate upgrade key "${u.key}"`);
+    seen.add(u.key);
+  }
+  console.log(
+    `COACH TREE — ${UPGRADES.length} upgrades across ${BRANCH_ORDER.length} branches, `
+    + `${dead.length} dead, ${unreachable.length} unreachable\n`,
+  );
 }
 
 /* ---------------------------------------------------------------- report */

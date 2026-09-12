@@ -21,7 +21,7 @@ import { weatherFor } from '../render/weather';
 import { coachEffects, withPerks } from './coaching';
 import { coachPerks } from '../challenge/coach';
 import { tacticsFor } from './matchSetup';
-import { simulateMatch, type SimResult } from './simulate';
+import { simulateMatch, type SideCoaching, type SimResult } from './simulate';
 import { gameStory, type GameStory } from './gameStory';
 import type { Career, ScheduledGame } from './types';
 
@@ -69,6 +69,17 @@ export function simulateFixture(career: Career, g: ScheduledGame): SimResult {
   // The coach's office AND everything he has earned across his career.
   const fx = withPerks(coachEffects(career.staff), coachPerks(career.coach));
   const mine = fx.offenseIQ * 0.5 + fx.defenseIQ * 0.5;
+  // The upgrades he actually bought, in the units the model reads. Only HIS
+  // side gets them; every opponent plays with the neutral set.
+  const myStaff: SideCoaching = {
+    groundBalls: fx.groundBalls,
+    clearing: fx.clearing,
+    faceoffs: fx.faceoffs,
+    shotQuality: fx.shotQuality,
+    saveSupport: fx.saveSupport,
+    depth: fx.depth,
+    lateGame: fx.lateGame,
+  };
 
   return simulateMatch(home, away, `${career.seed}:${career.year}:${g.id}`, {
     level: career.level,
@@ -81,6 +92,8 @@ export function simulateFixture(career: Career, g: ScheduledGame): SimResult {
     awayTactics: g.awayId === career.teamId ? career.tactics : tacticsFor(away),
     homeCoaching: g.homeId === career.teamId ? mine : aiCoaching(g.homeId),
     awayCoaching: g.awayId === career.teamId ? mine : aiCoaching(g.awayId),
+    homeStaff: g.homeId === career.teamId ? myStaff : undefined,
+    awayStaff: g.awayId === career.teamId ? myStaff : undefined,
   });
 }
 

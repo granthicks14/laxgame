@@ -98,6 +98,9 @@ export interface SimOptions {
   playoff?: boolean;
   homeTactics?: Tactics;
   awayTactics?: Tactics;
+  /** What the coach's own upgrade tree is worth to each side. */
+  homeStaff?: SideCoaching;
+  awayStaff?: SideCoaching;
   /** 0..1 coaching quality, from the coach's office. */
   homeCoaching?: number;
   awayCoaching?: number;
@@ -192,10 +195,33 @@ function levelPar(level: Level): number {
 
 /* ------------------------------------------------------------- the model */
 
+/**
+ * What a COACH brings to a simulated game, over and above the squad.
+ *
+ * Everything here is 1 (or 0) for a side with no coach tree behind it, so a
+ * Dynasty programme and every AI opponent behave exactly as they always have.
+ * These are the upgrades a Challenge coach actually bought, which is what makes
+ * the office worth spending in rather than a menu of adjectives.
+ */
+export interface SideCoaching {
+  groundBalls: number;
+  clearing: number;
+  faceoffs: number;
+  shotQuality: number;
+  saveSupport: number;
+  depth: number;
+  lateGame: number;
+}
+
+export const NEUTRAL_COACHING: SideCoaching = {
+  groundBalls: 1, clearing: 1, faceoffs: 1, shotQuality: 1, saveSupport: 1, depth: 1, lateGame: 0,
+};
+
 interface SideInput {
   ratings: TeamRatings;
   tactics: Tactics;
   coaching: number;
+  staff: SideCoaching;
   home: boolean;
 }
 
@@ -216,7 +242,10 @@ function paceFactor(side: SideInput, opponent: SideInput, par: number): number {
   const style = 0.72 + off.transition * 0.16 + off.shotGreed * 0.12;
   const pressure = def.checkRate > 1.2 ? 1.05 : def.checkRate < 0.7 ? 0.94 : 1;
   const athletic = 1 + edge(side.ratings.speed, par) / 900;
-  return style * pressure * athletic;
+  // Ground balls and clears are possessions. A side that wins the floor and
+  // gets the ball out of its own end simply has the ball more often.
+  const possession = 1 + (side.staff.groundBalls - 1) * 0.5 + (side.staff.clearing - 1) * 0.35;
+  return style * pressure * athletic * possession;
 }
 
 /** Shots per possession: can this offence actually generate a look? */
@@ -242,7 +271,12 @@ function onGoalFactor(side: SideInput, opponent: SideInput, par: number, w: SimW
   // A greedy offence takes worse shots; a patient one takes better ones.
   const patience = 1.08 - off.shotGreed * 0.08;
   const weather = w ? 1 - w.rain * 0.06 - w.wind * 0.05 : 1;
-  return clamp(patience * weather * (1 + (shooting - contest) / 470), 0.72, 1.28);
+  // A shooting coach, better ball movement and better shot selection all land
+  // here: the same number of shots, more of them worth taking.
+  return clamp(
+    patience * weather * side.staff.shotQuality * (1 + (shooting - contest) / 470),
+    0.72, 1.4,
+  );
 }
 
 /**
@@ -254,14 +288,17 @@ function saveFactor(keeper: SideInput, par: number, profile: LevelProfile): numb
   const g = edge(keeper.ratings.goalie, par);
   // Roughly 0.9 percentage points of save percentage per rating point, which is
   // about what separates a great college keeper from an average one.
-  const pct = profile.savePct + g * 0.009 + keeper.coaching * 0.012;
-  return clamp(pct, 0.3, 0.72);
+  const pct = (profile.savePct + g * 0.009 + keeper.coaching * 0.012) * keeper.staff.saveSupport;
+  return clamp(pct, 0.3, 0.78);
 }
 
 /** Faceoffs decide who gets the extra possessions, and they compound. */
 function faceoffShare(a: SideInput, b: SideInput): number {
   const diff = a.ratings.faceoff - b.ratings.faceoff;
-  return clamp(0.5 + diff / 240, 0.22, 0.78);
+  // A faceoff coach moves the share, not the rating: the same man wins a few
+  // more clamps because he has been taught how.
+  const coached = (a.staff.faceoffs - b.staff.faceoffs) * 0.22;
+  return clamp(0.5 + diff / 240 + coached, 0.2, 0.8);
 }
 
 /**
@@ -269,9 +306,12 @@ function faceoffShare(a: SideInput, b: SideInput): number {
  * Poisson. This is what produces the occasional blowout and the occasional
  * 8-7 between two teams who normally trade fifteen.
  */
-function formSwing(rng: Rng, spread: number, chemistry: number): number {
+function formSwing(rng: Rng, spread: number, chemistry: number, depth = 1): number {
   // A settled team is more consistent week to week. That is what chemistry is.
-  const steadiness = clamp(1.25 - (chemistry - 45) / 90, 0.6, 1.3);
+  // DEPTH is the other half of it: a programme whose bench can play does not
+  // have bad days for the same reasons, because a tired starter is replaced
+  // rather than endured.
+  const steadiness = clamp(1.25 - (chemistry - 45) / 90, 0.6, 1.3) / depth;
   const raw = rng.gauss(1, 0.13 * spread * steadiness);
   return clamp(raw, 0.45, 1.75);
 }
@@ -322,12 +362,14 @@ export function simulateMatch(
     ratings: homeRatings,
     tactics: opts.homeTactics ?? DEFAULT_TACTICS,
     coaching: clamp(opts.homeCoaching ?? 0, 0, 1),
+    staff: opts.homeStaff ?? NEUTRAL_COACHING,
     home: true,
   };
   const away: SideInput = {
     ratings: awayRatings,
     tactics: opts.awayTactics ?? DEFAULT_TACTICS,
     coaching: clamp(opts.awayCoaching ?? 0, 0, 1),
+    staff: opts.awayStaff ?? NEUTRAL_COACHING,
     home: false,
   };
   const weather = opts.weather ?? null;
@@ -380,7 +422,7 @@ export function simulateMatch(
   // never disagree.
   const scores: number[] = [];
   sides.forEach(([side, , , mine], i) => {
-    const swing = formSwing(rng, profile.spread, side.ratings.chemistry);
+    const swing = formSwing(rng, profile.spread, side.ratings.chemistry, side.staff.depth);
     const mean = expected[i] * swing;
     // A side having a good day shoots more as well as finishing more, so the
     // shooting percentage on the box score stays believable instead of a team
@@ -416,7 +458,9 @@ export function simulateMatch(
   // needed overtime at all.
   const homeReg = overtime && homeGoals > awayGoals ? homeGoals - 1 : homeGoals;
   const awayReg = overtime && awayGoals > homeGoals ? awayGoals - 1 : awayGoals;
-  const [homeByQuarter, awayByQuarter] = splitGame(rng, homeReg, awayReg);
+  const [homeByQuarter, awayByQuarter] = splitGame(
+    rng, homeReg, awayReg, home.staff.lateGame - away.staff.lateGame,
+  );
   if (overtime) {
     homeByQuarter.push(homeGoals - homeReg);
     awayByQuarter.push(awayGoals - awayReg);
@@ -470,7 +514,9 @@ export function simulateMatch(
  * momentum swing gives every game one, and because it only moves goals BETWEEN
  * quarters it can never change the final score.
  */
-function splitGame(rng: Rng, homeGoals: number, awayGoals: number): [number[], number[]] {
+function splitGame(
+  rng: Rng, homeGoals: number, awayGoals: number, lateBias = 0,
+): [number[], number[]] {
   // Where the game turned, and how hard. Most games swing a little; some are
   // two different games either side of half time.
   const turn = 1 + Math.floor(rng.next() * 3);   // quarter the run breaks on
@@ -479,7 +525,11 @@ function splitGame(rng: Rng, homeGoals: number, awayGoals: number): [number[], n
 
   const tilt = (q: number, side: 1 | -1): number => {
     const early = q < turn ? 1 : -1;
-    return 1 + strength * 0.85 * early * toward * side;
+    // A side coached to finish games scores more of its goals in the second
+    // half. It does not change the final score — only when it arrived — which
+    // is what makes a late-game coach show up in comebacks and in holding on.
+    const late = q >= 2 ? 1 + lateBias * side * 0.6 : 1 - lateBias * side * 0.35;
+    return Math.max(0.15, (1 + strength * 0.85 * early * toward * side) * late);
   };
   const weightsFor = (side: 1 | -1): number[] => [0, 1, 2, 3]
     .map((q) => Math.max(0.08, rng.range(0.55, 1.5) * tilt(q, side)));
