@@ -25,7 +25,7 @@ import { PITCH_ORDER, suggestedAngle } from '../league/transfers';
 import { programSnapshot } from '../league/career';
 import { upgradeCost, TRACK_ORDER } from '../league/coaching';
 import type { Career } from '../league/types';
-import { TIERS, type ChallengeTier } from '../challenge/difficulty';
+import { TIERS, TIER_ORDER, type ChallengeTier } from '../challenge/difficulty';
 
 const env = (globalThis as { process?: { env?: Record<string, string | undefined>; argv?: string[]; exit(n: number): void } }).process;
 const RUNS = Number(env?.env?.RUNS ?? 8);
@@ -292,7 +292,7 @@ const runs: RunResult[] = [];
 // the table below is the difficulty and nothing else.
 const TIERS_TESTED: ChallengeTier[] = TIER
   ? [TIER as ChallengeTier]
-  : ['standard', 'elite', 'impossible', 'final'];
+  : [...TIER_ORDER];
 
 for (const tier of TIERS_TESTED) {
 for (run = 1; run <= RUNS; run++) {

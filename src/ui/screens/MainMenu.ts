@@ -5,6 +5,7 @@ import { QuickSetupScreen } from './QuickSetup';
 import { TeamSelectScreen } from './TeamSelect';
 import { CareerEntryScreen } from './CareerEntry';
 import { ChallengeEntryScreen } from './Challenge';
+import { dominance } from '../../challenge/dominance';
 import { PracticeScreen } from './Practice';
 import { SettingsScreen } from './Settings';
 import { StatsScreen } from './Stats';
@@ -30,6 +31,9 @@ export class MainMenuScreen implements Screen {
     const dynasty = loadCareer('dynasty');
     const challenge = loadCareer('challenge');
     const climb = challenge?.challenge ?? null;
+    const superSave = loadCareer('superchallenge');
+    const superClimb = superSave?.challenge ?? null;
+    const superDom = superClimb ? dominance(superClimb) : null;
 
     const firstTime = !app.settings.seenTutorial;
 
@@ -68,6 +72,15 @@ export class MainMenuScreen implements Screen {
           : 'One coaching career, from the bottom of Class D to the professional game. Climb by winning.',
         note: climb ? 'CONTINUE' : 'NEW',
         go: (a) => a.push((b) => new ChallengeEntryScreen(b)),
+      },
+      {
+        label: 'Super Challenge',
+        desc: superClimb && superSave
+          ? `${userTeam(superSave).short} · ${superDom!.current.titles}/${superDom!.need} in seasons `
+            + `${superDom!.current.from}-${superDom!.current.to} · season ${superClimb.totalYears + 1}`
+          : 'The same climb, one thing to prove: three championships inside any ten seasons.',
+        note: superClimb ? 'CONTINUE' : 'NEW',
+        go: (a) => a.push((b) => new ChallengeEntryScreen(b, 'superchallenge')),
       },
       {
         label: 'Practice',

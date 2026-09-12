@@ -21,6 +21,8 @@
   --green: #3fbd77;
   --blue: #4a9be8;
   --field: #2f7d42;
+  /* The difficulty ladder needs five distinct marks, warm to cold. */
+  --orange: #f08a3c;
 
   --display: 'Arial Narrow', 'Helvetica Neue', 'Roboto Condensed', system-ui, sans-serif;
   --body: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -1191,3 +1193,31 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
   flex: 0 0 auto; width: 24px; height: 24px; display: grid; place-items: center;
   border: 2px solid var(--accent); color: var(--accent); font-size: 13px;
 }
+
+/* --- the dominance tracker ------------------------------------------------ */
+.dom { border-color: var(--accent); }
+.dom--done { border-color: var(--green); }
+.dom-pip {
+  width: 30px; height: 30px; flex: 0 0 auto;
+  border: 2px solid var(--line); background: var(--panel-2);
+  display: grid; place-items: center; color: var(--accent-ink);
+}
+.dom-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (min-width: 480px) { .dom-stats { grid-template-columns: repeat(4, 1fr); } }
+.dom-stat {
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  padding: 8px 10px; display: flex; flex-direction: column; gap: 2px;
+}
+.dom-stat__value { font-size: 22px; line-height: 1; }
+.dom-stat__label {
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+}
+.dom-timeline { display: flex; flex-wrap: wrap; gap: 3px; }
+.dom-year {
+  min-width: 24px; height: 24px; padding: 0 4px;
+  display: grid; place-items: center;
+  font: 600 11px/1 var(--mono);
+  background: var(--panel-2); border: 1px solid var(--line-soft); color: var(--muted);
+}
+.dom-year.is-window { border-color: var(--accent); color: var(--text-2); }
+.dom-year.is-title { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }

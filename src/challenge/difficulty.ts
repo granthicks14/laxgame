@@ -24,9 +24,11 @@
  * copy of these numbers to drift out of date.
  * ------------------------------------------------------------------------- */
 
-export type ChallengeTier = 'standard' | 'elite' | 'impossible' | 'final';
+export type ChallengeTier = 'standard' | 'hard' | 'veryhard' | 'impossible' | 'final';
 
-export const TIER_ORDER: ChallengeTier[] = ['standard', 'elite', 'impossible', 'final'];
+export const TIER_ORDER: ChallengeTier[] = [
+  'standard', 'hard', 'veryhard', 'impossible', 'final',
+];
 
 export interface ChallengeModifiers {
   /* --- what the coach earns ------------------------------------------- */
@@ -121,7 +123,7 @@ const STANDARD_MODS: ChallengeModifiers = {
 export const TIERS: Record<ChallengeTier, TierInfo> = {
   standard: {
     key: 'standard',
-    name: 'Standard Challenge',
+    name: 'Standard',
     mark: 'STANDARD',
     colour: 'var(--green)',
     tagline: 'The baseline. Difficult and fair.',
@@ -131,10 +133,10 @@ export const TIERS: Record<ChallengeTier, TierInfo> = {
       + 'takes is up to how quickly he wins titles — no two careers run the same length.',
     mods: STANDARD_MODS,
   },
-  elite: {
-    key: 'elite',
-    name: 'Elite Challenge',
-    mark: 'ELITE',
+  hard: {
+    key: 'hard',
+    name: 'Hard',
+    mark: 'HARD',
     colour: 'var(--accent)',
     tagline: 'For coaches who have already finished Standard.',
     blurb: 'Rival programmes recruit and scout properly, the portal is contested, and Coach '
@@ -162,15 +164,47 @@ export const TIERS: Record<ChallengeTier, TierInfo> = {
       legacy: 1.35,
     },
   },
+  veryhard: {
+    key: 'veryhard',
+    name: 'Very Hard',
+    mark: 'VERY HARD',
+    colour: 'var(--orange)',
+    tagline: 'Every system has to be working for you at once.',
+    blurb: 'Rivals evaluate talent nearly as well as a staffed scouting department, good '
+      + 'transfers are fought over, and the coach tree grows out of reach faster than you '
+      + 'can fund it. One bad class is felt for years.',
+    expectation: 'You cannot carry a weakness here. A programme with no faceoff man, or no '
+      + 'keeper, does not quietly get away with it.',
+    mods: {
+      ...STANDARD_MODS,
+      coachPoints: 0.73,
+      coachXp: 0.82,
+      upgradeCost: 1.5,
+      staffCost: 1.32,
+      rivalPush: 1.4,
+      rivalScouting: 0.65,
+      interestGain: 0.85,
+      offers: -1,
+      pitchResistance: 9,
+      portalRivals: 2,
+      outgoingRisk: 1.32,
+      development: 0.88,
+      breakouts: 0.77,
+      jobQuality: -0.18,
+      situationSeverity: 0.47,
+      expectation: 0.03,
+      legacy: 1.55,
+    },
+  },
   impossible: {
     key: 'impossible',
-    name: 'Impossible Challenge',
+    name: 'Impossible',
     mark: 'IMPOSSIBLE',
     colour: 'var(--red)',
     tagline: 'A brutal coaching career for players who know the game.',
-    blurb: 'Rivals evaluate talent nearly as well as a full scouting department, elite '
-      + 'transfers are fought over, and every Coach Point has to be argued for. You will '
-      + 'inherit programmes in genuine trouble and be expected to fix them.',
+    blurb: 'Elite transfers are fought over by programmes that want them as much as you do, '
+      + 'and every Coach Point has to be argued for. You will inherit programmes in genuine '
+      + 'trouble and be expected to fix them.',
     expectation: 'You cannot buy your way out of a bad squad. Finding players before anybody '
       + 'else does, and developing the ones you have, is the whole job.',
     mods: {
@@ -182,7 +216,7 @@ export const TIERS: Record<ChallengeTier, TierInfo> = {
       rivalPush: 1.55,
       rivalScouting: 0.75,
       interestGain: 0.8,
-      offers: -1,
+      offers: -2,
       pitchResistance: 13,
       portalRivals: 2,
       outgoingRisk: 1.45,
@@ -191,7 +225,7 @@ export const TIERS: Record<ChallengeTier, TierInfo> = {
       jobQuality: -0.24,
       situationSeverity: 0.65,
       expectation: 0.04,
-      legacy: 1.8,
+      legacy: 1.9,
     },
   },
   final: {
@@ -214,7 +248,7 @@ export const TIERS: Record<ChallengeTier, TierInfo> = {
       rivalPush: 1.9,
       rivalScouting: 0.92,
       interestGain: 0.72,
-      offers: -2,
+      offers: -3,
       pitchResistance: 20,
       portalRivals: 3,
       outgoingRisk: 1.7,
@@ -223,7 +257,7 @@ export const TIERS: Record<ChallengeTier, TierInfo> = {
       jobQuality: -0.34,
       situationSeverity: 1,
       expectation: 0.06,
-      legacy: 2.4,
+      legacy: 2.6,
     },
   },
 };

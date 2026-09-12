@@ -10,7 +10,8 @@ import {
 import { DEFAULT_TACTICS } from '../data/tactics';
 import { EMPTY_STAFF, coachEffects, withPerks } from './coaching';
 import type { CoachEffects } from './coaching';
-import { isCareerMode } from './modes';
+import { isCareerMode, isSuperChallenge } from './modes';
+import { dominance, dominanceLine } from '../challenge/dominance';
 import { DEV_LABEL, developPlayer } from './development';
 import { planMovement, type DivisionResult, type MovementReport } from './promotion';
 import {
@@ -1435,6 +1436,13 @@ function openJob(career: Career, stageKey: string): void {
 export function startChallenge(opts: {
   difficulty: DifficultyKey; gameLength: GameLengthKey; teamId?: string; seed?: number;
   tier?: ChallengeTier;
+  /**
+   * Which climb this is. Super Challenge runs the identical career engine —
+   * same ladder, same difficulty table, same coach, same everything — and
+   * differs only in what it asks the coach to prove, so it starts here rather
+   * than in a parallel function that would drift out of step.
+   */
+  mode?: 'challenge' | 'superchallenge';
 }): Career {
   const tier = opts.tier ?? DEFAULT_TIER;
   const seed = opts.seed ?? (Date.now() ^ Math.floor(Math.random() * 0xffffff));
@@ -1448,7 +1456,7 @@ export function startChallenge(opts: {
   const situation = situationFor(prestige, rng, modsFor(tier).situationSeverity);
 
   const career = createCareer({
-    mode: 'challenge',
+    mode: opts.mode ?? 'challenge',
     teamId,
     difficulty: difficultyFor(stage.level, opts.difficulty),
     gameLength: opts.gameLength,
@@ -1526,6 +1534,28 @@ export function resolveChallengeSeason(career: Career): SeasonVerdict | null {
     if (won) job.titles++;
   }
   awardCoachPoints(career, 0, seasonXp(wins, losses, won, state.stageIndex));
+
+  // SUPER CHALLENGE. The dominance requirement is checked HERE, after the
+  // season has been graded, and nowhere near `evaluateSeason` — that function
+  // carries the invariant that a Challenge career may only ever end at the PLL,
+  // it is asserted exhaustively by `npm run stages`, and it must stay true.
+  //
+  // Nothing in this block can END a career unhappily. A window that closes
+  // short is not a loss; it simply rolls forward, which is the whole design.
+  if (isSuperChallenge(career.mode)) {
+    const d = dominance(state);
+    if (d.achieved && !state.complete) {
+      state.complete = true;
+      state.endedReason = `Three championships in seasons ${d.achievedIn!.from}-${d.achievedIn!.to}. `
+        + 'Dominance proved.';
+      verdict.messages.push('SUPER CHALLENGE COMPLETE.');
+      verdict.messages.push(dominanceLine(d));
+    } else if (!d.achieved && d.seasons >= d.span && d.current.to % d.span === 0) {
+      // A ten-season mark passing without the requirement met. Said once, in
+      // the words the design asks for, and then the career carries on.
+      verdict.messages.push('Dominance not yet proven. The window rolls forward.');
+    }
+  }
 
   const rng = new Rng(`${career.seed}:offers:${state.totalYears}`);
   if (verdict.outcome === 'promoted') {

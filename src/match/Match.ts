@@ -435,11 +435,16 @@ export class Match {
 
   private completeRestart(): void {
     const side = this.restartSide;
-    // Give it to the nearest eligible field player (never the goalie unless he is closest).
+    // The nearest man, and the goalie counts when the restart is in his own
+    // end. The comment here used to say exactly that while the code skipped him
+    // unconditionally — a restart on the goal line handed the ball to a
+    // defender running in from the wing.
+    const own = defendingGoal(side);
     let best: MatchPlayer | null = null;
     let bestD = Infinity;
     for (const p of this.teams[side]) {
-      if (p.slot === 'G') continue;
+      if (p.slot === 'G'
+        && dist(this.restartAt.x, this.restartAt.y, own.x, own.y) > Match.GOALIE_RANGE) continue;
       const d = dist2(p.x, p.y, this.restartAt.x, this.restartAt.y);
       if (d < bestD) { bestD = d; best = p; }
     }
@@ -739,7 +744,11 @@ export class Match {
     for (const p of this.players) {
       this.tickTimers(p, dt);
       if (p.slot === 'G') {
-        updateGoalie(this, p, dt);
+        // The keeper's AI runs unless the human is steering him. It used to run
+        // unconditionally, which was harmless only because he could never be
+        // controlled; now that he can be, the AI would fight the stick and drag
+        // him back to his arc while you were trying to pick the ball up.
+        if (this.aiControls(p)) updateGoalie(this, p, dt);
       } else if (this.updateScreener(p, dt)) {
         continue;
       } else if (this.aiControls(p)) {
@@ -1923,8 +1932,41 @@ export class Match {
   }
 
   /** Everyone eligible to be handed control: field players who are on their feet. */
+  /**
+   * Who may be given control.
+   *
+   * THE GOALIE IS IN THIS LIST. He used to be filtered out unconditionally,
+   * which is wrong and is very visible in play: a shot backs off the pipe, the
+   * keeper is standing over the ball, and Switch hands you a defender twelve
+   * yards away who loses the race. In lacrosse the goalie plays those balls.
+   *
+   * He gets no priority for it — `rankForControl` scores him on the same real
+   * distance as everybody else, and he wins only when he genuinely wins. What
+   * he does get is a LEASH: he is a candidate for a ball near his own end, not
+   * for one at the far end of the field, because a keeper who sprints to the
+   * other restraining line has abandoned the only thing he is there to do.
+   */
   private controlCandidates(side: Side): MatchPlayer[] {
-    return this.teams[side].filter((p) => p.slot !== 'G' && p.stun <= 0);
+    return this.teams[side].filter((p) => {
+      if (p.stun > 0) return false;
+      if (p.slot !== 'G') return true;
+      return this.goalieMayChase(p);
+    });
+  }
+
+  /** How far from his own goal a keeper will go after a ball, in yards. */
+  private static readonly GOALIE_RANGE = 26;
+
+  /**
+   * A keeper chases a ball that is his to chase: loose, in his own end, and
+   * inside a sane distance of his cage. He never leaves it to chase a carried
+   * ball — that is a slide, not a keeper's job.
+   */
+  private goalieMayChase(g: MatchPlayer): boolean {
+    const b = this.ball;
+    if (b.state === 'carried') return b.carrier === g;
+    const own = defendingGoal(g.side);
+    return dist(b.x, b.y, own.x, own.y) <= Match.GOALIE_RANGE;
   }
 
   /** Ranks the squad for control, best first, with each man's score in seconds. */

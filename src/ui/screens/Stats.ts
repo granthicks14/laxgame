@@ -42,7 +42,7 @@ export class StatsScreen implements Screen {
     };
 
     const LABEL: Record<CareerMode, string> = {
-      dynasty: 'Dynasty', season: 'Season', challenge: 'Challenge',
+      dynasty: 'Dynasty', season: 'Season', challenge: 'Challenge', superchallenge: 'Super',
     };
     const tabs = available.length > 1
       ? segmented(

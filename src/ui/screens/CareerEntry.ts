@@ -26,6 +26,11 @@ const MODE_COPY: Record<CareerMode, { title: string; blurb: string }> = {
     blurb: 'A coaching career that starts at the bottom of high school lacrosse and only '
       + 'moves up when you win a championship.',
   },
+  superchallenge: {
+    title: 'Super Challenge',
+    blurb: 'The same climb, the same ladder and the same coach — but one thing to prove: '
+      + 'three championships inside any ten seasons.',
+  },
 };
 
 export class CareerEntryScreen implements Screen {

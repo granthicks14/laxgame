@@ -9,7 +9,7 @@ import { DEFAULT_TIER } from '../challenge/difficulty';
 const RETIRED_KEY = 'lsl.retiredSave';
 
 /** Versions this build can read and upgrade in place. */
-const MIGRATABLE = [4, 5, 6, 7];
+const MIGRATABLE = [4, 5, 6, 7, 8];
 
 const key = (mode: CareerMode): string => `lsl.career.${mode}.v${CAREER_VERSION}`;
 
@@ -84,6 +84,11 @@ export function migrateCareer(raw: unknown): unknown {
   if (challenge && typeof challenge === 'object' && !challenge.tier) {
     challenge.tier = DEFAULT_TIER;
   }
+  // v8 -> v9: the ladder went from four tiers to five and "Elite" was renamed.
+  // A career played on Elite was played on what is now Hard — same modifiers,
+  // same difficulty, different word — so it keeps its place rather than being
+  // quietly promoted or demoted.
+  if (challenge && challenge.tier === 'elite') challenge.tier = 'hard';
 
   c.version = CAREER_VERSION;
   return c;

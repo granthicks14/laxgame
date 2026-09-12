@@ -19,6 +19,8 @@ import { staffSummary } from '../../league/coaching';
 import { movementOutlook } from '../../league/promotion';
 import { RecruitingScreen } from './Recruiting';
 import { ChallengeTrackerScreen, openJobSearch } from './Challenge';
+import { DominanceScreen, dominancePanel } from './Dominance';
+import { dominance } from '../../challenge/dominance';
 import { LEVELS } from '../../data/levels';
 import { divisionName } from './divisionName';
 import { stageAt } from '../../challenge/ladder';
@@ -27,7 +29,7 @@ import { classGrade } from '../../scouting/recruiting';
 import { newsFeed } from '../../league/news';
 import { bracketRounds, postseasonStatus, validateRecords, type PostseasonStatus } from '../../league/career';
 import { BracketScreen, ClinchedScreen } from './Playoffs';
-import { MODE_LABEL, isCareerMode } from '../../league/modes';
+import { MODE_LABEL, isCareerMode, isSuperChallenge } from '../../league/modes';
 import { marketFor } from '../../league/transfers';
 import type { GameStory } from '../../league/gameStory';
 
@@ -94,13 +96,21 @@ export class SeasonHubScreen implements Screen {
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
           this.header(career, rank, standings.length),
+          // The dominance tracker is the FIRST thing on the hub in Super
+          // Challenge. It is the objective of the mode; burying it under the
+          // recruiting panel would make the one rule that matters the hardest
+          // thing on the screen to find.
+          career.challenge && isSuperChallenge(mode)
+            ? dominancePanel(app, dominance(career.challenge),
+              () => app.push((a) => new DominanceScreen(a)))
+            : null,
           story ? this.storyPanel(story) : null,
           post ? this.postseasonPanel(app, career, mode, post) : null,
           game ? this.nextGame(app, career, game) : this.playoffWait(app, career, mode),
           this.focusPanel(app, career),
           this.officePanel(app, career, mode),
           isCareerMode(mode) ? this.recruitingPanel(app, career, mode) : null,
-          career.challenge ? this.challengePanel(app, career) : null,
+          career.challenge ? this.challengePanel(app, career, mode) : null,
           this.newsPanel(career),
           h('div', { class: 'row row--wrap' },
             h('button', {
@@ -195,7 +205,7 @@ export class SeasonHubScreen implements Screen {
   }
 
   /** Where the coach stands in his career, and the way out of a dead end. */
-  private challengePanel(app: App, career: Career): HTMLElement {
+  private challengePanel(app: App, career: Career, mode: CareerMode): HTMLElement {
     const state = career.challenge!;
     const stage = stageAt(state.stageIndex);
     return panel('Your career',
@@ -213,7 +223,11 @@ export class SeasonHubScreen implements Screen {
         h('button', {
           class: 'btn',
           text: 'Career tracker',
-          on: { click: () => app.push((a) => new ChallengeTrackerScreen(a)) },
+          on: {
+            click: () => app.push((a) => new ChallengeTrackerScreen(
+              a, mode === 'superchallenge' ? 'superchallenge' : 'challenge',
+            )),
+          },
         }),
         career.seasonComplete
           ? h('button', {

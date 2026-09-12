@@ -5,6 +5,7 @@
  *   npm run checklist
  */
 import { isCareerMode, isClimbMode, ALL_MODES, MODE_LABEL } from '../league/modes';
+import type { CareerMode } from '../league/types';
 import { marketFor } from '../league/transfers';
 import { LEVEL_ORDER, LEVELS } from '../data/levels';
 import { classSize, maxScouts, offerBudget } from '../scouting/recruiting';
@@ -13,12 +14,14 @@ interface Feature {
   group: string;
   name: string;
   /** Which modes it is meant to work in. */
-  modes: ('season' | 'dynasty' | 'challenge')[];
+  modes: CareerMode[];
   note?: string;
 }
 
-const CAREER = ['dynasty', 'challenge'] as const;
-const ALL = ['season', 'dynasty', 'challenge'] as const;
+const CAREER = ['dynasty', 'challenge', 'superchallenge'] as const;
+const ALL = ['season', 'dynasty', 'challenge', 'superchallenge'] as const;
+/** Everything the ladder adds, which Super Challenge shares in full. */
+const CLIMB = ['challenge', 'superchallenge'] as const;
 
 const FEATURES: Feature[] = [
   { group: 'In season', name: 'Schedule', modes: [...ALL] },
@@ -52,12 +55,12 @@ const FEATURES: Feature[] = [
   { group: 'Career', name: 'Records screen', modes: [...ALL] },
   { group: 'Career', name: 'Prestige', modes: [...ALL] },
 
-  { group: 'Challenge only', name: 'The ladder and career climbing', modes: ['challenge'] },
-  { group: 'Challenge only', name: 'Championship requirements', modes: ['challenge'] },
-  { group: 'Challenge only', name: 'Job offers and changing programme', modes: ['challenge'] },
-  { group: 'Challenge only', name: 'Coach reputation and the hot seat', modes: ['challenge'] },
-  { group: 'Challenge only', name: 'Multiple levels of lacrosse', modes: ['challenge'] },
-  { group: 'Challenge only', name: 'Career tracker and legacy score', modes: ['challenge'] },
+  { group: 'Challenge only', name: 'The ladder and career climbing', modes: [...CLIMB] },
+  { group: 'Challenge only', name: 'Championship requirements', modes: [...CLIMB] },
+  { group: 'Challenge only', name: 'Job offers and changing programme', modes: [...CLIMB] },
+  { group: 'Challenge only', name: 'Coach reputation and the hot seat', modes: [...CLIMB] },
+  { group: 'Challenge only', name: 'Multiple levels of lacrosse', modes: [...CLIMB] },
+  { group: 'Challenge only', name: 'Career tracker and legacy score', modes: [...CLIMB] },
 ];
 
 console.log('MODE FEATURE CHECKLIST\n');

@@ -258,6 +258,15 @@ function playGames(career: Career, n: number): number {
   check('the squad keeps its shape', out.every((p, i) => (
     i === 0 || (out[i - 1].overall as number) <= (p.overall as number)
   )), 'relative strength preserved');
+  // The Elite -> Hard rename must carry a career across, not reset it.
+  const v8 = JSON.parse(JSON.stringify(career)) as Record<string, unknown>;
+  v8.version = 8;
+  (v8.challenge as Record<string, unknown>).tier = 'elite';
+  const renamed = migrateCareer(v8) as Record<string, unknown>;
+  check('an Elite career becomes a Hard career, not a Standard one',
+    (renamed.challenge as Record<string, unknown>)?.tier === 'hard',
+    String((renamed.challenge as Record<string, unknown>)?.tier));
+
   check('a current save passes through untouched',
     (migrateCareer(JSON.parse(JSON.stringify(career))) as Record<string, unknown>).version
       === CAREER_VERSION);
