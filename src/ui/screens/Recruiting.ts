@@ -15,6 +15,7 @@ import type { App, Screen } from '../App';
 import { screenEl, topbar, panel, panelFlush, emptyPanel, segmented } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
 import { recruitContext, spendCoachPoints, userTeam } from '../../league/career';
+import { playerPortrait } from '../portrait';
 import type { Career, CareerMode } from '../../league/types';
 
 const userTeamShort = (career: Career): string => userTeam(career).short;
@@ -353,6 +354,7 @@ export class RecruitingScreen implements Screen {
       on: { click: () => app.push((a) => new ProspectScreen(a, career, p.id)) },
     },
       h('div', { class: 'list__rank num', text: `#${p.nationalRank}` }),
+      playerPortrait(p.player, userTeam(career), 30, false),
       h('div', { class: 'stack', style: 'gap:2px;flex:1 1 auto;min-width:0' },
         h('div', { class: 'row', style: 'gap:6px;align-items:baseline' },
           h('div', { class: 'list__name', text: `${p.player.first} ${p.player.last}` }),
@@ -407,6 +409,11 @@ export class ProspectScreen implements Screen {
       clear(body);
       const est = estimateOf(p, par);
       body.appendChild(panel(`${p.player.first} ${p.player.last}`,
+        h('div', { class: 'row', style: 'gap:12px;align-items:center;margin-bottom:2px' },
+          playerPortrait(p.player, userTeam(career), 64, false),
+          h('div', { class: 'stack', style: 'gap:2px;min-width:0' },
+            h('div', { class: 'display', style: 'font-size:18px', text: `${p.player.first} ${p.player.last}` }),
+            h('div', { class: 'tiny', text: `${p.hometown} · ${ORIGIN_LABEL[p.origin]}` }))),
         h('div', { class: 'row row--wrap', style: 'gap:6px' },
           h('span', { class: 'pill pill--accent', text: POSITION_LABEL[p.player.pos] }),
           h('span', { class: 'pill', text: `Ranked #${p.nationalRank}` }),

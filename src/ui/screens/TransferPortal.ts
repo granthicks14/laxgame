@@ -4,6 +4,7 @@ import type { CareerMode } from '../../league/types';
 import { screenEl, topbar, panel, emptyPanel, teamBadge } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
 import { pitchTo, programSnapshot } from '../../league/career';
+import { playerPortrait } from '../portrait';
 import {
   PITCH_ANGLES, PITCH_ORDER, REASON_TEXT, angleFit, interestIn, marketFor,
   suggestedAngle, transferEstimate, type TransferCandidate,
@@ -130,7 +131,11 @@ export class TransferPortalScreen implements Screen {
     const est = transferEstimate(c);
     return panel(null,
       h('div', { class: 'row', style: 'gap:10px;align-items:flex-start' },
-        teamBadge(from, 'md'),
+        // His face and the badge of the programme he is leaving, which is the
+        // whole story of a transfer in two marks.
+        h('div', { class: 'stack', style: 'gap:4px;align-items:center;flex:0 0 auto' },
+          playerPortrait(c.player, from, 44, false),
+          teamBadge(from, 'sm')),
         h('div', { class: 'stack', style: 'gap:4px;flex:1 1 auto;min-width:0' },
           h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' },
             h('div', { class: 'display', style: 'font-size:17px', text: `${c.player.first} ${c.player.last}` }),

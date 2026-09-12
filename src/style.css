@@ -1221,3 +1221,20 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
 }
 .dom-year.is-window { border-color: var(--accent); color: var(--text-2); }
 .dom-year.is-title { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+/* --- player portraits ----------------------------------------------------- */
+.portrait {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.portrait--lg { border-width: 2px; }
+
+/* --- the player card ------------------------------------------------------ */
+.card { border-color: var(--line); }
+.card__num {
+  font-size: 15px; color: var(--muted); letter-spacing: .06em;
+}

@@ -13,6 +13,7 @@ import { OFFENSE_STYLES, DEFENSE_STYLES, type DefenseStyle, type OffenseStyle } 
 import { POSITION_LABEL } from '../../data/constants';
 import type { TeamData } from '../../data/teams';
 import { rosterSourceFor } from '../../data/rosters';
+import { playerPortrait } from '../portrait';
 import { PROJECTS, committedCost, project, projectCost, projectsFor } from '../../league/projects';
 import { CURVES, TIERS, archetype, tierFor } from '../../data/archetypes';
 import { levelPar } from '../../scouting/prospects';
@@ -123,6 +124,23 @@ function profile(team: TeamData): HTMLElement[] {
   return out;
 }
 
+/**
+ * His ROLE, taken from the depth chart rather than invented: where he sits
+ * among the players who play his position. "Starter" has to mean he starts.
+ */
+export function roleOf(career: Career, p: PlayerData): string {
+  const samePos = sortDepthChart(career.roster).filter((x) => x.pos === p.pos);
+  const idx = samePos.findIndex((x) => x.id === p.id);
+  const starters = STARTERS[p.pos] ?? 1;
+  if (idx < 0) return 'Squad';
+  if (idx < starters) return starters === 1 ? 'Starter' : `Starter ${idx + 1}`;
+  if (idx < starters * 2) return 'Rotation';
+  return 'Reserve';
+}
+
+/** How many of each position are on the field at once. */
+const STARTERS: Record<string, number> = { A: 3, M: 3, D: 3, G: 1, FO: 1 };
+
 /** The same star a player wears on the field, so the two never disagree. */
 export function starMark(overall: number): HTMLElement | null {
   const tier = starTier(overall);
@@ -136,6 +154,7 @@ export function starMark(overall: number): HTMLElement | null {
 
 function rosterTable(app: App, career: Career, mode: CareerMode): HTMLElement {
   const roster = sortDepthChart(career.roster);
+  const team = userTeam(career);
   const rows = roster.map((p) => {
     const starter = isStarter(roster, p);
     return h('tr', {
@@ -144,6 +163,7 @@ function rosterTable(app: App, career: Career, mode: CareerMode): HTMLElement {
     },
       h('td', { class: 'name' },
         h('div', { style: 'display:flex;align-items:center;gap:8px' },
+          playerPortrait(p, team, 28, false),
           h('span', { class: 'num', style: 'color:var(--muted);width:22px', text: `#${p.number}` }),
           h('span', { text: `${p.first} ${p.last}` }),
           starMark(p.overall))),
@@ -232,22 +252,7 @@ export class PlayerScreen implements Screen {
       topbar(app, `${p.first} ${p.last}`, `#${p.number}`),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
-          panel(null,
-            h('div', { class: 'row', style: 'gap:14px' },
-              h('div', { class: 'stack', style: 'gap:0;align-items:center' },
-                h('div', { class: 'eyebrow', text: 'OVR' }), ovr),
-              h('div', { class: 'stack', style: 'gap:4px;flex:1 1 auto' },
-                h('div', { class: 'row row--wrap', style: 'gap:6px' },
-                  h('span', { class: 'pill pill--accent', text: POSITION_LABEL[p.pos] }),
-                  h('span', { class: 'pill', text: gradeWord(p.grade) }),
-                  starTier(p.overall)
-                    ? h('span', {
-                      class: 'pill pill--green',
-                      text: starTier(p.overall) === 2 ? '★★ Elite' : '★ Star',
-                    })
-                    : null,
-                  cpLabel),
-                h('div', { class: 'small', text: potentialText(p) })))),
+          this.cardPanel(career, p, ovr, cpLabel),
 
           panel('Season stats',
             h('div', { class: 'row row--wrap', style: 'gap:14px' },
@@ -257,12 +262,125 @@ export class PlayerScreen implements Screen {
               p.pos === 'G' ? stat('GA', s.goalsAgainst) : null,
               stat('TO', s.turnovers))),
 
+          this.careerPanel(p),
+          this.strengthsPanel(career, p),
           this.profilePanel(career, p),
           this.projectPanel(app, career, p),
           panel('Attributes', attrsBox),
           this.historyPanel(p),
         )),
     );
+  }
+
+  /**
+   * The card at the top: his face, who he is, and the two numbers that matter.
+   * A player card in a sports game should answer "who am I looking at" before
+   * it answers anything else.
+   */
+  private cardPanel(
+    career: Career, p: PlayerData, ovr: HTMLElement, cpLabel: HTMLElement,
+  ): HTMLElement {
+    const team = userTeam(career);
+    const tier = starTier(p.overall);
+    const room = Math.max(0, p.potential - p.overall);
+    return h('div', { class: 'panel card' },
+      h('div', { class: 'panel__body row', style: 'gap:14px;align-items:flex-start' },
+        h('div', { class: 'stack', style: 'gap:6px;align-items:center;flex:0 0 auto' },
+          playerPortrait(p, team, 84, false),
+          h('div', { class: 'card__num display', text: `#${p.number}` })),
+        h('div', { class: 'stack', style: 'gap:6px;flex:1 1 auto;min-width:0' },
+          h('div', { class: 'display', style: 'font-size:21px;line-height:1.05' },
+            `${p.first} ${p.last}`),
+          h('div', { class: 'row row--wrap', style: 'gap:6px' },
+            h('span', { class: 'pill pill--accent', text: POSITION_LABEL[p.pos] }),
+            h('span', { class: 'pill', text: gradeWord(p.grade) }),
+            h('span', { class: 'pill', text: roleOf(career, p) }),
+            tier
+              ? h('span', {
+                class: 'pill pill--green',
+                text: tier === 2 ? '★★ ELITE' : '★ STAR',
+              })
+              : null,
+            cpLabel),
+          h('div', { class: 'row', style: 'gap:16px;margin-top:2px' },
+            h('div', { class: 'stack', style: 'gap:0;align-items:center' },
+              h('div', { class: 'eyebrow', text: 'OVR' }), ovr),
+            h('div', { class: 'stack', style: 'gap:0;align-items:center' },
+              h('div', { class: 'eyebrow', text: 'CEILING' }),
+              h('div', {
+                class: 'display',
+                style: `font-size:30px;color:${room > 6 ? 'var(--green)' : 'var(--text-2)'}`,
+                text: String(p.potential),
+              }))),
+          h('div', { class: 'small', text: potentialText(p) }))));
+  }
+
+  /** Season against career, which is how you tell a hot year from a good player. */
+  private careerPanel(p: PlayerData): HTMLElement {
+    const c = p.career;
+    const s = p.season;
+    const keeper = p.pos === 'G';
+    const rows: [string, number, number][] = keeper
+      ? [['Saves', s.saves, c.saves], ['Goals against', s.goalsAgainst, c.goalsAgainst],
+        ['Ground balls', s.groundBalls, c.groundBalls], ['Games', s.gamesPlayed, c.gamesPlayed]]
+      : [['Goals', s.goals, c.goals], ['Assists', s.assists, c.assists],
+        ['Points', s.goals + s.assists, c.goals + c.assists],
+        ['Shots', s.shots, c.shots], ['Ground balls', s.groundBalls, c.groundBalls],
+        ['Caused TO', s.causedTurnovers, c.causedTurnovers],
+        ['Games', s.gamesPlayed, c.gamesPlayed]];
+    const played = c.gamesPlayed > 0;
+    return panel('Season and career',
+      h('div', { class: 'table-wrap' },
+        h('table', { class: 'table table--compact' },
+          h('thead', null, h('tr', null,
+            h('th', { style: 'text-align:left', text: '' }),
+            h('th', { text: 'Season' }), h('th', { text: 'Career' }),
+            h('th', { text: 'Per game' }))),
+          h('tbody', null, ...rows.map(([label, season, total]) => h('tr', null,
+            h('td', { style: 'text-align:left', text: label }),
+            h('td', { class: 'num', text: String(season) }),
+            h('td', { class: 'num', text: String(total) }),
+            h('td', {
+              class: 'num',
+              style: 'color:var(--muted)',
+              text: played && label !== 'Games'
+                ? (total / Math.max(1, c.gamesPlayed)).toFixed(1)
+                : '—',
+            }))))))
+      ,
+      played
+        ? null
+        : h('div', { class: 'tiny', text: 'He has not played a competitive game yet.' }));
+  }
+
+  /**
+   * What he is good and bad at, read off his own attributes against the level
+   * he plays in — so a 70 means something different in Class D and the PLL.
+   */
+  private strengthsPanel(career: Career, p: PlayerData): HTMLElement {
+    const par = levelPar(career.level);
+    const keys = (Object.keys(p.attrs) as (keyof typeof p.attrs)[])
+      .filter((k) => (p.pos === 'G' ? k !== 'faceoff' : k !== 'goalie'));
+    const scored = keys
+      .map((k) => ({ k, v: p.attrs[k], edge: p.attrs[k] - par }))
+      .sort((a, b) => b.edge - a.edge);
+    const best = scored.filter((x) => x.edge >= 6).slice(0, 3);
+    const worst = scored.filter((x) => x.edge <= -6).slice(-3).reverse();
+    const line = (label: string, v: number, cls: string) => h('div', {
+      class: 'row', style: 'gap:8px;align-items:center',
+    },
+      h('span', { class: `pill ${cls}`, style: 'flex:0 0 auto', text: String(v) }),
+      h('span', { class: 'small', style: 'flex:1 1 auto', text: label }));
+    return panel('Strengths and weaknesses',
+      best.length ? h('div', { class: 'eyebrow', text: 'What he does well' }) : null,
+      ...best.map((x) => line(ATTR_LABEL[x.k], x.v, 'pill--green')),
+      worst.length
+        ? h('div', { class: 'eyebrow', style: 'margin-top:6px', text: 'What he cannot do' })
+        : null,
+      ...worst.map((x) => line(ATTR_LABEL[x.k], x.v, 'pill--red')),
+      !best.length && !worst.length
+        ? h('div', { class: 'small', text: 'No pronounced strength or weakness — a solid, even player for this level.' })
+        : null);
   }
 
   /**
