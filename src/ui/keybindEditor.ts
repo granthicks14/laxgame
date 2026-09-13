@@ -1,19 +1,20 @@
 import { h, clear } from './dom';
 import type { App } from './App';
 import {
-  ACTIONS, DEFAULT_KEYBINDS, UNBINDABLE, bindingText, clearBinding, keyLabel, ownerOf, rebind,
-  type ActionId,
+  UNBINDABLE, bindingText, clearBinding, keyLabel, normalizeKeybinds, ownerOf, rebind,
 } from '../state/keybinds';
 
 /**
- * Rebinding UI shared by Settings and the in-game pause menu, so the two can
- * never drift apart. Click a key, press a new one. Taking a key that another
- * action owns moves it, and the loser falls back to its default rather than
- * ending up with nothing — there is no way to leave a control unbound.
+ * Rebinding UI shared by Settings and the in-game pause menu — and now by every
+ * sport in the hub, because it renders whatever the active control scheme
+ * declares rather than a hard-coded list of lacrosse actions. Click a key, press
+ * a new one. Taking a key that another action owns moves it, and the loser falls
+ * back to its default rather than ending up with nothing — there is no way to
+ * leave a control unbound.
  */
 export function keybindEditor(app: App, onChange?: () => void): HTMLElement {
   const root = h('div', { class: 'stack', style: 'gap:4px' });
-  let listening: { action: ActionId; slot: number } | null = null;
+  let listening: { action: string; slot: number } | null = null;
 
   const stop = () => {
     listening = null;
@@ -31,7 +32,7 @@ export function keybindEditor(app: App, onChange?: () => void): HTMLElement {
       return;
     }
     const { action, slot } = listening;
-    const res = rebind(app.keybinds, action, slot, e.code);
+    const res = rebind(app.scheme, app.keybinds, action, slot, e.code);
     app.setKeybinds(res.binds);
     note.textContent = res.stolenFrom
       ? `${keyLabel(e.code)} moved from ${labelOf(res.stolenFrom)}.`
@@ -42,14 +43,14 @@ export function keybindEditor(app: App, onChange?: () => void): HTMLElement {
 
   const note = h('div', { class: 'tiny', text: 'Click a key to change it.' });
 
-  function labelOf(id: ActionId): string {
-    return ACTIONS.find((a) => a.id === id)?.label ?? id;
+  function labelOf(id: string): string {
+    return app.scheme.actions.find((a) => a.id === id)?.label ?? id;
   }
 
   function render(): void {
     clear(root);
-    for (const action of ACTIONS) {
-      const keys = app.keybinds[action.id];
+    for (const action of app.scheme.actions) {
+      const keys = app.keybinds[action.id] ?? [];
       const listeningHere = listening && listening.action === action.id;
       // Listening for an extra key renders a placeholder slot, so the row shows
       // what it is waiting for instead of looking like nothing happened.
@@ -79,7 +80,7 @@ export function keybindEditor(app: App, onChange?: () => void): HTMLElement {
               class: 'kb-key kb-key--drop', text: '\u2212', ariaLabel: `Remove a key from ${action.label}`,
               on: {
                 click: () => {
-                  app.setKeybinds(clearBinding(app.keybinds, action.id, keys.length - 1));
+                  app.setKeybinds(clearBinding(app.scheme, app.keybinds, action.id, keys.length - 1));
                   note.textContent = `${action.label} is now ${bindingText(app.keybinds, action.id)}.`;
                   onChange?.();
                   render();
@@ -105,7 +106,7 @@ export function keybindEditor(app: App, onChange?: () => void): HTMLElement {
       text: 'Reset to defaults',
       on: {
         click: () => {
-          app.setKeybinds({ ...DEFAULT_KEYBINDS });
+          app.setKeybinds(normalizeKeybinds(app.scheme, null));
           note.textContent = 'Back to the default layout.';
           onChange?.();
           render();
@@ -117,7 +118,7 @@ export function keybindEditor(app: App, onChange?: () => void): HTMLElement {
     if (clash) root.appendChild(h('div', { class: 'tiny bad', text: clash }));
   }
 
-  function startListening(action: ActionId, slot: number, message: string): void {
+  function startListening(action: string, slot: number, message: string): void {
     if (listening) {
       window.removeEventListener('keydown', onKey, true);
       listening = null;
@@ -133,10 +134,13 @@ export function keybindEditor(app: App, onChange?: () => void): HTMLElement {
 }
 
 function findClash(app: App): string | null {
-  for (const a of ACTIONS) {
-    for (const code of app.keybinds[a.id]) {
-      const other = ownerOf(app.keybinds, code, a.id);
-      if (other) return `${keyLabel(code)} is bound to both ${a.label} and ${ACTIONS.find((x) => x.id === other)?.label}.`;
+  for (const a of app.scheme.actions) {
+    for (const code of app.keybinds[a.id] ?? []) {
+      const other = ownerOf(app.scheme, app.keybinds, code, a.id);
+      if (other) {
+        const otherLabel = app.scheme.actions.find((x) => x.id === other)?.label ?? other;
+        return `${keyLabel(code)} is bound to both ${a.label} and ${otherLabel}.`;
+      }
     }
   }
   return null;

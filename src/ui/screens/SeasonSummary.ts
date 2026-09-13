@@ -1,6 +1,7 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
-import { screenEl, topbar, panel, panelFlush, teamBadge, emptyState } from '../components';
+import { screenEl, topbar, panel, panelFlush, emptyState } from '../components';
+import { teamBadge } from '../../sports/lacrosse/ui';
 import { saveCareer, deleteCareer } from '../../state/saves';
 import {
   champion, createCareer, effectiveTeam, resolveChallengeSeason, runOffseason,

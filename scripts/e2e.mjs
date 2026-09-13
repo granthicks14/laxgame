@@ -12,6 +12,7 @@
  */
 import { chromium, devices } from 'playwright';
 import { chromiumPath } from './chromium.mjs';
+import { enterSport as enterLacrosse } from './enter.mjs';
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
 const EXEC = chromiumPath();
@@ -45,8 +46,7 @@ async function boot(page) {
   await page.goto(BASE, { waitUntil: 'networkidle' });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle' });
-  await page.getByText('Press Start').click();
-  await page.waitForTimeout(350);
+  await enterLacrosse(page);
 }
 
 async function desktop(browser) {
@@ -62,8 +62,7 @@ async function desktop(browser) {
     localStorage.setItem('lsl.settings.v1', 'null');
   });
   await page.reload({ waitUntil: 'networkidle' });
-  await page.getByText('Press Start').click();
-  await page.waitForTimeout(420);
+  await enterLacrosse(page);
   check('corrupt save data still boots to the menu',
     await page.locator('.menu-btn').count() >= 6);
   // The warnings the game prints on purpose ("corrupt save … discarding") are
@@ -75,8 +74,7 @@ async function desktop(browser) {
     noisy.slice(0, 2).join(' | '));
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle' });
-  await page.getByText('Press Start').click();
-  await page.waitForTimeout(420);
+  await enterLacrosse(page);
 
   // --- quick game
   await menu(page, 'Play Now');
@@ -260,8 +258,7 @@ async function dynasty(browser) {
   await page.waitForTimeout(500);
 
   await page.reload({ waitUntil: 'networkidle' });
-  await page.getByText('Press Start').click();
-  await page.waitForTimeout(400);
+  await enterLacrosse(page);
   const menuText = await page.locator('.scroll').innerText();
   check('dynasty save survives a reload', /Year 2/.test(menuText), menuText.match(/Year \d+/)?.[0] ?? '');
   await ctx.close();

@@ -1,6 +1,7 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
-import { screenEl, topbar, panel, teamBadge, segmented, fieldRow } from '../components';
+import { screenEl, topbar, panel, segmented, fieldRow } from '../components';
+import { teamBadge } from '../../sports/lacrosse/ui';
 import { getTeam } from '../../data/teams';
 import { DIFFICULTIES, DIFFICULTY_ORDER, type DifficultyKey } from '../../data/difficulty';
 import { GAME_LENGTHS, type GameLengthKey } from '../../data/constants';

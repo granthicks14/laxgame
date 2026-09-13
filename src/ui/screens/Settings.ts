@@ -1,20 +1,32 @@
-import { CAREER_MODES, MODE_LABEL } from '../../league/modes';
 import { h } from '../dom';
 import type { App, Screen } from '../App';
 import { screenEl, topbar, panel, segmented, fieldRow } from '../components';
-import { DIFFICULTIES, DIFFICULTY_ORDER, type DifficultyKey } from '../../data/difficulty';
-import { GAME_LENGTHS, type GameLengthKey } from '../../data/constants';
 import { audio } from '../../audio/Audio';
-import { deleteCareer, hasCareer } from '../../state/saves';
 import { storageIsPersistent } from '../../core/storage';
-import { keybindEditor } from '../keybindEditor';
+
+/* ---------------------------------------------------------------------------
+ * SETTINGS
+ * ---------------------------------------------------------------------------
+ * The panels here are the ones that mean the same thing in every sport: how you
+ * are holding the device, how loud it is, whether the interface moves, and where
+ * your progress lives.
+ *
+ * Anything that only makes sense inside one sport — lacrosse's quarter length,
+ * its difficulty ladder, its saved careers, its key bindings — is passed in by
+ * that sport as extra sections. That is not tidiness for its own sake: it keeps
+ * every line of lacrosse out of the hub's bundle, and it means the settings
+ * screen a basketball player sees is about basketball.
+ * ------------------------------------------------------------------------- */
+
+/** Extra panels a sport contributes to its own settings screen. */
+export type SettingsSections = (app: App, rebuild: () => void) => (HTMLElement | null)[];
 
 export class SettingsScreen implements Screen {
   el: HTMLElement;
 
-  constructor(app: App) {
+  constructor(app: App, sections?: SettingsSections, title = 'Settings') {
     const s = app.settings;
-    const diffBlurb = h('div', { class: 'small', text: DIFFICULTIES[s.difficulty].blurb });
+    const rebuild = () => app.replace((a) => new SettingsScreen(a, sections, title));
 
     const slider = (value: number, onInput: (v: number) => void) =>
       h('input', {
@@ -26,41 +38,9 @@ export class SettingsScreen implements Screen {
       });
 
     this.el = screenEl(
-      topbar(app, 'Settings'),
+      topbar(app, title),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
-
-          panel('Gameplay defaults',
-            h('div', { class: 'stack', style: 'gap:6px' },
-              h('div', { class: 'field-row__label', text: 'Difficulty' }),
-              segmented<DifficultyKey>(
-                DIFFICULTY_ORDER.map((k) => ({ value: k, label: DIFFICULTIES[k].label })),
-                s.difficulty,
-                (v) => {
-                  app.updateSettings({ difficulty: v });
-                  diffBlurb.textContent = DIFFICULTIES[v].blurb;
-                }, true),
-              diffBlurb),
-            h('div', { class: 'stack', style: 'gap:6px' },
-              h('div', { class: 'field-row__label', text: 'Game length' }),
-              segmented<GameLengthKey>(
-                (Object.keys(GAME_LENGTHS) as GameLengthKey[]).map((k) => ({ value: k, label: GAME_LENGTHS[k].label })),
-                s.gameLength,
-                (v) => app.updateSettings({ gameLength: v }), true)),
-            fieldRow('Goal replays', 'Play a short highlight after each goal.',
-              segmented(
-                [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
-                s.goalReplays ? 'on' : 'off',
-                (v) => app.updateSettings({ goalReplays: v === 'on' }),
-              )),
-            fieldRow('Simulation details',
-              'Show how a simulated result was reached: possessions, shots, saves and faceoffs.',
-              segmented(
-                [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }],
-                s.simDetails ? 'on' : 'off',
-                (v) => app.updateSettings({ simDetails: v === 'on' }),
-              )),
-            h('div', { class: 'tiny', text: 'These are defaults for new games. A career keeps the settings it was created with.' })),
 
           panel('Controls',
             fieldRow('Input', 'Auto picks touch controls on phones and tablets.',
@@ -80,9 +60,7 @@ export class SettingsScreen implements Screen {
                 (v) => app.updateSettings({ showHints: v === 'on' }),
               ))),
 
-          panel('Keyboard',
-            h('div', { class: 'small', text: 'Movement sits under the left hand, actions under the right. Change any of it — the game and the pause menu both follow whatever you set.' }),
-            keybindEditor(app)),
+          ...(sections ? sections(app, rebuild) : []),
 
           panel('Audio',
             fieldRow('Sound effects', null, slider(s.sfxVolume, (v) => {
@@ -108,38 +86,15 @@ export class SettingsScreen implements Screen {
             h('div', {
               class: 'small',
               text: storageIsPersistent()
-                ? 'Progress is saved in this browser. Clearing site data will erase it.'
+                ? 'Progress is saved in this browser. Clearing site data will erase it. '
+                  + 'Each sport keeps its own saves, and deleting one leaves the others alone.'
                 : 'This browser is blocking local storage, so progress will not survive a reload.',
-            }),
-            h('div', { class: 'row row--wrap' },
-              h('button', {
-                class: 'btn btn--sm', text: 'Delete season save',
-                disabled: !hasCareer('season'),
-                on: {
-                  click: () => {
-                    if (window.confirm('Delete the saved season?')) {
-                      deleteCareer('season');
-                      app.toast('Season save deleted');
-                      app.replace((a) => new SettingsScreen(a));
-                    }
-                  },
-                },
-              }),
-              ...CAREER_MODES.map((m) => h('button', {
-                class: 'btn btn--sm', text: `Delete ${MODE_LABEL[m].toLowerCase()} save`,
-                disabled: !hasCareer(m),
-                on: {
-                  click: () => {
-                    if (window.confirm(`Delete the saved ${MODE_LABEL[m].toLowerCase()}? Every season of history goes with it.`)) {
-                      deleteCareer(m);
-                      app.toast(`${MODE_LABEL[m]} save deleted`);
-                      app.replace((a) => new SettingsScreen(a));
-                    }
-                  },
-                },
-              })))),
+            })),
 
-          h('div', { class: 'tiny', text: 'Lone Star Lax runs entirely in your browser. No accounts, no servers, no cost.' }),
+          h('div', {
+            class: 'tiny',
+            text: 'Lone Star Sports runs entirely in your browser. No accounts, no servers, no cost.',
+          }),
         )),
     );
   }

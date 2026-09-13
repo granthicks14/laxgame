@@ -1,9 +1,8 @@
 import { clamp } from '../core/math';
-import type { InputState } from '../match/types';
-import { DEFAULT_KEYBINDS, type Keybinds } from '../state/keybinds';
-
-export type ButtonId = 'action' | 'shoot' | 'dodge' | 'switch' | 'screen';
-export const BUTTON_IDS: ButtonId[] = ['action', 'shoot', 'dodge', 'switch', 'screen'];
+import {
+  MOVE_ACTIONS, PAUSE_ACTION, SPRINT_ACTION,
+  type ControlScheme, type Keybinds,
+} from '../state/keybinds';
 
 /** Pixel radius of full stick deflection. */
 const STICK_RADIUS = 58;
@@ -25,12 +24,40 @@ export interface StickState {
   y: number;
 }
 
-type PointerRole = 'stick' | ButtonId;
+/**
+ * One frame of input, in the sport's own vocabulary.
+ *
+ * Movement is universal — every sport in the hub moves a player around a
+ * surface — so it is read here. Everything else is the sport's own action set,
+ * reported as three sets a game engine can ask questions of: what was pressed
+ * this frame, what is being held, and what was released this frame. A sport
+ * turns that into its own input type (see `laxInput`, `hoopsInput`) so its
+ * engine never handles raw strings.
+ */
+export interface RawInput {
+  moveX: number;
+  moveY: number;
+  sprint: boolean;
+  /** Went down this frame. */
+  pressed: ReadonlySet<string>;
+  /** Down right now, however long it has been down. */
+  held: ReadonlySet<string>;
+  /** Came up this frame. */
+  released: ReadonlySet<string>;
+}
+
+export const neutralRaw = (): RawInput => ({
+  moveX: 0, moveY: 0, sprint: false,
+  pressed: new Set(), held: new Set(), released: new Set(),
+});
+
+type PointerRole = 'stick' | { action: string };
 
 /* ===========================================================================
  * INPUT
  *
- * One owner for every input channel, built so movement can never stick on:
+ * One owner for every input channel, for every sport, built so movement can
+ * never stick on:
  *
  *  - Pointer move/up/cancel are bound to the WINDOW, not the game element, so a
  *    finger released anywhere (or outside the viewport) still ends the gesture.
@@ -45,32 +72,32 @@ type PointerRole = 'stick' | ButtonId;
  *
  * Every one of those paths funnels into releaseAll(), so there is a single
  * place where "nothing is held" is defined.
+ *
+ * What the manager knows about a SPORT is only what its control scheme
+ * declares: the action ids, which keys drive them, which of them are on-screen
+ * buttons, and which are held rather than tapped. Adding a sport adds no code
+ * here.
  * ========================================================================= */
 export class InputManager {
   private keys = new Set<string>();
 
+  private scheme: ControlScheme;
   /** Live bindings. Rebinding while a game is running takes effect at once. */
-  private binds: Keybinds = DEFAULT_KEYBINDS;
+  private binds: Keybinds;
   private moveKeys = new Map<string, [number, number]>();
-  private actionKeys = new Set<string>();
-  private shootKeys = new Set<string>();
-  private dodgeKeys = new Set<string>();
-  private switchKeys = new Set<string>();
-  private screenKeys = new Set<string>();
+  /** KeyboardEvent.code -> the actions it drives, from the live bindings. */
+  private actionKeys = new Map<string, string[]>();
   private sprintKeys = new Set<string>();
   private pauseKeys = new Set<string>();
-  private pendingAction = false;
-  private pendingDodge = false;
-  private pendingSwitch = false;
-  private pendingScreen = false;
-  private pendingShootRelease = false;
-  private shootHeldKeyboard = false;
+
+  /** Edge and held state, by action id. */
+  private pending = new Set<string>();
+  private pendingRelease = new Set<string>();
+  private heldKeyboard = new Set<string>();
 
   /** Which pointer is driving each role. A role with no pointer is not held. */
   private pointerRoles = new Map<number, PointerRole>();
-  private buttonPointer: Record<ButtonId, number | null> = {
-    action: null, shoot: null, dodge: null, switch: null, screen: null,
-  };
+  private buttonPointer = new Map<string, number>();
   private stickPointer: number | null = null;
 
   readonly stick: StickState = {
@@ -87,7 +114,7 @@ export class InputManager {
   usedKeyboard = false;
 
   private surface: HTMLElement | null = null;
-  private buttonEls = new Map<ButtonId, HTMLElement>();
+  private buttonEls = new Map<string, HTMLElement>();
 
   // --- bound handlers, kept so they can be removed again
   private hKeyDown = (e: KeyboardEvent) => this.onKeyDown(e);
@@ -101,29 +128,49 @@ export class InputManager {
   private hSurfaceDown = (e: PointerEvent) => this.onPointerDown(e);
   private hContextMenu = (e: Event) => e.preventDefault();
 
+  constructor(scheme: ControlScheme) {
+    this.scheme = scheme;
+    this.binds = scheme.defaults;
+    this.setBindings(scheme.defaults);
+  }
+
   /* ------------------------------------------------------------- lifecycle */
 
   /** Point the manager at a binding set. Safe to call mid-game. */
   setBindings(binds: Keybinds): void {
     this.binds = binds;
     this.moveKeys.clear();
-    for (const k of binds.moveUp) this.moveKeys.set(k, [0, -1]);
-    for (const k of binds.moveDown) this.moveKeys.set(k, [0, 1]);
-    for (const k of binds.moveLeft) this.moveKeys.set(k, [-1, 0]);
-    for (const k of binds.moveRight) this.moveKeys.set(k, [1, 0]);
-    this.actionKeys = new Set(binds.pass);
-    this.shootKeys = new Set(binds.shoot);
-    this.dodgeKeys = new Set(binds.dodge);
-    this.switchKeys = new Set(binds.switch);
-    this.screenKeys = new Set(binds.screen);
-    this.sprintKeys = new Set(binds.sprint);
-    this.pauseKeys = new Set(binds.pause);
+    this.actionKeys.clear();
+    const [up, down, left, right] = MOVE_ACTIONS;
+    for (const k of binds[up] ?? []) this.moveKeys.set(k, [0, -1]);
+    for (const k of binds[down] ?? []) this.moveKeys.set(k, [0, 1]);
+    for (const k of binds[left] ?? []) this.moveKeys.set(k, [-1, 0]);
+    for (const k of binds[right] ?? []) this.moveKeys.set(k, [1, 0]);
+    this.sprintKeys = new Set(binds[SPRINT_ACTION] ?? []);
+    this.pauseKeys = new Set(binds[PAUSE_ACTION] ?? []);
+    for (const a of this.scheme.actions) {
+      if (a.group !== 'action') continue;
+      for (const code of binds[a.id] ?? []) {
+        const list = this.actionKeys.get(code);
+        if (list) list.push(a.id);
+        else this.actionKeys.set(code, [a.id]);
+      }
+    }
     // A key that has just been rebound must not stay logically held.
     this.keys.clear();
+    this.heldKeyboard.clear();
   }
 
   get bindings(): Keybinds {
     return this.binds;
+  }
+
+  get controls(): ControlScheme {
+    return this.scheme;
+  }
+
+  private isHoldAction(id: string): boolean {
+    return this.scheme.hold.includes(id);
   }
 
   attach(surface?: HTMLElement): void {
@@ -175,17 +222,17 @@ export class InputManager {
 
   /** Register an on-screen button. The element only reports presses; all state
    *  lives here so a lost pointerup cannot leave it stuck down. */
-  registerButton(id: ButtonId, el: HTMLElement): void {
+  registerButton(id: string, el: HTMLElement): void {
     this.buttonEls.set(id, el);
     el.addEventListener('pointerdown', (e) => {
       const pe = e as PointerEvent;
       pe.preventDefault();
       if (this.suspended) return;
       this.usedTouch = pe.pointerType !== 'mouse';
-      if (this.buttonPointer[id] !== null) return;
-      this.buttonPointer[id] = pe.pointerId;
-      this.pointerRoles.set(pe.pointerId, id);
-      this.pressButton(id);
+      if (this.buttonPointer.has(id)) return;
+      this.buttonPointer.set(id, pe.pointerId);
+      this.pointerRoles.set(pe.pointerId, { action: id });
+      this.pressAction(id);
       el.classList.add('is-down');
       this.onVisualChange?.();
     }, { passive: false });
@@ -195,12 +242,9 @@ export class InputManager {
   /** The single definition of "nothing is held". */
   releaseAll(): void {
     this.keys.clear();
-    this.pendingAction = false;
-    this.pendingDodge = false;
-    this.pendingSwitch = false;
-    this.pendingScreen = false;
-    this.pendingShootRelease = false;
-    this.shootHeldKeyboard = false;
+    this.pending.clear();
+    this.pendingRelease.clear();
+    this.heldKeyboard.clear();
 
     this.pointerRoles.clear();
     this.stickPointer = null;
@@ -210,10 +254,11 @@ export class InputManager {
     this.stick.x = 0;
     this.stick.y = 0;
 
-    for (const id of BUTTON_IDS) {
-      this.buttonPointer[id] = null;
-      this.buttonEls.get(id)?.classList.remove('is-down');
+    for (const [id, el] of this.buttonEls) {
+      this.buttonPointer.delete(id);
+      el.classList.remove('is-down');
     }
+    this.buttonPointer.clear();
     this.onVisualChange?.();
   }
 
@@ -225,7 +270,7 @@ export class InputManager {
   }
 
   private anyButtonHeld(): boolean {
-    return BUTTON_IDS.some((id) => this.buttonPointer[id] !== null);
+    return this.buttonPointer.size > 0;
   }
 
   /* --------------------------------------------------------------- pointer */
@@ -260,7 +305,7 @@ export class InputManager {
     if (role === undefined) return;
     this.pointerRoles.delete(e.pointerId);
     if (role === 'stick') this.clearStick();
-    else this.releaseButton(role);
+    else this.releaseButton(role.action);
     this.onVisualChange?.();
   }
 
@@ -274,11 +319,7 @@ export class InputManager {
     // Pointer ids and touch identifiers are not the same number, so the only
     // safe inference is the total-absence case: no fingers left on the screen
     // means nothing driven by touch can still be held.
-    if (live.size === 0) {
-      let touchDriven = false;
-      for (const role of this.pointerRoles.values()) { void role; touchDriven = true; }
-      if (touchDriven && this.usedTouch) this.releaseAll();
-    }
+    if (live.size === 0 && this.usedTouch) this.releaseAll();
   }
 
   private clearStick(): void {
@@ -320,18 +361,16 @@ export class InputManager {
     this.stick.y = dy * inv * scaled;
   }
 
-  private pressButton(id: ButtonId): void {
-    if (id === 'action') this.pendingAction = true;
-    if (id === 'dodge') this.pendingDodge = true;
-    if (id === 'switch') this.pendingSwitch = true;
-    if (id === 'screen') this.pendingScreen = true;
+  /** A tap or a button press. Hold actions report their release edge instead. */
+  private pressAction(id: string): void {
+    if (!this.isHoldAction(id)) this.pending.add(id);
   }
 
-  private releaseButton(id: ButtonId): void {
-    if (this.buttonPointer[id] === null) return;
-    this.buttonPointer[id] = null;
+  private releaseButton(id: string): void {
+    if (!this.buttonPointer.has(id)) return;
+    this.buttonPointer.delete(id);
     this.buttonEls.get(id)?.classList.remove('is-down');
-    if (id === 'shoot') this.pendingShootRelease = true;
+    if (this.isHoldAction(id)) this.pendingRelease.add(id);
   }
 
   /* -------------------------------------------------------------- keyboard */
@@ -348,8 +387,7 @@ export class InputManager {
       this.onPause?.();
       return;
     }
-    const known = this.moveKeys.has(e.code) || this.actionKeys.has(e.code) || this.shootKeys.has(e.code)
-      || this.dodgeKeys.has(e.code) || this.switchKeys.has(e.code) || this.screenKeys.has(e.code)
+    const known = this.moveKeys.has(e.code) || this.actionKeys.has(e.code)
       || this.sprintKeys.has(e.code);
     if (known) {
       e.preventDefault();
@@ -358,20 +396,20 @@ export class InputManager {
     if (e.repeat || this.suspended) return;
 
     this.keys.add(e.code);
-    if (this.actionKeys.has(e.code)) this.pendingAction = true;
-    if (this.dodgeKeys.has(e.code)) this.pendingDodge = true;
-    if (this.switchKeys.has(e.code)) this.pendingSwitch = true;
-    if (this.screenKeys.has(e.code)) this.pendingScreen = true;
-    if (this.shootKeys.has(e.code)) this.shootHeldKeyboard = true;
+    for (const id of this.actionKeys.get(e.code) ?? []) {
+      if (this.isHoldAction(id)) this.heldKeyboard.add(id);
+      else this.pending.add(id);
+    }
   }
 
   private onKeyUp(e: KeyboardEvent): void {
     this.keys.delete(e.code);
-    if (this.shootKeys.has(e.code)) {
-      const stillHeld = [...this.shootKeys].some((k) => this.keys.has(k));
-      if (!stillHeld && this.shootHeldKeyboard) {
-        this.shootHeldKeyboard = false;
-        this.pendingShootRelease = true;
+    for (const id of this.actionKeys.get(e.code) ?? []) {
+      if (!this.isHoldAction(id)) continue;
+      const stillHeld = (this.binds[id] ?? []).some((k) => this.keys.has(k));
+      if (!stillHeld && this.heldKeyboard.has(id)) {
+        this.heldKeyboard.delete(id);
+        this.pendingRelease.add(id);
       }
     }
   }
@@ -399,18 +437,11 @@ export class InputManager {
   }
 
   /** Read and clear one frame of input. */
-  consume(): InputState {
+  consume(): RawInput {
     if (this.suspended) {
-      this.pendingAction = false;
-      this.pendingDodge = false;
-      this.pendingSwitch = false;
-      this.pendingScreen = false;
-      this.pendingShootRelease = false;
-      return {
-        moveX: 0, moveY: 0, sprint: false, actionPressed: false,
-        shootHeld: false, shootReleased: false, dodgePressed: false,
-        switchPressed: false, screenPressed: false,
-      };
+      this.pending.clear();
+      this.pendingRelease.clear();
+      return neutralRaw();
     }
 
     const kb = this.keyboardMove();
@@ -431,27 +462,28 @@ export class InputManager {
       }
     }
 
-    const state: InputState = {
+    const state: RawInput = {
       moveX: clamp(mx, -1, 1),
       moveY: clamp(my, -1, 1),
       sprint,
-      actionPressed: this.pendingAction,
-      shootHeld: this.shootHeldKeyboard || this.buttonPointer.shoot !== null,
-      shootReleased: this.pendingShootRelease,
-      dodgePressed: this.pendingDodge,
-      switchPressed: this.pendingSwitch,
-      screenPressed: this.pendingScreen,
+      pressed: new Set(this.pending),
+      held: this.heldNow(),
+      released: new Set(this.pendingRelease),
     };
 
-    this.pendingAction = false;
-    this.pendingDodge = false;
-    this.pendingSwitch = false;
-    this.pendingScreen = false;
-    this.pendingShootRelease = false;
+    this.pending.clear();
+    this.pendingRelease.clear();
     return state;
   }
 
-  get shootDown(): boolean {
-    return this.shootHeldKeyboard || this.buttonPointer.shoot !== null;
+  private heldNow(): Set<string> {
+    const out = new Set(this.heldKeyboard);
+    for (const id of this.buttonPointer.keys()) out.add(id);
+    return out;
+  }
+
+  /** Is this action being held right now? */
+  isDown(id: string): boolean {
+    return this.heldKeyboard.has(id) || this.buttonPointer.has(id);
   }
 }

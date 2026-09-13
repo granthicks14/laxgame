@@ -1,9 +1,7 @@
 import './style.css';
 import { App } from './ui/App';
-import { TitleScreen } from './ui/screens/TitleScreen';
+import { HubTitleScreen } from './ui/screens/HubTitle';
 import { h } from './ui/dom';
-import { validateLeague } from './data/teams';
-import { retireOldSaves } from './state/saves';
 
 function fatal(message: string, detail?: unknown): void {
   const root = document.getElementById('app');
@@ -11,7 +9,7 @@ function fatal(message: string, detail?: unknown): void {
   root.replaceChildren(h('div', { class: 'screen' },
     h('div', { class: 'scroll' },
       h('div', { class: 'panel error-box' },
-        h('div', { class: 'panel__head', text: 'Lone Star Lax could not start' }),
+        h('div', { class: 'panel__head', text: 'Lone Star Sports could not start' }),
         h('div', { class: 'panel__body stack' },
           h('p', { style: 'margin:0', text: message }),
           detail ? h('pre', { class: 'tiny', style: 'white-space:pre-wrap;overflow:auto', text: String(detail) }) : null,
@@ -23,23 +21,9 @@ function fatal(message: string, detail?: unknown): void {
 }
 
 function boot(): void {
-  // Surface league data problems (duplicate ids, dangling rivals, thin classes)
-  // in the console rather than letting them turn into odd behaviour later.
-  // Old-format saves cannot be migrated across the league restructure; retire
-  // them explicitly so the menu can say what happened.
-  try {
-    retireOldSaves();
-  } catch (err) {
-    console.warn('[saves] could not retire old saves', err);
-  }
-
-  try {
-    const problems = validateLeague();
-    if (problems.length) console.warn('[league] data problems:\n - ' + problems.join('\n - '));
-  } catch (err) {
-    console.warn('[league] validation failed', err);
-  }
-
+  // Nothing sport-specific happens here. A sport validates its own data and
+  // retires its own saves when it loads (see SportModule.init), so opening the
+  // hub costs the hub's bundle and nothing else.
   const root = document.getElementById('app');
   if (!root) {
     document.body.textContent = 'Missing #app container.';
@@ -47,7 +31,7 @@ function boot(): void {
   }
   try {
     const app = new App(root);
-    app.reset((a) => new TitleScreen(a));
+    app.reset((a) => new HubTitleScreen(a));
   } catch (err) {
     console.error(err);
     fatal('Something went wrong while starting the game.', err);

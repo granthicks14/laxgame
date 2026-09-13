@@ -1,7 +1,19 @@
 import { h } from './dom';
 import type { App } from './App';
-import type { GameTeam, TeamData, TeamRatings } from '../data/teams';
-import { DIFFICULTY_WORDS, coachingDifficulty } from '../data/teams';
+
+/* ---------------------------------------------------------------------------
+ * THE SHARED UI KIT
+ * ---------------------------------------------------------------------------
+ * Every element here means the same thing in every sport: a top bar, a panel, a
+ * segmented control, a labelled row, a bar comparing two numbers, an empty state
+ * that offers a way out of itself.
+ *
+ * Nothing sport-specific belongs here, and the cost of getting that wrong is not
+ * abstract: two helpers that needed a lacrosse team put the entire lacrosse
+ * league table into the hub's bundle, downloaded by every player before they had
+ * chosen a sport. Team badges, rating grids and coaching-difficulty pills live
+ * with the sport whose data they understand.
+ * ------------------------------------------------------------------------- */
 
 export function topbar(app: App, title: string, sub?: string, onBack?: () => void): HTMLElement {
   const back = h('button', {
@@ -25,34 +37,8 @@ export function scrollArea(...children: (Node | null | false)[]): HTMLElement {
   return h('div', { class: 'scroll' }, h('div', { class: 'wrapper stack' }, ...children));
 }
 
-export function teamBadge(team: GameTeam, size: 'sm' | 'md' | 'lg' = 'md'): HTMLElement {
-  const cls = size === 'sm' ? 'badge badge--sm' : size === 'lg' ? 'badge badge--lg' : 'badge';
-  return h('div', {
-    class: cls,
-    style: `background:${team.primary};border-color:${team.secondary}`,
-    text: team.abbr,
-  });
-}
 
-export function ratingBar(label: string, value: number, color = 'var(--accent)'): HTMLElement {
-  return h('div', { class: 'rate' },
-    h('div', { class: 'rate__label', text: label }),
-    h('div', { class: 'rate__track' },
-      h('div', { class: 'rate__fill', style: `width:${Math.max(2, Math.min(100, value))}%;background:${color}` })),
-    h('div', { class: 'rate__val num', text: String(Math.round(value)) }),
-  );
-}
 
-export function ratingGrid(r: TeamRatings): HTMLElement {
-  return h('div', { class: 'stack', style: 'gap:6px' },
-    ratingBar('Overall', r.overall),
-    ratingBar('Offense', r.offense, '#ff9d4d'),
-    ratingBar('Defense', r.defense, '#4a9be8'),
-    ratingBar('Goalie', r.goalie, '#3fbd77'),
-    ratingBar('Faceoff', r.faceoff, '#c58cff'),
-    ratingBar('Speed', r.speed, '#ffd84d'),
-  );
-}
 
 export function panel(title: string | null, ...body: (Node | null | false)[]): HTMLElement {
   return h('div', { class: 'panel' },
@@ -112,11 +98,6 @@ export function fieldRow(label: string, hint: string | null, control: Node): HTM
   );
 }
 
-export function difficultyPill(team: TeamData): HTMLElement {
-  const d = coachingDifficulty(team);
-  const cls = d <= 2 ? 'pill pill--green' : d >= 4 ? 'pill pill--red' : 'pill';
-  return h('span', { class: cls, text: `${DIFFICULTY_WORDS[d]} job` });
-}
 
 export function statBar(
   label: string, left: number, right: number, leftColor: string, rightColor: string,

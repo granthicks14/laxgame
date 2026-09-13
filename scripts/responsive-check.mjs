@@ -8,6 +8,7 @@
  */
 import { chromium } from 'playwright';
 import { chromiumPath } from './chromium.mjs';
+import { enterSport as enterLacrosse } from './enter.mjs';
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
 const SIZES = [
@@ -67,8 +68,7 @@ for (const [device, width, height] of SIZES) {
   await page.goto(BASE, { waitUntil: 'networkidle' });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle' });
-  await page.getByText('Press Start').click();
-  await page.waitForTimeout(300);
+  await enterLacrosse(page);
 
   const click = async (re) => {
     const b = page.getByRole('button', { name: re }).first();

@@ -8,12 +8,15 @@ import { ChallengeEntryScreen } from './Challenge';
 import { dominance } from '../../challenge/dominance';
 import { PracticeScreen } from './Practice';
 import { SettingsScreen } from './Settings';
+import { lacrosseSettings } from '../../sports/lacrosse/settings';
 import { StatsScreen } from './Stats';
 import { HowToPlayScreen } from './HowToPlay';
 import { loadCareer, takeRetiredNotice } from '../../state/saves';
 import { getTeam } from '../../data/teams';
 import { seasonRecordText, userTeam } from '../../league/career';
 import { stageAt } from '../../challenge/ladder';
+import { hubButton } from '../hub';
+import { HubTitleScreen } from './HubTitle';
 
 interface Item {
   label: string;
@@ -111,9 +114,9 @@ export class MainMenuScreen implements Screen {
       } as Item]),
       {
         label: 'Settings',
-        desc: 'Difficulty, game length, audio and accessibility.',
+        desc: 'Difficulty, game length, controls, audio and accessibility.',
         muted: true,
-        go: (a) => a.push((b) => new SettingsScreen(b)),
+        go: (a) => a.push((b) => new SettingsScreen(b, lacrosseSettings, 'Lacrosse settings')),
       },
     ];
 
@@ -121,6 +124,10 @@ export class MainMenuScreen implements Screen {
 
     this.el = screenEl(
       h('div', { class: 'topbar' },
+        // Always present, never stack-dependent: a season ending resets the
+        // lacrosse stack, and without this the player would be stranded inside
+        // one sport with no way back to the hub.
+        hubButton(() => app.reset((a) => new HubTitleScreen(a))),
         h('div', { class: 'topbar__title display', text: 'Lone Star Lax' }),
         h('div', { class: 'topbar__sub', text: 'North District' })),
       h('div', { class: 'scroll' },

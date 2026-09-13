@@ -11,7 +11,8 @@
 
 import { h, clear } from '../dom';
 import type { App, Screen } from '../App';
-import { screenEl, topbar, panel, panelFlush, emptyPanel, fieldRow, segmented, teamBadge } from '../components';
+import { screenEl, topbar, panel, panelFlush, emptyPanel, fieldRow, segmented } from '../components';
+import { teamBadge } from '../../sports/lacrosse/ui';
 import { deleteCareer, loadCareer, saveCareer } from '../../state/saves';
 import {
   challengeLegacy, declineChallengeOffers, seekChallengeJob, startChallenge,

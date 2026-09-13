@@ -1,6 +1,7 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
-import { screenEl, topbar, teamBadge, ratingGrid, difficultyPill, panel } from '../components';
+import { screenEl, topbar, panel } from '../components';
+import { teamBadge, ratingGrid, difficultyPill } from '../../sports/lacrosse/ui';
 import {
   TEAMS, CLASSES, CLASS_ORDER, IDENTITY_LABEL, SIXES_PROGRAMS, getTeam, teamsInClass,
   type ClassKey, type TeamData,

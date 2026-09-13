@@ -14,7 +14,8 @@
 
 import { h, clear } from '../dom';
 import type { App, Screen } from '../App';
-import { screenEl, topbar, panel, teamBadge, emptyPanel } from '../components';
+import { screenEl, topbar, panel, emptyPanel } from '../components';
+import { teamBadge } from '../../sports/lacrosse/ui';
 import { loadCareer, saveCareer } from '../../state/saves';
 import {
   bracketRounds, champion, conferenceRecordText, effectiveTeam, postseasonStatus,

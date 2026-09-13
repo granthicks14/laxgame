@@ -1,12 +1,26 @@
 import { audio } from '../audio/Audio';
 import { h } from './dom';
 import { loadSettings, saveSettings, type Settings } from '../state/settings';
-import { loadKeybinds, saveKeybinds, type Keybinds } from '../state/keybinds';
+import {
+  NEUTRAL_SCHEME, loadKeybinds, saveKeybinds, type ControlScheme, type Keybinds,
+} from '../state/keybinds';
 
 export interface Screen {
   el: HTMLElement;
   /** Called when the screen is removed. Clean up timers and listeners here. */
   destroy?(): void;
+  /**
+   * Called when another screen is pushed on top of this one. A pushed-over
+   * screen is NOT destroyed — it stays on the stack so a pop can return to it —
+   * so anything it bound to the window is still live and still listening.
+   *
+   * That is a real bug, not a theoretical one: the hub's front door binds Enter
+   * and Space to "Play Now", and without this hook that binding survived all the
+   * way into a live game, where pressing Space to clamp a faceoff threw the
+   * player back to the sport list. Any screen with a window listener, an
+   * interval, or a timer must give it up here.
+   */
+  suspend?(): void;
   /** Called when this screen becomes visible again after a pop. */
   resume?(): void;
 }
@@ -21,7 +35,16 @@ interface Entry {
 export class App {
   readonly root: HTMLElement;
   settings: Settings;
-  /** Key bindings live alongside settings so every screen can read them. */
+  /**
+   * The control scheme of the sport the player is currently in, and its
+   * bindings. A sport sets this when it loads (see the sport registry), which is
+   * what lets one rebinding screen serve every sport in the hub. Before any
+   * sport has loaded this is the neutral shell scheme — the hub has no gameplay
+   * controls of its own, and importing a sport's just to have a default would
+   * put that sport in the hub's bundle.
+   */
+  scheme: ControlScheme = NEUTRAL_SCHEME;
+  /** Key bindings for `scheme`. Screens read them; the game screen binds them. */
   keybinds: Keybinds;
   private stack: Entry[] = [];
   private toastTimer: number | null = null;
@@ -32,7 +55,7 @@ export class App {
   constructor(root: HTMLElement) {
     this.root = root;
     this.settings = loadSettings();
-    this.keybinds = loadKeybinds();
+    this.keybinds = loadKeybinds(this.scheme);
     this.applySettings();
     // Any first gesture unlocks audio (browsers require this).
     const unlock = () => {
@@ -49,10 +72,22 @@ export class App {
     audio.enabled = this.settings.sfxVolume > 0 || this.settings.musicVolume > 0;
   }
 
+  /**
+   * Enter a sport's controls. Its stored bindings load, and anything listening
+   * (a live game) is told, so switching sports can never leave a screen bound to
+   * the previous sport's keys.
+   */
+  setScheme(scheme: ControlScheme): void {
+    if (this.scheme.sport === scheme.sport) return;
+    this.scheme = scheme;
+    this.keybinds = loadKeybinds(scheme);
+    this.onKeybindsChanged?.(this.keybinds);
+  }
+
   /** Persists a new binding set and tells anything listening (a live game). */
   setKeybinds(binds: Keybinds): void {
     this.keybinds = binds;
-    saveKeybinds(binds);
+    saveKeybinds(this.scheme, binds);
     this.onKeybindsChanged?.(binds);
   }
 
@@ -76,7 +111,14 @@ export class App {
 
   push(factory: ScreenFactory): void {
     const top = this.stack[this.stack.length - 1];
-    if (top) top.screen.el.remove();
+    if (top) {
+      try {
+        top.screen.suspend?.();
+      } catch (err) {
+        console.error('[app] screen suspend failed', err);
+      }
+      top.screen.el.remove();
+    }
     this.mount(factory);
     audio.play('ui');
   }

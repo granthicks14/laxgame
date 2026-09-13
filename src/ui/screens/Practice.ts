@@ -1,6 +1,7 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
-import { screenEl, topbar, panel, teamBadge } from '../components';
+import { screenEl, topbar, panel } from '../components';
+import { teamBadge } from '../../sports/lacrosse/ui';
 import { getTeam } from '../../data/teams';
 import { quickPrefs } from '../../state/session';
 import { makeMatchConfig } from '../../league/matchSetup';

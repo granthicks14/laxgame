@@ -3,7 +3,8 @@ import { CAREER_VERSION, type Career, type CareerMode } from '../league/types';
 import { tryGetTeam } from '../data/teams';
 import { tryWorldTeam } from '../data/world';
 import { EMPTY_STAFF } from '../league/coaching';
-import { ALL_MODES } from '../league/modes';
+import { ALL_MODES, MODE_LABEL } from '../league/modes';
+import { clearProgress, noteProgress } from './hubIndex';
 import { LEVELS, type Level } from '../data/levels';
 import { DEFAULT_TIER } from '../challenge/difficulty';
 
@@ -272,12 +273,30 @@ export function takeRetiredNotice(): string[] | null {
   return raw.split(',').filter(Boolean);
 }
 
+/** The team short name, from whichever of the two team tables owns it. */
+function userTeamShort(career: Career): string {
+  return tryGetTeam(career.teamId)?.short
+    ?? tryWorldTeam(career.teamId)?.short
+    ?? 'Your programme';
+}
+
 export function saveCareer(career: Career): boolean {
-  return save(key(career.mode), career);
+  const ok = save(key(career.mode), career);
+  // Leave the hub a one-line headline so it can offer to carry on without
+  // loading any of this. See state/hubIndex.
+  if (ok) {
+    const team = userTeamShort(career);
+    const titles = career.championships === 1 ? '1 title' : `${career.championships} titles`;
+    noteProgress('lacrosse', MODE_LABEL[career.mode],
+      `${team} · Year ${career.year}${career.championships ? ` · ${titles}` : ''}`);
+  }
+  return ok;
 }
 
 export function deleteCareer(mode: CareerMode): void {
   removeRaw(key(mode));
+  // If that was the last lacrosse save, the hub should stop offering it.
+  if (!ALL_MODES.some(hasCareer)) clearProgress('lacrosse');
 }
 
 export function hasCareer(mode: CareerMode): boolean {

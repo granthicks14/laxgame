@@ -1,6 +1,7 @@
 import type { Match } from '../../match/Match';
 import type { InputState } from '../../match/types';
-import { bindingText, DEFAULT_KEYBINDS, type Keybinds } from '../../state/keybinds';
+import { bindingText, normalizeKeybinds, type Keybinds } from '../../state/keybinds';
+import { LACROSSE_CONTROLS } from '../../sports/lacrosse/controls';
 
 interface Step {
   id: string;
@@ -70,7 +71,10 @@ export class Tutorial {
   private binds: Keybinds;
   onFinished: (() => void) | null = null;
 
-  constructor(match: Match, touch: boolean, binds: Keybinds = DEFAULT_KEYBINDS) {
+  constructor(
+    match: Match, touch: boolean,
+    binds: Keybinds = normalizeKeybinds(LACROSSE_CONTROLS, null),
+  ) {
     this.touch = touch;
     this.binds = binds;
     this.ctx = { match, input: null as never, dt: 0, distanceMoved: 0, sprintTime: 0, flags: new Set() };

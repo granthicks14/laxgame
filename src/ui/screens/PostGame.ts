@@ -1,6 +1,7 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
-import { screenEl, panel, panelFlush, statBar, teamBadge } from '../components';
+import { screenEl, panel, panelFlush, statBar } from '../components';
+import { teamBadge } from '../../sports/lacrosse/ui';
 import type { Match } from '../../match/Match';
 import type { Side } from '../../data/constants';
 import { shortName, type PlayerData, type PlayerStats } from '../../data/players';

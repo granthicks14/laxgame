@@ -7,6 +7,7 @@
  */
 import { chromium } from 'playwright';
 import { chromiumPath } from './chromium.mjs';
+import { enterSport as enterLacrosse } from './enter.mjs';
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
 const EXEC = chromiumPath();
@@ -51,13 +52,25 @@ async function boot() {
   await page.goto(BASE, { waitUntil: 'networkidle' });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle' });
-  await page.getByText('Press Start').click();
-  await settle();
+  await enterLacrosse(page);
 }
 
 async function backToMenu() {
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     if (await page.locator('.menu-btn').count()) return true;
+    // Sweeping clicks EVERY control on a screen, and the lacrosse menu now
+    // carries a way back to the sports hub. Landing there is a correct outcome
+    // of the sweep, so the recovery path has to know how to walk back in.
+    if (await page.locator('.hub-mark__sports').count()) {
+      await enterLacrosse(page);
+      continue;
+    }
+    if (await page.locator('.sport-card').count()) {
+      await page.locator('.sport-card__name').filter({ hasText: 'Lacrosse' }).first().click();
+      await page.locator('.menu-btn').first().waitFor({ state: 'visible', timeout: 15000 });
+      await settle(300);
+      continue;
+    }
     const back = page.locator('.topbar button').first();
     if (await back.count()) { await back.click(); await settle(300); continue; }
     // In a game: pause and quit.
@@ -203,8 +216,7 @@ async function toHub() {
   // Season hub too, which is how a whole career sweep once ran against the
   // wrong save.
   await page.goto(BASE, { waitUntil: 'networkidle' });
-  const ps = page.getByText('Press Start');
-  if (await ps.count()) { await ps.click().catch(() => {}); await settle(400); }
+  await enterLacrosse(page);
   const item = page.locator('.menu-btn__label').filter({ hasText: 'Dynasty' }).first();
   if (!(await item.count())) return false;
   await item.click().catch(() => {});

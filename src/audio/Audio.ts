@@ -1,10 +1,69 @@
-/** All audio is synthesised with the Web Audio API — there are no sound files to
- *  load, nothing to license, and nothing that can 404. If the browser blocks audio
- *  entirely the game keeps running silently. */
+/* ---------------------------------------------------------------------------
+ * AUDIO
+ * ---------------------------------------------------------------------------
+ * All audio is synthesised with the Web Audio API — there are no sound files to
+ * load, nothing to license, and nothing that can 404. If the browser blocks
+ * audio entirely the game keeps running silently.
+ *
+ * The engine owns the SYNTHESIS and nothing about any sport. A sport supplies a
+ * SOUND PACK: a map from sound name to a recipe written against the two
+ * primitives below, `tone` and `noise`, plus the crowd. A rim rattling and a
+ * lacrosse ball hitting the post are two recipes, not two engines, and swapping
+ * sports swaps the pack.
+ *
+ * Interface sounds are the exception and live here, because the hub itself makes
+ * them before any sport has loaded.
+ *
+ * `play` takes a plain string rather than a per-sport union, deliberately: the
+ * alternative couples this file to every sport's sound list, or renames every
+ * `audio.play` call site in the game. A name with no recipe is a no-op, and
+ * `npm run sounds` fails the build if any name the game plays has none, which
+ * catches the typo that the union would have caught.
+ * ------------------------------------------------------------------------- */
 
-type SfxName =
-  | 'whistle' | 'pass' | 'catch' | 'shot' | 'goal' | 'save' | 'check'
-  | 'post' | 'ui' | 'uiBack' | 'error' | 'crowdUp' | 'buzzer';
+/** What a sound recipe is allowed to do. */
+export interface SynthApi {
+  /** An oscillator blip. `slideTo` sweeps the pitch across the duration. */
+  tone(
+    freq: number, dur: number, type: OscillatorType, gain: number,
+    slideTo?: number, delay?: number,
+  ): void;
+  /** Band-passed noise — impacts, scrapes, whistles. `sweepTo` moves the band. */
+  noise(
+    dur: number, gain: number, filterFreq: number, q?: number,
+    delay?: number, sweepTo?: number,
+  ): void;
+  /** A crowd swell over the ambient bed. */
+  cheer(intensity: number, dur: number): void;
+}
+
+/** One sound, in terms of the primitives. `intensity` is 0..1-ish from the game. */
+export type SoundRecipe = (a: SynthApi, intensity: number) => void;
+
+/** A sport's sounds, by name. */
+export type SoundPack = Record<string, SoundRecipe>;
+
+/** Interface sounds every screen in the hub can make, sport or no sport. */
+export const UI_SOUNDS: SoundPack = {
+  ui: (a) => {
+    a.tone(880, 0.05, 'square', 0.05);
+    a.tone(1320, 0.05, 'square', 0.035, undefined, 0.035);
+  },
+  uiBack: (a) => {
+    a.tone(520, 0.06, 'square', 0.05);
+    a.tone(360, 0.07, 'square', 0.04, undefined, 0.04);
+  },
+  error: (a) => {
+    a.tone(180, 0.16, 'square', 0.07, 120);
+  },
+  /** The hub handing over to a sport. */
+  launch: (a) => {
+    a.tone(330, 0.1, 'square', 0.07);
+    a.tone(440, 0.1, 'square', 0.07, undefined, 0.08);
+    a.tone(660, 0.22, 'square', 0.08, undefined, 0.16);
+  },
+  crowdUp: (a, intensity) => a.cheer(intensity, 1.4),
+};
 
 export class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -127,63 +186,35 @@ export class AudioEngine {
     src.stop(t + dur + 0.05);
   }
 
-  play(name: SfxName, intensity = 1): void {
+  /** The recipe surface handed to a sound pack. */
+  private readonly api: SynthApi = {
+    tone: (freq, dur, type, gain, slideTo, delay) =>
+      this.tone(freq, dur, type, gain, slideTo, delay),
+    noise: (dur, gain, filterFreq, q, delay, sweepTo) =>
+      this.noise(dur, gain, filterFreq, q, delay, sweepTo),
+    cheer: (intensity, dur) => this.cheer(intensity, dur),
+  };
+
+  private pack: SoundPack = {};
+
+  /**
+   * Point the engine at a sport's sounds. Called when a sport loads; the
+   * interface pack is always available underneath, so menus keep their clicks.
+   */
+  usePack(pack: SoundPack): void {
+    this.pack = pack;
+  }
+
+  /** Is there a recipe for this name? Used by the sound-coverage check. */
+  knows(name: string): boolean {
+    return !!(this.pack[name] ?? UI_SOUNDS[name]);
+  }
+
+  play(name: string, intensity = 1): void {
     if (!this.ctx || !this.enabled) return;
-    switch (name) {
-      case 'whistle':
-        this.tone(2100, 0.16, 'square', 0.09);
-        this.tone(2650, 0.16, 'square', 0.06, undefined, 0.005);
-        break;
-      case 'pass':
-        this.noise(0.1, 0.1, 1800, 1.4, 0, 700);
-        break;
-      case 'catch':
-        this.noise(0.06, 0.13, 900, 2.2);
-        this.tone(240, 0.05, 'triangle', 0.07);
-        break;
-      case 'shot':
-        this.noise(0.16, 0.12 + intensity * 0.09, 2600, 1.2, 0, 500);
-        this.tone(160 + intensity * 90, 0.1, 'sawtooth', 0.05, 70);
-        break;
-      case 'goal':
-        this.tone(523, 0.1, 'square', 0.12);
-        this.tone(659, 0.1, 'square', 0.12, undefined, 0.09);
-        this.tone(784, 0.16, 'square', 0.13, undefined, 0.18);
-        this.tone(1047, 0.34, 'square', 0.12, undefined, 0.28);
-        this.cheer(1.0, 1.8);
-        break;
-      case 'save':
-        this.noise(0.11, 0.2, 420, 1.1);
-        this.tone(120, 0.14, 'sine', 0.12, 70);
-        this.cheer(0.55, 1.1);
-        break;
-      case 'check':
-        this.noise(0.13, 0.22, 260, 0.9);
-        this.tone(90, 0.16, 'sine', 0.14, 50);
-        break;
-      case 'post':
-        this.tone(880, 0.25, 'sine', 0.16, 620);
-        this.tone(1320, 0.18, 'sine', 0.08);
-        break;
-      case 'ui':
-        this.tone(880, 0.05, 'square', 0.05);
-        this.tone(1320, 0.05, 'square', 0.035, undefined, 0.035);
-        break;
-      case 'uiBack':
-        this.tone(520, 0.06, 'square', 0.05);
-        this.tone(360, 0.07, 'square', 0.04, undefined, 0.04);
-        break;
-      case 'error':
-        this.tone(180, 0.16, 'square', 0.07, 120);
-        break;
-      case 'buzzer':
-        this.tone(160, 0.7, 'square', 0.11);
-        this.tone(161.5, 0.7, 'sawtooth', 0.06);
-        break;
-      case 'crowdUp':
-        this.cheer(intensity, 1.4);
-        break;
-    }
+    const recipe = this.pack[name] ?? UI_SOUNDS[name];
+    if (!recipe) return;
+    recipe(this.api, intensity);
   }
 
   /** Crowd swell layered over the ambient bed. */

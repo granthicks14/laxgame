@@ -13,6 +13,7 @@ import { chromiumPath } from './chromium.mjs';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { enterSport as enterLacrosse } from './enter.mjs';
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
 const OUT = process.argv[2] ?? 'shots';
@@ -77,8 +78,7 @@ for (const size of SIZES) {
       localStorage.setItem(k, v);
     }, [keyFor(save), save]);
     await page.reload({ waitUntil: 'networkidle' });
-    await page.getByText('Press Start').click();
-    await settle(450);
+    await enterLacrosse(page);
   };
 
   await boot(CHAMPION);
@@ -152,8 +152,7 @@ for (const size of SIZES) {
   // The difficulty picker, from a clean start.
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle' });
-  await page.getByText('Press Start').click();
-  await settle(450);
+  await enterLacrosse(page);
   await menu('Challenge');
   await settle(450);
   await shot('challenge-intro');

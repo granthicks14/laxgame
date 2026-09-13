@@ -960,7 +960,12 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
 
 /* ------------------------------------------------------------ title screen */
 
-.title-screen {
+/* ------------------------------------------------------------------ the hub */
+
+/* The hub's front door. Deliberately the same construction as a sport's own
+ * title — a mark, a rule, a short line — so crossing into a sport feels like
+ * going deeper into one product rather than launching a different one. */
+.hub-title {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
@@ -968,7 +973,8 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
   padding: 24px;
   overflow: hidden;
 }
-.title-screen::before {
+/* A field of play, rolling past behind the mark. */
+.hub-title::before {
   content: '';
   position: absolute; inset: -20%;
   background:
@@ -978,8 +984,16 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
   animation: pan 24s linear infinite;
 }
 @keyframes pan { from { transform: rotate(-8deg) translateX(0); } to { transform: rotate(-8deg) translateX(-84px); } }
-.title-mark { position: relative; text-align: center; z-index: 1; }
-.title-mark__star {
+.hub-title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(900px 520px at 50% 38%, transparent 30%, rgba(5,8,11,.75) 100%);
+  pointer-events: none;
+}
+
+.hub-mark { position: relative; text-align: center; z-index: 1; }
+.hub-mark__star {
   position: absolute;
   left: 50%; top: 46%;
   width: min(300px, 62vw); height: min(300px, 62vw);
@@ -989,43 +1003,196 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
   clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
   pointer-events: none;
 }
-.title-mark__lone {
-  font-family: var(--display);
-  font-size: clamp(30px, 9vw, 58px);
+.hub-mark__lone {
+  font-size: clamp(26px, 7.5vw, 46px);
   letter-spacing: 0.34em;
   color: var(--text-2);
   margin-left: 0.34em;
 }
-.title-mark__lax {
-  font-family: var(--display);
-  font-size: clamp(58px, 20vw, 132px);
+.hub-mark__sports {
+  font-size: clamp(46px, 16vw, 104px);
   letter-spacing: 0.02em;
   line-height: 0.86;
   color: var(--accent);
   text-shadow: 0 6px 0 #7a5400, 0 10px 24px rgba(0,0,0,.6);
 }
-.title-mark__rule { height: 4px; background: var(--red); margin: 12px auto 10px; width: 72%; }
-.title-mark__sub {
-  font-family: var(--display);
+.hub-mark__rule { height: 4px; background: var(--red); margin: 12px auto 10px; width: 72%; }
+.hub-mark__sub {
   font-size: clamp(11px, 3.2vw, 15px);
-  letter-spacing: 0.4em;
+  letter-spacing: 0.36em;
   color: var(--text-2);
-  margin-left: 0.4em;
+  margin-left: 0.36em;
 }
-.title-actions { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 10px; width: min(340px, 90vw); }
-.title-foot { position: absolute; z-index: 1; bottom: calc(14px + var(--safe-b)); left: 0; right: 0; text-align: center; font-size: 11px; color: var(--muted); padding: 0 16px; }
-
-.title-start { animation: start-pulse 2.4s ease-in-out infinite; }
+.hub-title__actions {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; gap: 10px;
+  width: min(340px, 90vw);
+}
+.hub-title__foot {
+  position: absolute; z-index: 1;
+  bottom: calc(14px + var(--safe-b)); left: 0; right: 0;
+  text-align: center; font-size: 11px; color: var(--muted);
+  padding: 0 16px;
+}
+.hub-play { min-height: 56px; font-size: 20px; animation: start-pulse 2.4s ease-in-out infinite; }
 @keyframes start-pulse {
   0%, 100% { box-shadow: 3px 3px 0 rgba(0,0,0,.45); }
   50% { box-shadow: 3px 3px 0 rgba(0,0,0,.45), 0 0 0 4px rgba(255,197,61,.22); }
 }
-.title-screen::after {
-  content: '';
+.hub-continue { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; }
+.hub-continue__label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; }
+.hub-continue__detail { font-size: 11px; color: var(--text-2); text-transform: none; letter-spacing: 0; }
+
+/* The way back to the hub, on every sport's front screen. */
+.hub-back { font-size: 19px; line-height: 1; }
+
+/* ------------------------------------------------------------ sport select */
+
+.sport-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.sport-card {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 0;
+  align-items: stretch;
+  text-align: left;
+  padding: 0;
+  border: 2px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 3px 3px 0 rgba(0,0,0,.45);
+  transition: transform .09s steps(2), border-color .12s, box-shadow .09s;
+}
+.sport-card:hover, .sport-card:focus-visible {
+  border-color: var(--card-accent);
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 rgba(0,0,0,.5);
+  outline: none;
+}
+.sport-card:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 rgba(0,0,0,.5); }
+.sport-card__frame {
+  border-right: 2px solid var(--line);
+  background: #000;
+  display: flex; align-items: center;
+  overflow: hidden;
+}
+.sport-card__art { display: block; image-rendering: pixelated; }
+.sport-card__body { padding: 9px 11px 10px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sport-card__head { display: flex; align-items: baseline; gap: 8px; }
+.sport-card__name {
+  font-size: 21px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--card-accent);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sport-card__badge {
+  font-family: var(--display);
+  font-size: 10px; letter-spacing: 0.14em;
+  padding: 2px 5px;
+  background: var(--card-accent); color: var(--card-ink);
+  flex: 0 0 auto;
+}
+.sport-card__title {
+  font-family: var(--display);
+  font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-2);
+}
+.sport-card__blurb { font-size: 12px; color: var(--text-2); line-height: 1.4; }
+.sport-card__modes { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+.sport-card__mode {
+  font-size: 10px; letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.sport-card__resume {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--card-accent);
+  margin-top: 3px;
+}
+.sport-card__resume--new { color: var(--muted); font-family: var(--body); font-style: italic; }
+
+/* The roadmap. Not buttons, and it should not look like buttons. */
+.sport-soon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 8px;
+}
+.sport-soon {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  align-items: center;
+  gap: 9px;
+  padding: 6px;
+  border: 1px dashed var(--line);
+  opacity: 0.72;
+}
+.sport-soon__frame { background: #000; overflow: hidden; display: flex; }
+.sport-soon__name { font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-2); }
+.sport-soon__note { font-size: 11px; color: var(--muted); line-height: 1.35; }
+
+/* ----------------------------------------------------------- sport loading */
+
+.sport-load {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  overflow: hidden;
+}
+.sport-load__art {
   position: absolute;
-  inset: 0;
-  background: radial-gradient(900px 520px at 50% 38%, transparent 30%, rgba(5,8,11,.75) 100%);
+  left: 50%; top: 50%;
+  width: min(760px, 150vw);
+  height: auto;
+  transform: translate(-50%, -50%);
+  opacity: 0.2;
+  image-rendering: pixelated;
   pointer-events: none;
+}
+.sport-load__plate { position: relative; z-index: 1; text-align: center; }
+.sport-load__sport {
+  font-size: clamp(11px, 3.2vw, 14px);
+  letter-spacing: 0.42em;
+  color: var(--text-2);
+  margin-left: 0.42em;
+}
+.sport-load__title {
+  font-size: clamp(40px, 13vw, 84px);
+  line-height: 0.9;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  text-shadow: 0 5px 0 rgba(0,0,0,.55);
+}
+.sport-load__rule { height: 3px; background: var(--red); margin: 10px auto 8px; width: 60%; }
+.sport-load__tag { position: relative; z-index: 1; font-size: 13px; color: var(--text-2); }
+.sport-load__meter {
+  position: relative; z-index: 1;
+  width: min(300px, 78vw);
+  height: 10px;
+  border: 2px solid var(--line);
+  background: var(--panel);
+}
+.sport-load__fill { height: 100%; width: 6%; background: var(--accent); transition: width .18s linear; }
+.sport-load__status {
+  position: relative; z-index: 1;
+  font-family: var(--display);
+  font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--muted);
+}
+.sport-load__error {
+  position: relative; z-index: 1;
+  width: min(320px, 84vw);
+  text-align: center;
 }
 
 /* --------------------------------------------------------------- post game */

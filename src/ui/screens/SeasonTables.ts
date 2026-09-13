@@ -1,7 +1,8 @@
 import { h } from '../dom';
 import type { App, Screen } from '../App';
 import type { CareerMode } from '../../league/types';
-import { screenEl, topbar, panelFlush, teamBadge, emptyPanel } from '../components';
+import { screenEl, topbar, panelFlush, emptyPanel } from '../components';
+import { teamBadge } from '../../sports/lacrosse/ui';
 import { loadCareer } from '../../state/saves';
 import {
   effectiveTeam, leagueMembers, opponentOf, playoffFieldSize, roundNameIn,

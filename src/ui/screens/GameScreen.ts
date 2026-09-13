@@ -3,7 +3,9 @@ import { Match } from '../../match/Match';
 import type { MatchConfig } from '../../match/types';
 import { Renderer, type AimHint, type ViewOverride } from '../../render/Renderer';
 import { ANGLE_LABELS, replayCamera } from '../../match/replay';
-import { InputManager, type ButtonId } from '../../input/Input';
+import { InputManager } from '../../input/Input';
+import { LACROSSE_CONTROLS } from '../../sports/lacrosse/controls';
+import { laxInput } from '../../sports/lacrosse/input';
 import { h, clear } from '../dom';
 import type { App, Screen } from '../App';
 import { GAME_LENGTHS, type Side } from '../../data/constants';
@@ -42,7 +44,7 @@ export class GameScreen implements Screen {
   private opts: GameScreenOptions;
   private match: Match;
   private renderer: Renderer;
-  private input = new InputManager();
+  private input = new InputManager(LACROSSE_CONTROLS);
   private raf = 0;
   private last = 0;
   private acc = 0;
@@ -202,7 +204,7 @@ export class GameScreen implements Screen {
 
     this.elStickNub = h('div', { class: 'stick__nub' });
     this.elStick = h('div', { class: 'stick' }, this.elStickNub);
-    this.elActionBtn = this.touchButton('action', 'Pass');
+    this.elActionBtn = this.touchButton('pass', 'Pass');
     this.elScreenBtn = this.touchButton('screen', 'Screen');
     this.elTouch = h('div', { class: `touch${this.touchMode ? '' : ' is-off'}` },
       this.elStick,
@@ -238,7 +240,7 @@ export class GameScreen implements Screen {
     );
   }
 
-  private touchButton(id: ButtonId, label: string): HTMLElement {
+  private touchButton(id: string, label: string): HTMLElement {
     const btn = h('button', { class: `tbtn tbtn--${id}`, text: label, ariaLabel: label });
     // The element reports presses; every bit of held state lives in the input
     // manager so a lost pointerup cannot leave a button stuck down.
@@ -369,7 +371,7 @@ export class GameScreen implements Screen {
   private step(dt: number): void {
     const raw = this.input.consume();
     const world = this.renderer.cam.inputToWorld(raw.moveX, raw.moveY);
-    const state = { ...raw, moveX: world.x, moveY: world.y };
+    const state = { ...laxInput(raw), moveX: world.x, moveY: world.y };
     this.match.update(dt, state);
     if (this.tutorial) {
       this.tutorial.update(dt, state, this.match);

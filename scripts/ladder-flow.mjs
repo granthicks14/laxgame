@@ -19,6 +19,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { enterSport as enterLacrosse } from './enter.mjs';
 
 /** A Challenge save at a chosen rung, written by the game's own code. */
 const SEEDS = mkdtempSync(join(tmpdir(), 'lsl-seeds-'));
@@ -91,8 +92,7 @@ async function load(file, opts = {}) {
   await page.goto(BASE, { waitUntil: 'networkidle' });
   await page.evaluate(([k, s]) => { localStorage.clear(); localStorage.setItem(k, s); }, [key, json]);
   await page.reload({ waitUntil: 'networkidle' });
-  await page.getByText('Press Start').click();
-  await settle(400);
+  await enterLacrosse(page);
   await page.locator('.menu-btn__label').filter({ hasText: 'Challenge' }).first().click();
   await settle(400);
   await clickText(/Continue the career|See how it ended/i);

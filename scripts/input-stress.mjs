@@ -10,6 +10,7 @@
  */
 import { chromium, devices } from 'playwright';
 import { chromiumPath } from './chromium.mjs';
+import { enterSport as enterLacrosse } from './enter.mjs';
 
 const b = await chromium.launch({ executablePath: chromiumPath() });
 const ctx = await b.newContext({ ...devices['iPhone 13'] });
@@ -21,7 +22,7 @@ p.on('console', m => { if (m.type() === 'error') errs.push('C:' + m.text()); });
 await p.goto(process.env.BASE_URL ?? 'http://127.0.0.1:4173/', { waitUntil: 'networkidle' });
 await p.evaluate(() => localStorage.clear());
 await p.reload({ waitUntil: 'networkidle' });
-await p.getByText('Press Start').tap(); await p.waitForTimeout(350);
+await enterLacrosse(p, 'lacrosse', { tap: true });
 await p.locator('.menu-btn__label').filter({ hasText: 'Play Now' }).first().tap(); await p.waitForTimeout(350);
 await p.getByRole('button', { name: 'Faceoff' }).tap(); await p.waitForTimeout(1600);
 
@@ -205,14 +206,14 @@ const mt = await whileLive(async () => {
   await p.evaluate(() => { window.__pt('pointerdown', 10, 90, 420); window.__pt('pointermove', 10, 150, 420); });
   await p.locator('.tbtn--shoot').dispatchEvent('pointerdown', { pointerId: 11, pointerType: 'touch', clientX: 300, clientY: 560, bubbles: true });
   await p.waitForTimeout(200);
-  const bothHeld = await p.evaluate(() => window.loneStarLax.input.shootDown);
+  const bothHeld = await p.evaluate(() => window.loneStarLax.input.isDown('shoot'));
   await p.evaluate(() => window.__pt('pointerup', 10, 150, 420));  // lift the stick finger first
   await p.waitForTimeout(200);
   const afterStick = await st();
-  const stillHeld = await p.evaluate(() => window.loneStarLax.input.shootDown);
+  const stillHeld = await p.evaluate(() => window.loneStarLax.input.isDown('shoot'));
   await p.evaluate(() => window.__pt('pointerup', 11, 300, 560));
   await p.waitForTimeout(200);
-  const afterButton = await p.evaluate(() => window.loneStarLax.input.shootDown);
+  const afterButton = await p.evaluate(() => window.loneStarLax.input.isDown('shoot'));
   return { bothHeld, afterStick, stillHeld, afterButton };
 });
 check('shoot button holds while the stick is active', mt !== null && mt.bothHeld === true);

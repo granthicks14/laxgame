@@ -22,6 +22,7 @@
 import { chromium } from 'playwright';
 import { chromiumPath } from './chromium.mjs';
 import { execFileSync } from 'node:child_process';
+import { enterSport as enterLacrosse } from './enter.mjs';
 
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:4173/';
 const MODE = 'superchallenge';
@@ -51,8 +52,7 @@ async function open(page, which = save) {
   await page.goto(BASE, { waitUntil: 'networkidle' });
   await page.evaluate(([k, v]) => { localStorage.clear(); localStorage.setItem(k, v); }, [key, which]);
   await page.reload({ waitUntil: 'networkidle' });
-  await page.getByText('Press Start').click();
-  await page.waitForTimeout(420);
+  await enterLacrosse(page);
   await page.locator('.menu-btn__label').filter({ hasText: 'Super Challenge' }).first().click();
   await page.waitForTimeout(420);
   const cont = page.getByRole('button', { name: /Continue the career|See how it ended/i }).first();
