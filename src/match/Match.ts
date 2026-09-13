@@ -712,6 +712,20 @@ export class Match {
 
   private finishGame(): void {
     this.phase = 'final';
+    // Drop the ball where it was being held rather than only clearing the
+    // carrier. A carried ball is drawn in the carrier's stick and skipped by the
+    // loose-ball pass (see Renderer), so a whistle that caught somebody holding
+    // it used to leave the ball drawn by neither — it simply disappeared off the
+    // field on the last frame of the game.
+    const held = this.ball.carrier;
+    if (held && this.ball.state === 'carried') {
+      const s = this.stickPos(held);
+      this.ball.x = s.x;
+      this.ball.y = s.y;
+      this.ball.z = 1.2;
+    }
+    this.ball.state = 'loose';
+    this.ball.vx = 0; this.ball.vy = 0; this.ball.vz = 0;
     this.ball.carrier = null;
     this.events.emit('gameEnd', {});
   }

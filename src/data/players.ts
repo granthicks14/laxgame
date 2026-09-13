@@ -293,9 +293,22 @@ export function ensureDevProfile(p: PlayerData, rng: Rng): DevProfile {
   return p.dev;
 }
 
-let uid = 0;
-function nextId(): string {
-  return `p${(++uid).toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+/**
+ * A player's id, drawn entirely from the generator's own seeded stream.
+ *
+ * Two properties are needed here and a process-wide counter provides only one
+ * of them. Ids must not collide — the counter used to restart at zero every page
+ * load, so a freshly generated player could take an id already held by someone
+ * in the save that a transfer later brought onto the same roster — and a career
+ * started from a given seed must come out the same every time, because the id is
+ * hashed into a transfer pitch's rng (career.ts) and into the scouting sheet's
+ * per-attribute offsets (prospects.ts). A counter breaks the second: it made a
+ * career's portal depend on how many players happened to be generated before
+ * it. Sixty-two seeded bits give collision odds far below what the old
+ * counter-plus-Math.random() pair managed, and they reproduce.
+ */
+function nextId(rng: Rng): string {
+  return `p${rng.int(0, 0x7fff_ffff).toString(36)}${rng.int(0, 0x7fff_ffff).toString(36)}`;
 }
 
 export function generatePlayer(
@@ -346,7 +359,7 @@ export function generatePlayer(
   return {
     dev,
     project: null,
-    id: nextId(),
+    id: nextId(rng),
     first: opts.first ?? rng.pick(FIRST_NAMES),
     last: opts.last ?? rng.pick(LAST_NAMES),
     source: opts.source ?? 'generated',
