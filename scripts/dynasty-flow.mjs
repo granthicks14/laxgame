@@ -141,9 +141,11 @@ await back();
 
 const advanceSeason = async () => {
   // Simulating a season now passes through the postseason screens: qualifying
-  // is shown once, and the bracket opens itself when the playoffs are drawn.
+  // is shown once, the bracket opens itself when the playoffs are drawn, and a
+  // title gets its own moment before the summary.
   if (await clickText(/^Simulate this game$/)) return true;
   if (await clickText(/^Continue to the (playoffs|season)$/)) return true;
+  if (await page.locator('.champ').count()) return clickText(/^Continue$/);
   return false;
 };
 

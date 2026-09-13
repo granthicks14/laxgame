@@ -70,6 +70,8 @@ export interface SeasonRecord {
 
 /** One line of the offseason development report. */
 export interface DevelopmentEntry {
+  /** The player, so his face can be shown. Absent in saves written before it. */
+  id?: string;
   name: string;
   pos: string;
   grade: number;
@@ -153,6 +155,8 @@ export interface Career {
   postseason: {
     /** False until the "you are in" screen has been shown for this season. */
     clinchedSeen: boolean;
+    /** False until the championship celebration has been shown for this title. */
+    titleSeen: boolean;
     /** How many rounds the coach has watched, for following it after a defeat. */
     revealed: number;
   };

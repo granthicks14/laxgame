@@ -491,7 +491,7 @@ function defenseAI(m: Match, p: MatchPlayer, dt: number): void {
   // Star awareness: a defence knows who it cannot let get going. A marked star
   // is played a touch tighter and drawn help a touch sooner. Deliberately small
   // — a star should still be worth having, just not free.
-  const star = starTier(carrier.data.overall);
+  const star = starTier(carrier.data.overall, m.cfg.level);
   const starTight = star === 2 ? 0.82 : star === 1 ? 0.9 : 1;
   const starHelp = star === 2 ? 1.15 : star === 1 ? 1.07 : 1;
 

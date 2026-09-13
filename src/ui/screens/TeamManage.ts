@@ -1,5 +1,6 @@
-import { h, clear } from '../dom';
+import { activatable, h, clear } from '../dom';
 import type { App, Screen } from '../App';
+import type { Level } from '../../data/levels';
 import type { CareerMode } from '../../league/types';
 import { screenEl, topbar, panel, panelFlush, ratingBar, segmented, teamBadge, emptyPanel } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
@@ -142,8 +143,8 @@ export function roleOf(career: Career, p: PlayerData): string {
 const STARTERS: Record<string, number> = { A: 3, M: 3, D: 3, G: 1, FO: 1 };
 
 /** The same star a player wears on the field, so the two never disagree. */
-export function starMark(overall: number): HTMLElement | null {
-  const tier = starTier(overall);
+export function starMark(overall: number, level: Level = 'hs'): HTMLElement | null {
+  const tier = starTier(overall, level);
   if (!tier) return null;
   return h('span', {
     class: `star star--${tier}`,
@@ -157,16 +158,14 @@ function rosterTable(app: App, career: Career, mode: CareerMode): HTMLElement {
   const team = userTeam(career);
   const rows = roster.map((p) => {
     const starter = isStarter(roster, p);
-    return h('tr', {
-      class: starter ? 'is-you' : '',
-      on: { click: () => app.push((a) => new PlayerScreen(a, mode, p.id)) },
-    },
+    // Rows open a profile, so they are controls: keyboard included.
+    return activatable(h('tr', { class: starter ? 'is-you' : '' },
       h('td', { class: 'name' },
         h('div', { style: 'display:flex;align-items:center;gap:8px' },
-          playerPortrait(p, team, 28, false),
+          playerPortrait(p, team, 24, false),
           h('span', { class: 'num', style: 'color:var(--muted);width:22px', text: `#${p.number}` }),
           h('span', { text: `${p.first} ${p.last}` }),
-          starMark(p.overall))),
+          starMark(p.overall, career.level))),
       h('td', { text: p.pos }),
       h('td', { text: GRADE_LABEL[p.grade] }),
       h('td', { text: String(p.overall) }),
@@ -174,7 +173,7 @@ function rosterTable(app: App, career: Career, mode: CareerMode): HTMLElement {
       h('td', { text: String(p.season.assists) }),
       h('td', { text: String(p.season.groundBalls) }),
       h('td', { text: p.pos === 'G' ? String(p.season.saves) : '—' }),
-    );
+    ), () => app.push((a) => new PlayerScreen(a, mode, p.id)));
   });
   return h('div', { class: 'table-wrap' },
     h('table', { class: 'table table--compact' },
@@ -212,7 +211,9 @@ export class PlayerScreen implements Screen {
       return;
     }
 
-    const cpLabel = h('span', { class: 'pill pill--green', text: `${career.coachingPoints} CP` });
+    // The coach's budget, not a fact about this player — so it sits with the
+    // controls that spend it rather than among his position and class.
+    const cpLabel = h('span', { class: 'pill pill--green', text: `${career.coachingPoints} CP banked` });
     const attrsBox = h('div', { class: 'stack', style: 'gap:6px' });
     const maxed = () => p.overall >= p.potential + 4;
 
@@ -252,7 +253,7 @@ export class PlayerScreen implements Screen {
       topbar(app, `${p.first} ${p.last}`, `#${p.number}`),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
-          this.cardPanel(career, p, ovr, cpLabel),
+          this.cardPanel(career, p, ovr),
 
           panel('Season stats',
             h('div', { class: 'row row--wrap', style: 'gap:14px' },
@@ -266,7 +267,11 @@ export class PlayerScreen implements Screen {
           this.strengthsPanel(career, p),
           this.profilePanel(career, p),
           this.projectPanel(app, career, p),
-          panel('Attributes', attrsBox),
+          panel('Attributes',
+            h('div', { class: 'row', style: 'justify-content:space-between;gap:8px' },
+              h('div', { class: 'tiny', text: `Training costs ${TRAIN_COST} CP and adds +2.` }),
+              cpLabel),
+            attrsBox),
           this.historyPanel(p),
         )),
     );
@@ -278,15 +283,15 @@ export class PlayerScreen implements Screen {
    * it answers anything else.
    */
   private cardPanel(
-    career: Career, p: PlayerData, ovr: HTMLElement, cpLabel: HTMLElement,
+    career: Career, p: PlayerData, ovr: HTMLElement,
   ): HTMLElement {
     const team = userTeam(career);
-    const tier = starTier(p.overall);
+    const tier = starTier(p.overall, career.level);
     const room = Math.max(0, p.potential - p.overall);
     return h('div', { class: 'panel card' },
       h('div', { class: 'panel__body row', style: 'gap:14px;align-items:flex-start' },
         h('div', { class: 'stack', style: 'gap:6px;align-items:center;flex:0 0 auto' },
-          playerPortrait(p, team, 84, false),
+          playerPortrait(p, team, 96, false),
           h('div', { class: 'card__num display', text: `#${p.number}` })),
         h('div', { class: 'stack', style: 'gap:6px;flex:1 1 auto;min-width:0' },
           h('div', { class: 'display', style: 'font-size:21px;line-height:1.05' },
@@ -300,8 +305,7 @@ export class PlayerScreen implements Screen {
                 class: 'pill pill--green',
                 text: tier === 2 ? '★★ ELITE' : '★ STAR',
               })
-              : null,
-            cpLabel),
+              : null),
           h('div', { class: 'row', style: 'gap:16px;margin-top:2px' },
             h('div', { class: 'stack', style: 'gap:0;align-items:center' },
               h('div', { class: 'eyebrow', text: 'OVR' }), ovr),

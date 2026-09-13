@@ -38,6 +38,12 @@ async function measure(page, label) {
     const targets = [...document.querySelectorAll('.screen button:not(.seg__opt)')]
       .map((el) => el.getBoundingClientRect().height)
       .filter((n) => n > 0);
+    // Text that is cut off with an ellipsis is text the player cannot read.
+    // The topbar is where it happens first, because the title and the subtitle
+    // share one line and neither wraps.
+    const clipped = [...document.querySelectorAll('.topbar__sub, .topbar__title')]
+      .filter((el) => el.scrollWidth - el.clientWidth > 1)
+      .map((el) => (el.textContent ?? '').trim());
     return {
       overflow: Math.max(
         doc.scrollWidth - doc.clientWidth,
@@ -46,11 +52,13 @@ async function measure(page, label) {
       minFont: small.length ? Math.min(...small) : 99,
       minTarget: targets.length ? Math.min(...targets) : 99,
       buttons: targets.length,
+      clipped,
     };
   });
   check(`${label}: no horizontal overflow`, m.overflow <= 1, `${m.overflow}px`);
   check(`${label}: text stays legible`, m.minFont >= 10.5, `${m.minFont}px smallest`);
   check(`${label}: touch targets are big enough`, m.minTarget >= 30, `${m.minTarget.toFixed(0)}px smallest of ${m.buttons}`);
+  check(`${label}: nothing in the topbar is cut off`, m.clipped.length === 0, m.clipped.join(' | '));
 }
 
 for (const [device, width, height] of SIZES) {
@@ -82,7 +90,7 @@ for (const [device, width, height] of SIZES) {
   await click(/^Impossible Challenge/i);
   await page.waitForTimeout(360);
   await measure(page, `${device} · Difficulty detail`);
-  await click(/Compare all four/);
+  await click(/Compare all \d+/);
   await page.waitForTimeout(420);
   await measure(page, `${device} · Difficulty comparison`);
   await page.locator('.topbar button').first().click();

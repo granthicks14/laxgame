@@ -18,8 +18,27 @@ export interface Attrs {
   role?: string;
   tabIndex?: number;
   ariaLabel?: string;
+  /** Decorative layers — confetti, washes — must not be read out. */
+  ariaHidden?: boolean;
   dataset?: Record<string, string>;
   on?: Partial<Record<keyof HTMLElementEventMap, (e: never) => void>>;
+}
+
+/**
+ * Makes a non-button element behave like one: clickable, focusable, and
+ * operable from the keyboard. A table row that only answers the mouse is a
+ * control half the players cannot reach.
+ */
+export function activatable(el: HTMLElement, run: () => void): HTMLElement {
+  el.setAttribute('role', 'button');
+  el.tabIndex = 0;
+  el.addEventListener('click', run);
+  el.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    run();
+  });
+  return el;
 }
 
 /** Tiny hyperscript helper. Keeps screens declarative without pulling in a framework. */
@@ -35,6 +54,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
     if (attrs.title) el.title = attrs.title;
     if (attrs.role) el.setAttribute('role', attrs.role);
     if (attrs.ariaLabel) el.setAttribute('aria-label', attrs.ariaLabel);
+    if (attrs.ariaHidden) el.setAttribute('aria-hidden', 'true');
     if (attrs.tabIndex !== undefined) el.tabIndex = attrs.tabIndex;
     if (attrs.style) {
       if (typeof attrs.style === 'string') el.setAttribute('style', attrs.style);

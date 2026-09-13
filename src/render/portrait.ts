@@ -34,7 +34,8 @@ export interface PortraitOptions {
   /** Stable identity. The same id always produces the same face. */
   id: string;
   pos: Position;
-  number: number;
+  /** Worn on the chest. Omitted where a screen has no number to show. */
+  number?: number;
   team: PortraitTeam;
   /** Draw the helmet. Off for a bare head shot on a profile card. */
   helmet?: boolean;
@@ -301,15 +302,16 @@ export function drawPortrait(ctx: CanvasRenderingContext2D, o: PortraitOptions):
   }
 
   // Jersey number on the chest, small and legible.
-  const n = String(o.number);
-  ctx.save();
-  ctx.imageSmoothingEnabled = false;
-  ctx.font = '700 9px "Arial Narrow", Impact, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = o.team.trim;
-  ctx.fillText(n, cx, S - 6);
-  ctx.restore();
+  if (o.number !== undefined) {
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.font = '700 9px "Arial Narrow", Impact, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = o.team.trim;
+    ctx.fillText(String(o.number), cx, S - 6);
+    ctx.restore();
+  }
 }
 
 /* ------------------------------------------------------------- the cache */
@@ -319,7 +321,7 @@ const cache = new Map<string, HTMLCanvasElement>();
 const CACHE_LIMIT = 160;
 
 function keyOf(o: PortraitOptions): string {
-  return `${o.id}|${o.number}|${o.team.primary}|${o.team.secondary}|${o.team.trim}|${o.helmet ? 'h' : 'b'}`;
+  return `${o.id}|${o.number ?? '-'}|${o.team.primary}|${o.team.secondary}|${o.team.trim}|${o.helmet ? 'h' : 'b'}`;
 }
 
 /**

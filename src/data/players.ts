@@ -131,19 +131,44 @@ export function computeOverall(pos: Position, a: PlayerAttrs): number {
 /* --------------------------------------------------------------- superstars */
 
 /**
- * Star tiers. Calibrated against the actual generated distribution (npm run
- * ratings): across the league's 800 players, ~4.6% reach 86 and ~1% reach 90,
- * so a star is roughly one per squad and an elite player is a handful in the
- * whole district — rare enough that the mark means something.
+ * Star tiers.
+ *
+ * A star is a player who stands out AMONG HIS OWN — which on a universal rating
+ * scale cannot be a fixed number. 79 is the best player in a high school
+ * district and a bench player in the PLL, so a single absolute threshold marks
+ * either nobody at the bottom or everybody at the top. (It did: after the scale
+ * was unified, 86 and 90 were unreachable at high school, and Dynasty, which is
+ * played entirely at high school, silently lost the star system altogether.)
+ *
+ * So the marks are a share of the level's own band, calibrated against the real
+ * generated distributions (`npm run ratings`, which fails if a level's stars
+ * vanish or become common): roughly one star per squad, and a handful of elite
+ * players in a whole league.
  */
-export const STAR_OVERALL = 86;
-export const ELITE_OVERALL = 90;
+const STAR_MARKS: Record<Level, { star: number; elite: number }> = {
+  hs: { star: 75, elite: 80 },
+  d3: { star: 82, elite: 87 },
+  d2: { star: 87, elite: 92 },
+  d1: { star: 94, elite: 97 },
+  semipro: { star: 96, elite: 98 },
+  pll: { star: 98, elite: 99 },
+};
+
+/** Where the two marks fall at a level, on the universal scale. */
+export function starThresholds(level: Level = 'hs'): { star: number; elite: number } {
+  return STAR_MARKS[level] ?? STAR_MARKS.hs;
+}
+
+/** High school marks, for the few places that have no level to hand. */
+export const STAR_OVERALL = starThresholds('hs').star;
+export const ELITE_OVERALL = starThresholds('hs').elite;
 
 export type StarTier = 0 | 1 | 2;
 
-export function starTier(overall: number): StarTier {
-  if (overall >= ELITE_OVERALL) return 2;
-  if (overall >= STAR_OVERALL) return 1;
+export function starTier(overall: number, level: Level = 'hs'): StarTier {
+  const t = starThresholds(level);
+  if (overall >= t.elite) return 2;
+  if (overall >= t.star) return 1;
   return 0;
 }
 

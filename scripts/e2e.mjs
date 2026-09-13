@@ -208,6 +208,12 @@ async function advanceSeason(page, wait) {
       return true;
     }
   }
+  // A title gets its own screen on the way to the summary.
+  if (await page.locator('.champ').count()) {
+    await page.getByRole('button', { name: /^Continue$/i }).first().click().catch(() => {});
+    await page.waitForTimeout(wait);
+    return true;
+  }
   return false;
 }
 

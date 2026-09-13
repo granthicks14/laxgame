@@ -189,7 +189,7 @@ export class Renderer {
         charge: match.ball.carrier === p ? p.windup : 0,
         teamColor: match.setups[p.side].team.primary,
         dim: false,
-        star: starTier(p.data.overall),
+        star: starTier(p.data.overall, match.cfg.level),
       });
     }
 

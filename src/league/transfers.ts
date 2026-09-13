@@ -524,6 +524,8 @@ function pickReason(
 export interface ProgramSnapshot {
   team: TeamData;
   roster: PlayerData[];
+  /** Which level the programme plays at — a star is a star among his own. */
+  level: Level;
   prestige: number;
   staff: CoachStaff;
   /** Last season's record, for "are they winning" questions. */
@@ -596,7 +598,7 @@ export function interestIn(c: TransferCandidate, prog: ProgramSnapshot): Interes
   if (c.reason === 'development' && fx.developmentRate > 1.3) factors.push({ label: 'Development programme', delta: 12 });
 
   // --- the better the player, the higher his bar
-  const tier = starTier(c.player.overall);
+  const tier = starTier(c.player.overall, prog.level);
   if (tier > 0) factors.push({ label: tier === 2 ? 'Elite players have options' : 'Star players have options', delta: tier === 2 ? -20 : -10 });
 
   const base = 38;

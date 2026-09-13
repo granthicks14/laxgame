@@ -4,14 +4,15 @@ import { screenEl, topbar, panel, panelFlush, teamBadge, segmented, emptyPanel }
 import { CareerEntryScreen } from './CareerEntry';
 import { loadCareer, saveCareer } from '../../state/saves';
 import {
-  FOCUS_INFO, effectiveTeam, nextUserGame, opponentOf, roundName, seasonRecordText,
-  simulateUserGame, standingsSorted, userIsHome, userTeam, winPct,
+  FOCUS_INFO, champion, effectiveTeam, nextUserGame, opponentOf, roundName,
+  seasonRecordText, simulateUserGame, standingsSorted, userIsHome, userTeam, winPct,
 } from '../../league/career';
 import type { Career, CareerMode, ScheduledGame, WeeklyFocus } from '../../league/types';
 import { playSeasonGame } from './seasonPlay';
 import { TeamManageScreen } from './TeamManage';
 import { StandingsScreen, ScheduleScreen } from './SeasonTables';
 import { SeasonSummaryScreen } from './SeasonSummary';
+import { ChampionshipScreen } from './Championship';
 import { CoachOfficeScreen } from './CoachOffice';
 import { TransferPortalScreen } from './TransferPortal';
 import { DynastyStatsScreen } from './DynastyStats';
@@ -76,6 +77,16 @@ export class SeasonHubScreen implements Screen {
     // interrupts a coach who has already been in there.
     if (post && !career.seasonComplete && !career.postseason.revealed && bracketRounds(career).length) {
       this.el = new BracketScreen(app, mode, () => {
+        app.replace((a) => new SeasonHubScreen(a, mode));
+      }).el;
+      return;
+    }
+
+    // A championship is the point of a season and the thing a long career is
+    // remembered for: it gets its own moment, once, before the cold numbers.
+    if (career.seasonComplete && !career.postseason.titleSeen
+      && champion(career) === career.teamId) {
+      this.el = new ChampionshipScreen(app, career, () => {
         app.replace((a) => new SeasonHubScreen(a, mode));
       }).el;
       return;
@@ -361,7 +372,11 @@ export class SeasonHubScreen implements Screen {
     }));
     const blurb = h('div', {
       class: 'small',
-      text: career.focus ? FOCUS_INFO[career.focus].blurb : 'Pick what your team works on this week. It carries into the next game.',
+      // Saying what NOT choosing costs is the point: an untouched focus is a
+      // bonus left on the table every week of the season.
+      text: career.focus
+        ? FOCUS_INFO[career.focus].blurb
+        : 'Nothing chosen — the squad works on nothing in particular. Pick one and it carries into the next game.',
     });
     return panel('Practice focus',
       segmented<WeeklyFocus>(options, career.focus ?? ('' as WeeklyFocus), (v) => {

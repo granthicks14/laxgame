@@ -305,8 +305,18 @@ export function generateOffers(
   const picked = rng.shuffle([...window]).slice(0, count);
   if (!picked.length && sorted.length) picked.push(sorted[0]);
 
+  // Three programmes on the same screen with the identical problem — the same
+  // headline, the same blurb, the same fix — reads as a generator rather than a
+  // job market, and it makes the choice meaningless. Each offer gets a few
+  // attempts at a situation nobody else in this set has; a repeat is allowed
+  // after that, because two programmes really can be in the same trouble.
+  const taken = new Set<SituationKey>();
   return picked.map((p) => {
-    const situation = situationFor(p.prestige, rng, mods.situationSeverity);
+    let situation = situationFor(p.prestige, rng, mods.situationSeverity);
+    for (let tries = 0; tries < 4 && taken.has(situation); tries++) {
+      situation = situationFor(p.prestige, rng, mods.situationSeverity);
+    }
+    taken.add(situation);
     return {
       teamId: p.id,
       teamName: p.name,

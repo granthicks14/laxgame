@@ -190,7 +190,7 @@ export class ChallengeEntryScreen implements Screen {
 
     this.el = screenEl(
       topbar(app, isSuper ? 'Super Challenge' : 'Challenge',
-        isSuper ? 'Prove you can dominate' : 'Class D to the PLL'),
+        isSuper ? 'Prove you can dominate' : 'Class D \u2192 PLL'),
       h('div', { class: 'scroll' }, h('div', { class: 'wrapper stack' }, ...body)),
     );
   }

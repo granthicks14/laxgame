@@ -54,7 +54,11 @@ export function migrateCareer(raw: unknown): unknown {
   // The coach's profile is built on first use from what the career already has,
   // so an upgrade tree bought before this existed is not lost.
   if (c.coach === undefined) c.coach = null;
-  if (!c.postseason) c.postseason = { clinchedSeen: false, revealed: 0 };
+  if (!c.postseason) c.postseason = { clinchedSeen: false, titleSeen: false, revealed: 0 };
+  // Added with the championship celebration. An older save that already won a
+  // title simply sees it once, which is no worse than not seeing it at all.
+  const post = c.postseason as { titleSeen?: boolean };
+  if (post.titleSeen === undefined) post.titleSeen = false;
 
   // v6 -> v7: standings carry a conference split as well as the overall record.
   // A v6 save counted only conference games, so the overall record is rebuilt

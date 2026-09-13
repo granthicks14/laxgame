@@ -136,7 +136,7 @@ function playerStories(career: Career): NewsItem[] {
   }
 
   // A player crossing into star territory.
-  const stars = career.roster.filter((p) => starTier(p.overall) > 0)
+  const stars = career.roster.filter((p) => starTier(p.overall, career.level) > 0)
     .sort((a, b) => b.overall - a.overall);
   if (stars.length) {
     const s = stars[0];

@@ -75,7 +75,15 @@ const clickText = async (re) => {
   return true;
 };
 
-async function load(file) {
+/**
+ * A title gets its own screen before the season summary. `load` steps past it by
+ * default; pass `{ hold: true }` to stop on it and inspect it.
+ */
+async function celebration() {
+  return (await page.locator('.champ').count()) > 0;
+}
+
+async function load(file, opts = {}) {
   const json = readFileSync(file, 'utf8').trim();
   // The seeded save says which version it is; write it under that key so the
   // app loads it directly instead of migrating or ignoring it.
@@ -89,11 +97,33 @@ async function load(file) {
   await settle(400);
   await clickText(/Continue the career|See how it ended/i);
   await settle(700);
+  if (!opts.hold && await celebration()) {
+    await clickText(/^Continue$/i);
+    await settle(700);
+  }
 }
 
 /* ------------------------ 1. the A-Class championship is NOT the end ------ */
 
-await load(A_CLASS_CHAMPION);
+await load(A_CLASS_CHAMPION, { hold: true });
+
+/* the championship gets its own moment, once, before the cold numbers */
+check('a championship opens on its own screen', await celebration());
+const champText = (await page.locator('.champ').innerText()).toLowerCase();
+check('the celebration names the trophy', /championship/.test(champText),
+  champText.split('\n').find((l) => l.trim()) ?? '');
+check('the celebration names the programme and the record',
+  /champions/.test(champText) && /\d+-\d+ on the season/.test(champText));
+check('the celebration shows the final it was won in', /the final/.test(champText));
+check('the celebration credits the players', /who scored it/.test(champText));
+const seenFlag = await save();
+check('the celebration is marked as seen, so it shows once',
+  seenFlag.postseason.titleSeen === true);
+await clickText(/^Continue$/i);
+await settle(700);
+check('continuing from the celebration reaches the season summary',
+  (await page.locator('.wrapper').innerText()).toLowerCase().includes('high school chapter complete'));
+
 const afterTitle = await save();
 check('the Class A title did not end the career', !afterTitle.challenge.complete,
   `complete=${afterTitle.challenge.complete}`);

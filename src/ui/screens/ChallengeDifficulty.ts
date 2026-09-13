@@ -7,7 +7,7 @@
  *                              which for every tier above Standard answers one
  *                              question: what makes this harder than the tier
  *                              below it?
- *   DifficultyCompareScreen    all four side by side, every modifier, no
+ *   DifficultyCompareScreen    every tier side by side, every modifier, no
  *                              omissions.
  *
  * Nothing on either screen is written by hand. Every number, label and arrow is
@@ -65,7 +65,7 @@ export class ChallengeDifficultyScreen implements Screen {
 
       body.appendChild(h('button', {
         class: 'btn btn--block',
-        text: 'Compare all four side by side',
+        text: `Compare all ${TIER_ORDER.length} side by side`,
         on: { click: () => app.push((a) => new DifficultyCompareScreen(a)) },
       }));
 
@@ -85,7 +85,7 @@ export class ChallengeDifficultyScreen implements Screen {
     render();
 
     this.el = screenEl(
-      topbar(app, 'Difficulty', 'Chosen once, for the career'),
+      topbar(app, 'Difficulty', 'Chosen once'),
       h('div', { class: 'scroll' }, body),
     );
   }
@@ -215,7 +215,7 @@ export class DifficultyCompareScreen implements Screen {
     }));
 
     this.el = screenEl(
-      topbar(app, 'Compared', 'All four tiers'),
+      topbar(app, 'Compared', `All ${TIER_ORDER.length} tiers`),
       h('div', { class: 'scroll' }, body),
     );
   }

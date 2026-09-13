@@ -4,6 +4,7 @@ import type { TeamData } from '../data/teams';
 import type { Tactics } from '../data/tactics';
 import type { CoachEffects } from '../league/coaching';
 import type { DifficultyKey } from '../data/difficulty';
+import type { Level } from '../data/levels';
 
 /** Where a player lines up in the 2-3-1 offensive set / matching defensive set. */
 export type SlotKey = 'G' | 'D1' | 'D2' | 'D3' | 'M1' | 'M2' | 'M3' | 'A1' | 'A2' | 'A3';
@@ -180,6 +181,13 @@ export interface MatchConfig {
   home: TeamSetup;
   away: TeamSetup;
   difficulty: DifficultyKey;
+  /**
+   * Which level this game is being played at. Ratings mean different things at
+   * different levels — a star at high school is a bench player in the PLL — so
+   * anything that reads a rating as a standing needs it. Defaults to high
+   * school, which is what an exhibition is.
+   */
+  level?: Level;
   quarterSeconds: number;
   /** Extra presentation flags. */
   rivalry?: boolean;

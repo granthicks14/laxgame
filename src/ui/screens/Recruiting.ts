@@ -354,7 +354,7 @@ export class RecruitingScreen implements Screen {
       on: { click: () => app.push((a) => new ProspectScreen(a, career, p.id)) },
     },
       h('div', { class: 'list__rank num', text: `#${p.nationalRank}` }),
-      playerPortrait(p.player, userTeam(career), 30, false),
+      playerPortrait(p.player, userTeam(career), 24, false),
       h('div', { class: 'stack', style: 'gap:2px;flex:1 1 auto;min-width:0' },
         h('div', { class: 'row', style: 'gap:6px;align-items:baseline' },
           h('div', { class: 'list__name', text: `${p.player.first} ${p.player.last}` }),
@@ -410,7 +410,7 @@ export class ProspectScreen implements Screen {
       const est = estimateOf(p, par);
       body.appendChild(panel(`${p.player.first} ${p.player.last}`,
         h('div', { class: 'row', style: 'gap:12px;align-items:center;margin-bottom:2px' },
-          playerPortrait(p.player, userTeam(career), 64, false),
+          playerPortrait(p.player, userTeam(career), 96, false),
           h('div', { class: 'stack', style: 'gap:2px;min-width:0' },
             h('div', { class: 'display', style: 'font-size:18px', text: `${p.player.first} ${p.player.last}` }),
             h('div', { class: 'tiny', text: `${p.hometown} · ${ORIGIN_LABEL[p.origin]}` }))),

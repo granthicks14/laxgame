@@ -89,7 +89,7 @@ check('the explanation is quantified, not adjectives',
 check('it names the legacy multiplier', /legacy score ×/i.test(detail));
 
 // And the comparison screen carries every tier side by side.
-await clickText(/Compare all four/);
+await clickText(/Compare all \d+/);
 await settle(500);
 const compare = (await page.locator('.wrapper').innerText()).toLowerCase();
 check('the comparison screen lists every tier',
@@ -166,9 +166,11 @@ await settle();
 // Simulate the whole season from the hub.
 const advanceSeason = async () => {
   // Simulating a season now passes through the postseason screens: qualifying
-  // is shown once, and the bracket opens itself when the playoffs are drawn.
+  // is shown once, the bracket opens itself when the playoffs are drawn, and a
+  // title gets its own moment before the summary.
   if (await clickText(/^Simulate this game$/)) return true;
   if (await clickText(/^Continue to the (playoffs|season)$/)) return true;
+  if (await page.locator('.champ').count()) return clickText(/^Continue$/);
   return false;
 };
 

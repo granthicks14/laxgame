@@ -65,6 +65,7 @@ export function makeMatchConfig(o: MatchSetupOptions): MatchConfig {
       coaching: o.awayCoaching,
     },
     difficulty: o.difficulty,
+    level: o.level ?? 'hs',
     quarterSeconds: GAME_LENGTHS[o.gameLength].quarterSeconds,
     rivalry: areRivals(o.homeTeam.id, o.awayTeam.id),
     contextLabel: o.contextLabel,

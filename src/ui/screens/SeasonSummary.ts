@@ -11,6 +11,7 @@ import { BracketScreen } from './Playoffs';
 import { stageAt } from '../../challenge/ladder';
 import { recruitingSummary } from '../../league/career';
 import type { Career } from '../../league/types';
+import { reportPortrait } from '../portrait';
 import { GRADE_LABEL, sortDepthChart } from '../../data/players';
 import { SeasonHubScreen } from './SeasonHub';
 import { MainMenuScreen } from './MainMenu';
@@ -154,10 +155,12 @@ export class SeasonSummaryScreen implements Screen {
               }),
               recruitingSummary(career) ? h('div', { class: 'tiny', text: recruitingSummary(career)! }) : null)
             : null,
+          // The title has its own screen now, so this is the record of it
+          // rather than a second celebration three panels down the page.
           won
-            ? h('div', { class: 'trophy' },
-              h('div', { class: 'trophy__icon' }, trophyIcon(58)),
-              h('div', { class: 'trophy__title', text: seasonFormat(career).titleName }),
+            ? h('div', { class: 'trophy trophy--slim' },
+              h('div', { class: 'trophy__icon' }, trophyIcon(34)),
+              h('div', { class: 'trophy__title display', text: seasonFormat(career).titleName }),
               h('div', { class: 'small', text: `${team.name} · ${seasonRecordText(career)}` }))
             : h('div', { class: 'panel' },
               h('span', { class: 'stripe', style: `background:${team.primary}` }),
@@ -217,6 +220,13 @@ export class OffseasonScreen implements Screen {
       const kept = items.filter((x): x is HTMLElement => !!x);
       return kept.length ? panel(title, ...kept) : null;
     };
+    const team = userTeam(career);
+    // Graduating seniors and new arrivals are people leaving and joining a
+    // programme, so they get the same face here that they have on the roster.
+    // `id` arrived with the portraits; a save written before it simply has none.
+    const face = (id: string | undefined, pos: string) => (id
+      ? reportPortrait(id, pos, team)
+      : null);
 
     this.el = screenEl(
       topbar(app, 'Offseason', `Year ${career.year}`),
@@ -236,16 +246,19 @@ export class OffseasonScreen implements Screen {
           this.movementPanel(app, career, report),
 
           section('Graduating', report.graduated.map((g) => h('div', { class: 'row' },
+            face(g.id, g.pos),
             h('span', { class: 'pill', text: g.pos }),
             h('span', { style: 'flex:1 1 auto', text: g.name }),
             h('span', { class: 'num', text: String(g.overall) })))),
 
           section('Did not return', report.departed.map((g) => h('div', { class: 'row' },
+            face(g.id, g.pos),
             h('span', { class: 'pill', text: g.pos }),
             h('span', { style: 'flex:1 1 auto', text: g.name }),
             h('span', { class: 'num', text: String(g.overall) })))),
 
           section('Arrivals', report.arrived.map((g) => h('div', { class: 'row' },
+            face(g.id, g.pos),
             h('span', { class: 'pill', text: g.pos }),
             h('span', { style: 'flex:1 1 auto', text: g.name }),
             h('span', { class: 'tiny', text: GRADE_LABEL[g.grade] }),

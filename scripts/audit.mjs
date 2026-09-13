@@ -155,7 +155,7 @@ const routes = [
     // the picker is swept: a sweep clicks the back arrow too, and by the end of
     // one we are rarely still on the screen we started from.
     if (await openPicker()) {
-      const compare = page.getByRole('button', { name: /Compare all four/i }).first();
+      const compare = page.getByRole('button', { name: /Compare all \d+/i }).first();
       if (await compare.count()) {
         await compare.click();
         await settle(420);

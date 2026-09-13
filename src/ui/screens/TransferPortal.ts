@@ -103,7 +103,7 @@ export class TransferPortalScreen implements Screen {
     const from = tryWorldTeam(c.fromTeamId) ?? getTeam(c.fromTeamId);
     const { score, factors } = interestIn(c, programSnapshot(career));
     // The star mark is your OPINION of him, so it comes off the estimate too.
-    const tier = starTier(transferEstimate(c).overall);
+    const tier = starTier(transferEstimate(c).overall, career.level);
     const closed = c.status === 'committed' || c.status === 'declined' || c.status === 'lost';
 
     const statusLine = () => {
@@ -134,7 +134,7 @@ export class TransferPortalScreen implements Screen {
         // His face and the badge of the programme he is leaving, which is the
         // whole story of a transfer in two marks.
         h('div', { class: 'stack', style: 'gap:4px;align-items:center;flex:0 0 auto' },
-          playerPortrait(c.player, from, 44, false),
+          playerPortrait(c.player, from, 48, false),
           teamBadge(from, 'sm')),
         h('div', { class: 'stack', style: 'gap:4px;flex:1 1 auto;min-width:0' },
           h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' },

@@ -131,7 +131,7 @@ export function createCareer(opts: NewCareerOptions): Career {
     championships: 0,
     careerWins: 0,
     careerLosses: 0,
-    postseason: { clinchedSeen: false, revealed: 0 },
+    postseason: { clinchedSeen: false, titleSeen: false, revealed: 0 },
     playoffSeeds: null,
     nationalSeeds: null,
     autoBids: [],
@@ -857,11 +857,20 @@ export function conferenceChampion(career: Career): string | null {
 }
 
 function finalWinner(career: Career, bracket: Bracket): string | null {
-  const final = career.schedule
-    .filter((g) => g.playoff === 'F' && (g.bracket ?? 'league') === bracket)
-    .pop();
+  const final = finalIn(career, bracket);
   if (!final || !final.played) return null;
   return final.homeScore > final.awayScore ? final.homeId : final.awayId;
+}
+
+function finalIn(career: Career, bracket: Bracket): ScheduledGame | undefined {
+  return career.schedule
+    .filter((g) => g.playoff === 'F' && (g.bracket ?? 'league') === bracket)
+    .pop();
+}
+
+/** The game that decided this level's championship, played or not. */
+export function finalGame(career: Career): ScheduledGame | undefined {
+  return finalIn(career, titleBracket(seasonFormat(career)));
 }
 
 /* -------------------------------------------------------------- progression */
@@ -923,13 +932,13 @@ export function rosterForMatch(career: Career): PlayerData[] {
 /* ---------------------------------------------------------------- offseason */
 
 export interface OffseasonReport {
-  graduated: { name: string; pos: string; overall: number }[];
+  graduated: { id: string; name: string; pos: string; overall: number }[];
   improved: { name: string; pos: string; from: number; to: number }[];
-  arrived: { name: string; pos: string; overall: number; grade: Grade }[];
+  arrived: { id: string; name: string; pos: string; overall: number; grade: Grade }[];
   development: DevelopmentEntry[];
   movement: MovementReport | null;
   /** Squad players who did not return, when a roster ran over its limit. */
-  departed: { name: string; pos: string; overall: number }[];
+  departed: { id: string; name: string; pos: string; overall: number }[];
   /** Players who left through the portal, at levels that have one. */
   portalOut: PortalDeparture[];
 }
@@ -1019,7 +1028,7 @@ export function runOffseason(career: Career): OffseasonReport {
   const staying: PlayerData[] = [];
   for (const p of career.roster) {
     if (departs(p, level, rng)) {
-      report.graduated.push({ name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall });
+      report.graduated.push({ id: p.id, name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall });
       career.alumni.push({
         name: `${p.first} ${p.last}`,
         pos: p.pos,
@@ -1075,6 +1084,7 @@ export function runOffseason(career: Career): OffseasonReport {
     p.xp = 0;
     p.season = emptyStats();
     const entry: DevelopmentEntry = {
+      id: p.id,
       name: `${p.first} ${p.last}`,
       pos: p.pos,
       grade: p.grade,
@@ -1100,7 +1110,7 @@ export function runOffseason(career: Career): OffseasonReport {
   const signed = takeSignedRecruits(career, used);
   for (const p of signed) {
     staying.push(p);
-    report.arrived.push({ name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall, grade: p.grade });
+    report.arrived.push({ id: p.id, name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall, grade: p.grade });
   }
 
   const prestigeBoost = clamp((career.prestige - 60) * 0.2 + fx.appeal * 9, -4, 12);
@@ -1125,7 +1135,7 @@ export function runOffseason(career: Career): OffseasonReport {
       const p = generatePlayer(rng, shell, pos, { depth: i, grade, potentialBonus, level }, used);
       attachDevProfile(p, rng);
       staying.push(p);
-      report.arrived.push({ name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall, grade });
+      report.arrived.push({ id: p.id, name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall, grade });
     }
   }
 
@@ -1159,7 +1169,7 @@ export function runOffseason(career: Career): OffseasonReport {
     spare.sort((a, b) => b.overall - a.overall);
     for (const p of spare) {
       if (keep.length < cap) keep.push(p);
-      else report.departed.push({ name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall });
+      else report.departed.push({ id: p.id, name: `${p.first} ${p.last}`, pos: p.pos, overall: p.overall });
     }
     squad = sortDepthChart(keep);
   }
@@ -1200,7 +1210,7 @@ export function runOffseason(career: Career): OffseasonReport {
   career.finish = null;
   // A new season has its own postseason: qualifying is news again, and the
   // bracket opens itself again the day it is drawn.
-  career.postseason = { clinchedSeen: false, revealed: 0 };
+  career.postseason = { clinchedSeen: false, titleSeen: false, revealed: 0 };
   awardCoachPoints(career, 4, 6);
   career.focus = null;
   // Who you have actually seen play decides how well you know the market.
@@ -1242,6 +1252,7 @@ export function programSnapshot(career: Career): ProgramSnapshot {
   return {
     team: userTeam(career),
     roster: career.roster,
+    level: career.level,
     prestige: career.prestige,
     staff: career.staff,
     wins: last?.wins ?? row?.wins ?? 0,
@@ -1651,7 +1662,7 @@ export function takeChallengeJob(career: Career, offer: JobOffer): void {
   career.playoffSeeds = null;
   career.nationalSeeds = null;
   career.autoBids = [];
-  career.postseason = { clinchedSeen: false, revealed: 0 };
+  career.postseason = { clinchedSeen: false, titleSeen: false, revealed: 0 };
   career.eliminated = false;
   career.seasonComplete = false;
   career.finish = null;
