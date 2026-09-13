@@ -110,8 +110,15 @@ function starRun(games: number, lift: number): StarRun {
   console.log(`  with a star      ${star.points.toFixed(2)} pts/game from the slot, `
     + `${(star.winRate * 100).toFixed(0)}% wins, ${star.goalsFor.toFixed(1)}-${star.goalsAgainst.toFixed(1)}\n`);
 
+  // Measured with `npm run stars`: lifting the slot by 16 takes it from about
+  // 5.0 points a game to 6.7, and the side from 42% to 60%. The bar sits well
+  // under both so ordinary variance cannot fail the run, and well over nothing
+  // so a star that stops mattering does.
   check('a star is worth having', star.points > plain.points * 1.2,
     `${plain.points.toFixed(2)} -> ${star.points.toFixed(2)} points a game`);
+  check('a star lifts the scoreboard, not just his own line',
+    star.goalsFor > plain.goalsFor,
+    `${plain.goalsFor.toFixed(1)} -> ${star.goalsFor.toFixed(1)} goals a game`);
   check('a star lifts the side that has him', star.winRate > plain.winRate,
     `${(plain.winRate * 100).toFixed(0)}% -> ${(star.winRate * 100).toFixed(0)}%`);
   check('a star is not a cheat code', star.winRate <= 0.9,
