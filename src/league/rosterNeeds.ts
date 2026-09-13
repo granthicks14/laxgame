@@ -266,7 +266,11 @@ export function needSummary(n: PositionNeed): string {
   }
   const bits: string[] = [];
   if (n.projected < ON_FIELD[n.pos]) bits.push('Not enough bodies to field a line');
-  else if (n.shortfall > 6) bits.push(`Starters ${n.shortfall} below the standard here`);
+  else if (n.open <= 0 && n.shortfall > 6) {
+    // A position can be a priority with no room in it: the answer is a better
+    // player, not another one, and saying "4 open" would be a lie here.
+    bits.push(`No room, and ${n.shortfall} below the standard — this needs an upgrade`);
+  } else if (n.shortfall > 6) bits.push(`Starters ${n.shortfall} below the standard here`);
   else if (n.shortfall > 0) bits.push('Starters about the standard here');
   else bits.push('Starters are good; this is depth');
   if (n.incoming) bits.push(`${n.incoming} already committed`);
