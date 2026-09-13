@@ -203,7 +203,7 @@ export class CoachOfficeScreen implements Screen {
             text: reason === null ? 'Buy' : why,
             on: {
               click: () => {
-                if (!buyCoachUpgrade(career, u.key)) { app.toast('Not available yet.'); return; }
+                if (!buyCoachUpgrade(career, u.key)) { app.toast('Not available yet.', 'bad'); return; }
                 syncUserTeamRatings(career);
                 saveCareer(career);
                 app.toast(`${u.label} unlocked`);

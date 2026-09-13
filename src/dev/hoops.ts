@@ -163,6 +163,9 @@ let simSeconds = 0;
 let longest = 0;
 /** Ball movement: a possession that never passes is one man, not an offence. */
 let passes = 0;
+/** Box scores whose player rows do not add up to the team line. */
+let boxDrift = 0;
+let fouledOut = 0;
 
 for (let g = 0; g < GAMES; g++) {
   const homeIdx = g % TEAMS.length;
@@ -209,8 +212,20 @@ for (let g = 0; g < GAMES; g++) {
 
   totalShots += game.box.home.fga + game.box.away.fga;
   threeShare += game.box.home.tpa + game.box.away.tpa;
-  for (const p of [...game.five('home'), ...game.five('away')]) {
-    maxFouls = Math.max(maxFouls, p.fouls);
+  for (const side of ['home', 'away'] as const) {
+    // Everybody who played, so a man who fouled out is still counted. If he were
+    // dropped, the rows of the box score would stop adding up to the team line
+    // and nobody would notice until they added the column up by hand.
+    let points = 0;
+    let fouls = 0;
+    for (const p of game.played(side)) {
+      maxFouls = Math.max(maxFouls, p.fouls);
+      points += p.stat.points;
+      fouls += p.fouls;
+      if (p.fouledOut) fouledOut++;
+    }
+    if (points !== game.box[side].points) boxDrift++;
+    if (fouls !== game.box[side].fouls) boxDrift++;
   }
 }
 
@@ -271,6 +286,8 @@ check('turnovers happen, and are not the whole game',
 check('somebody gets to the line',
   perTeam(t.fta) > 1, perTeam(t.fta).toFixed(1));
 check('nobody plays on past six fouls', maxFouls <= HOOPS.foulOutAt, `${maxFouls}`);
+check('the box score adds up to the team line', boxDrift === 0,
+  `${boxDrift} sides drifted (${fouledOut} men fouled out)`);
 check('points are scored inside as well as out',
   pct(t.paint, t.points) > 0.15, fmt(pct(t.paint, t.points)));
 

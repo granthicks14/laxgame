@@ -22,6 +22,17 @@ export interface Settings {
   /** Show how a simulated result was arrived at. Off by default: it is a tool
    *  for working out why a scoreline looks wrong, not part of playing. */
   simDetails: boolean;
+  /**
+   * PER-SPORT PREFERENCES, keyed by sport id.
+   *
+   * The settings above it are either genuinely shared — volume, motion, whether
+   * the hint strip shows — or lacrosse's own, from before there was more than one
+   * sport. Rather than widen `difficulty` into something that has to mean four
+   * different ladders at once, each sport keeps its own bag and owns its shape.
+   * A sport that has never been played has no entry, and asking for a missing
+   * preference gets the fallback the sport passes in.
+   */
+  sports: Record<string, Record<string, string | number | boolean>>;
 }
 
 const KEY = 'lsl.settings.v1';
@@ -39,6 +50,7 @@ export const DEFAULT_SETTINGS: Settings = {
   goalReplays: true,
   controls: 'auto',
   simDetails: false,
+  sports: {},
 };
 
 export function loadSettings(): Settings {

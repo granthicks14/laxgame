@@ -130,6 +130,7 @@ export class HoopsGame {
       const setup = side === 'home' ? this.cfg.home : this.cfg.away;
       const five = starters(setup.roster);
       this.teams[side] = five.map((data, i) => this.makePlayer(data, side, i));
+      this.appearances[side] = [...this.teams[side]];
     }
     this.players = [...this.teams.home, ...this.teams.away];
     this.assignDefenders();
@@ -217,6 +218,20 @@ export class HoopsGame {
   five(side: Side): CourtPlayer[] {
     return this.teams[side];
   }
+
+  /**
+   * Everybody who took the floor for a side, in the order they appeared.
+   *
+   * A man who fouls out is replaced in `teams`, and his stats go with him — so a
+   * box score built from the current five would quietly lose a starter's twenty
+   * points and stop adding up to the team total. This is the list a box score is
+   * built from; `five` is only who is playing right now.
+   */
+  played(side: Side): CourtPlayer[] {
+    return this.appearances[side];
+  }
+
+  private appearances: Record<Side, CourtPlayer[]> = { home: [], away: [] };
 
   setBanner(text: string, seconds: number): void {
     this.banner = text;
@@ -1180,6 +1195,7 @@ export class HoopsGame {
     const idx = this.teams[out.side].indexOf(out);
     this.teams[out.side][idx] = replacement;
     this.players = [...this.teams.home, ...this.teams.away];
+    this.appearances[out.side].push(replacement);
     // Anyone guarding the man who left now guards his replacement.
     for (const d of this.teams[otherSide(out.side)]) {
       if (d.assignment === out.uid) d.assignment = replacement.uid;
@@ -1353,11 +1369,14 @@ export class HoopsGame {
         stepHeld(this.ball, hand.x, hand.y, hand.z + carrier.z);
         this.ball.state = 'held';
       } else {
-        stepDribble(
+        const bounced = stepDribble(
           this.ball, carrier.x, carrier.y, carrier.facing,
           Math.hypot(carrier.vx, carrier.vy), dt,
         );
         this.ball.state = 'dribble';
+        // One tick per bounce, from the physics rather than a timer, so the
+        // sound speeds up with the handler instead of running against him.
+        if (bounced) this.events.emit('dribble', {});
       }
       return;
     }

@@ -444,7 +444,7 @@ export function openJobSearch(app: App, career: Career): void {
   const found = seekChallengeJob(career);
   saveCareer(career);
   if (!found || !found.length) {
-    app.toast('Nobody is interested. Win something first.');
+    app.toast('Nobody is interested. Win something first.', 'bad');
     return;
   }
   app.push((a) => new JobOffersScreen(a, career));

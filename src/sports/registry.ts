@@ -202,13 +202,13 @@ export const SPORTS: SportManifest[] = [
     blurb: 'Half-court basketball with real rim physics and a release window you '
       + 'either hit or do not. Spacing, screens, help defence and the fast break, '
       + 'over a full season.',
-    modes: [],
+    modes: ['Play Now', 'Season'],
     theme: {
       accent: '#ff8c42', accentInk: '#1a0d00',
       surface: '#b9793f', surfaceLine: '#e6c9a3', backdrop: '#0c0a09',
     },
     preview: basketballPreview,
-    plannedNote: 'Rim physics and a release window — in build now.',
+    load: async () => (await import('./basketball/index')).BASKETBALL,
   },
   {
     id: 'football',

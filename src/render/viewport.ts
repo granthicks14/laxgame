@@ -73,16 +73,20 @@ export class Viewport {
 
   /**
    * Move toward a point, clamped so the camera shows at most `pad` yards past
-   * the edge of the surface. Subclasses decide WHICH point and how fast; this
-   * only guarantees the view stays over the venue.
+   * the edge of the surface — `padY` where the two axes need different slack,
+   * as they do when a sport keeps room above one end but none at the sides.
+   * Subclasses decide WHICH point and how fast; this only guarantees the view
+   * stays over the venue.
    */
-  protected approach(tx: number, ty: number, dt: number, rate: number, pad: number): void {
+  protected approach(
+    tx: number, ty: number, dt: number, rate: number, pad: number, padY = pad,
+  ): void {
     const halfX = this.viewYardsX / 2;
     const halfY = this.viewYardsY / 2;
     const minX = halfX - pad;
     const maxX = this.bounds.length - halfX + pad;
-    const minY = halfY - pad;
-    const maxY = this.bounds.width - halfY + pad;
+    const minY = halfY - padY;
+    const maxY = this.bounds.width - halfY + padY;
 
     const goalX = minX > maxX ? this.bounds.length / 2 : clamp(tx, minX, maxX);
     const goalY = minY > maxY ? this.bounds.width / 2 : clamp(ty, minY, maxY);

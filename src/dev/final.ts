@@ -17,7 +17,7 @@
  */
 import { Match } from '../match/Match';
 import { makeMatchConfig } from '../league/matchSetup';
-import { getTeam } from '../data/teams';
+import { getTeam, TEAMS } from '../data/teams';
 import { Rng } from '../core/rng';
 import { refreshOverall, type PlayerData } from '../data/players';
 import {
@@ -194,6 +194,55 @@ function seasonOf(mode: CareerMode): Career {
   check('career totals survive the offseason', carried > 0, `${carried} players with a history`);
   check('season totals are cleared for the new year',
     career.roster.every((p) => p.season.gamesPlayed === 0));
+}
+
+/* ----------------------------------------------------------- development */
+
+{
+  // How much a squad moves over an offseason is a claim about a DISTRIBUTION,
+  // so it is measured over a sample of squads with fixed seeds rather than over
+  // whichever roster one browser run happened to draw. A senior squad already at
+  // its ceiling gaining nothing is correct behaviour, and asserting a magnitude
+  // against a single random squad turned that correctness into a failing test
+  // roughly every other run.
+  console.log('\nDEVELOPMENT');
+  const gains: number[] = [];
+  const outcomes = new Set<string>();
+  let bigMovers = 0;
+  let squads = 0;
+  for (let i = 0; i < 12; i++) {
+    const career = createCareer({
+      mode: 'dynasty', teamId: TEAMS[i % TEAMS.length].id, difficulty: 'varsity',
+      gameLength: 'short', seed: 4400 + i * 97,
+    });
+    let guard = 0;
+    while (guard++ < 600) {
+      const g = nextUserGame(career);
+      if (!g) break;
+      simulateUserGame(career, g);
+    }
+    advancePhase(career);
+    const report = runOffseason(career);
+    squads++;
+    let best = 0;
+    for (const d of report.development) {
+      gains.push(d.to - d.from);
+      outcomes.add(d.outcome);
+      best = Math.max(best, d.to - d.from);
+    }
+    if (best >= 2) bigMovers++;
+  }
+  const avg = gains.reduce((a, b) => a + b, 0) / Math.max(1, gains.length);
+  const spread = new Set(gains).size;
+  console.log(`  ${squads} squads, ${gains.length} players, avg ${avg.toFixed(2)} OVR`);
+  console.log(`  outcomes: ${[...outcomes].join(', ')}`);
+  console.log(`  squads with somebody up 2+: ${bigMovers}/${squads}`);
+  check('players get better over an offseason', avg > 0.2 && avg < 4, avg.toFixed(2));
+  check('and not all by the same amount', spread >= 4, `${spread} distinct gains`);
+  check('development is banded, not one outcome', outcomes.size >= 3,
+    [...outcomes].join(', '));
+  check('most squads have somebody who really jumps', bigMovers >= squads * 0.6,
+    `${bigMovers}/${squads}`);
 }
 
 /* ------------------------------------------------------------------ saves */

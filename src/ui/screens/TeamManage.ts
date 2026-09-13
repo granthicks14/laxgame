@@ -239,7 +239,7 @@ export class PlayerScreen implements Screen {
                   renderAttrs();
                   app.toast(`${p.last} +2 ${ATTR_LABEL[k]}`);
                 } else {
-                  app.toast('Cannot train that right now');
+                  app.toast('Cannot train that right now', 'bad');
                 }
               },
             },
@@ -454,7 +454,7 @@ export class PlayerScreen implements Screen {
             text: `${cost} CP`,
             on: {
               click: () => {
-                if (career.coachingPoints < cost) { app.toast('Not enough Coach Points.'); return; }
+                if (career.coachingPoints < cost) { app.toast('Not enough Coach Points.', 'bad'); return; }
                 spendCoachPoints(career, cost);
                 p.project = info.key;
                 saveCareer(career);

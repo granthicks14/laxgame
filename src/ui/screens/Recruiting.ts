@@ -651,7 +651,7 @@ export class ScoutMarketScreen implements Screen {
               on: {
                 click: () => {
                   if (!afford) {
-                    app.toast(full ? 'Your scouting staff is full.' : 'Not enough Coach Points.');
+                    app.toast(full ? 'Your scouting staff is full.' : 'Not enough Coach Points.', 'bad');
                     return;
                   }
                   if (hireScout(state, s.id)) {

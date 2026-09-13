@@ -50,7 +50,7 @@ function card(app: App, sport: SportManifest): HTMLElement {
     style: `--card-accent:${sport.theme.accent};--card-ink:${sport.theme.accentInk}`,
     on: { click: () => enterSport(app, sport) },
   },
-    h('div', { class: 'sport-card__frame' }, previewCanvas(sport, 132, 74)),
+    h('div', { class: 'sport-card__frame' }, previewCanvas(sport, 240, 132)),
     h('div', { class: 'sport-card__body' },
       h('div', { class: 'sport-card__head' },
         h('div', { class: 'sport-card__name display', text: sport.name }),
@@ -67,7 +67,7 @@ function card(app: App, sport: SportManifest): HTMLElement {
 
 function plannedCard(sport: SportManifest): HTMLElement {
   return h('div', { class: 'sport-soon' },
-    h('div', { class: 'sport-soon__frame' }, previewCanvas(sport, 84, 48)),
+    h('div', { class: 'sport-soon__frame' }, previewCanvas(sport, 96, 54)),
     h('div', { class: 'sport-soon__body' },
       h('div', { class: 'sport-soon__name display', text: sport.name }),
       h('div', { class: 'sport-soon__note', text: sport.plannedNote ?? 'In development.' })),

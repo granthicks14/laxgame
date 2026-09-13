@@ -356,22 +356,27 @@ export function stepBall(ball: Ball, dt: number, rng: Rng): BallEvents {
  * floor and out in front of the handler, which is what makes a poke-away a
  * matter of position and timing rather than a dice roll on contact.
  */
+/** @returns true on the frame the ball touches the floor, so it can be heard. */
 export function stepDribble(
   ball: Ball, handX: number, handY: number, facing: number, speed: number, dt: number,
-): void {
+): boolean {
   // A moving handler pushes the ball further out in front of himself.
   const lead = 0.9 + Math.min(1.5, speed * 0.16);
   ball.x = handX + Math.cos(facing) * lead;
   ball.y = handY + Math.sin(facing) * lead;
   // Faster dribble when moving, and a low hard one when really moving.
   const rate = 2.1 + Math.min(2.6, speed * 0.3);
+  const was = ball.dribblePhase;
   ball.dribblePhase = (ball.dribblePhase + rate * dt) % 1;
+  // The phase wrapping past 1 is the ball reaching the floor.
+  const bounced = ball.dribblePhase < was;
   const peak = Math.max(1.6, 3.4 - speed * 0.14);
   // |sin| gives the bounce its shape: quick at the floor, hanging at the top.
   ball.z = BALL_RADIUS + Math.abs(Math.sin(ball.dribblePhase * Math.PI)) * (peak - BALL_RADIUS);
   ball.vx = 0;
   ball.vy = 0;
   ball.vz = 0;
+  return bounced;
 }
 
 /** How exposed the ball is right now: low in the dribble is where it gets taken. */

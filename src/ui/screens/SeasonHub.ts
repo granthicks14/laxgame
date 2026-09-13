@@ -358,7 +358,8 @@ export class SeasonHubScreen implements Screen {
       played++;
     }
     saveCareer(career);
-    app.toast(played ? `Simulated ${played} game${played === 1 ? '' : 's'}` : 'Nothing left to play');
+    app.toast(played ? `Simulated ${played} game${played === 1 ? '' : 's'}` : 'Nothing left to play',
+          played ? 'info' : 'bad');
     app.replace((a) => new SeasonHubScreen(a, career.mode));
   }
 

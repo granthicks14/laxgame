@@ -71,13 +71,18 @@ export function segmented<T extends string>(
     const longest = options.reduce((n, o) => Math.max(n, o.label.length), 0);
     el.style.setProperty('--seg-min', `${Math.min(170, Math.max(64, longest * 8 + 18))}px`);
   }
+  // The live selection, not the one this control was built with. Comparing
+  // against the original left every segment permanently dead once you clicked
+  // away from it and back — a pause menu you could leave but never return to.
+  let live = current;
   for (const opt of options) {
     const b = h('button', {
       class: `seg__opt${opt.value === current ? ' is-on' : ''}`,
       text: opt.label,
       on: {
         click: () => {
-          if (opt.value === current) return;
+          if (opt.value === live) return;
+          live = opt.value;
           for (const child of Array.from(el.children)) child.classList.remove('is-on');
           b.classList.add('is-on');
           onChange(opt.value);

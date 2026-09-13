@@ -172,11 +172,20 @@ export class App {
     entry.screen.el.remove();
   }
 
-  toast(message: string): void {
+  /**
+   * A line of feedback at the bottom of the screen.
+   *
+   * `tone` is 'bad' when the toast exists because something was REFUSED — not
+   * enough points, two of the same club, nothing left to play. A refusal that
+   * looks and sounds exactly like a confirmation is a refusal the player reads
+   * as success and then wonders why nothing happened.
+   */
+  toast(message: string, tone: 'info' | 'bad' = 'info'): void {
     const existing = document.querySelector('.toast');
     if (existing) existing.remove();
-    const el = h('div', { class: 'toast', text: message });
+    const el = h('div', { class: `toast${tone === 'bad' ? ' toast--bad' : ''}`, text: message });
     document.body.appendChild(el);
+    if (tone === 'bad') audio.play('error');
     if (this.toastTimer) window.clearTimeout(this.toastTimer);
     this.toastTimer = window.setTimeout(() => el.remove(), 2200);
   }

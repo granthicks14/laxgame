@@ -55,6 +55,10 @@ async function boot() {
   await enterLacrosse(page);
 }
 
+/** Which sport the sweep is inside, so the recovery path walks back into it. */
+let sport = 'lacrosse';
+const SPORT_CARD = { lacrosse: 'Lacrosse', basketball: 'Basketball' };
+
 async function backToMenu() {
   for (let i = 0; i < 10; i++) {
     if (await page.locator('.menu-btn').count()) return true;
@@ -62,11 +66,11 @@ async function backToMenu() {
     // carries a way back to the sports hub. Landing there is a correct outcome
     // of the sweep, so the recovery path has to know how to walk back in.
     if (await page.locator('.hub-mark__sports').count()) {
-      await enterLacrosse(page);
+      await enterLacrosse(page, sport);
       continue;
     }
     if (await page.locator('.sport-card').count()) {
-      await page.locator('.sport-card__name').filter({ hasText: 'Lacrosse' }).first().click();
+      await page.locator('.sport-card__name').filter({ hasText: SPORT_CARD[sport] }).first().click();
       await page.locator('.menu-btn').first().waitFor({ state: 'visible', timeout: 15000 });
       await settle(300);
       continue;
@@ -297,6 +301,49 @@ for (const [name, label] of [
     errors.push(`career hub is missing the ${name} button`);
   }
 }
+
+/* --------------------------------------------------------------- basketball */
+
+// The hub has more than one sport in it now, and a dead button is a dead button
+// whichever floor it is on. Basketball gets the same sweep: every visible control
+// on every screen it can reach, and anything that changes nothing is reported.
+sport = 'basketball';
+await page.goto(BASE, { waitUntil: 'networkidle' });
+await page.evaluate(() => localStorage.clear());
+await page.reload({ waitUntil: 'networkidle' });
+await enterLacrosse(page, 'basketball', { title: 'Hardwood' });
+
+const hoopsMenu = async (label) => {
+  if (!(await backToMenu())) return false;
+  const b = page.locator('.menu-btn__label').filter({ hasText: label }).first();
+  if (!(await b.count())) { errors.push(`the basketball menu is missing ${label}`); return false; }
+  await b.click().catch(() => {});
+  await settle(450);
+  return true;
+};
+
+if (await hoopsMenu('Clubs')) {
+  const card = page.locator('.club-card').first();
+  if (await card.count()) {
+    await card.click(); await settle(380);
+    const row = page.locator('.roster-row').first();
+    if (await row.count()) {
+      await row.click(); await settle(380);
+      await sweep('Basketball player');
+      const bk = page.locator('.topbar button').first();
+      if (await bk.count()) { await bk.click(); await settle(320); }
+    }
+    await sweep('Basketball roster');
+  }
+  await sweep('Basketball clubs');
+}
+if (await hoopsMenu('How to Play')) await sweep('Basketball how to play');
+if (await hoopsMenu('Settings')) await sweep('Basketball settings', /Delete|Clear|Wipe/i);
+if (await hoopsMenu('Season')) await sweep('Basketball season', /Delete|Play game|Abandon/i);
+// The setup screen last: sweeping it tips a game off, which is a correct outcome
+// rather than a dead control, and backToMenu knows how to quit out of one.
+if (await hoopsMenu('Play Now')) await sweep('Basketball setup', /Tip off/i);
+await backToMenu();
 
 console.log(`screens swept: ${visited.length}`);
 console.log(visited.map((v) => `  - ${v}`).join('\n'));

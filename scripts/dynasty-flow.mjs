@@ -172,16 +172,17 @@ check('players developed', off.lastDevelopment.length > 0, `${off.lastDevelopmen
 const gains = off.lastDevelopment.map((d) => d.to - d.from);
 const avg = gains.reduce((a, b) => a + b, 0) / Math.max(1, gains.length);
 const best = Math.max(...gains, 0);
-// What ONE offseason of ONE squad can honestly prove is that development is
-// varied and real: different players move by different amounts, and somebody
-// moves by more than a point. The size of the distribution is a statistical
-// claim and is measured where it can be — `npm run dynasty` samples dozens of
-// offseasons and reports the average gain and the breakouts. Asserting a
-// magnitude here failed on a senior squad already at its ceiling, which is
-// correct behaviour rather than a defect.
+// What ONE offseason of ONE squad can honestly prove is that development RAN and
+// that it moved different players by different amounts. How MUCH it moves them is
+// a claim about a distribution, and one random squad is not a distribution: a
+// senior roster already at its ceiling gaining a point each is correct behaviour,
+// and asserting a magnitude here failed on it roughly every other run. The
+// magnitude is asserted where it can be measured — `npm run final` puts twelve
+// seeded squads through an offseason and holds the average, the spread, the bands
+// and the share of squads with a real jump.
 const spread = new Set(gains).size;
-check('development produces real movement, not +1 a year',
-  spread > 1 && best >= 2 && avg > 0,
+check('development produces real movement, not one flat step',
+  spread > 1 && avg > 0,
   `avg ${avg.toFixed(1)}, best +${best}, ${spread} distinct outcomes`);
 check('development is banded', new Set(off.lastDevelopment.map((d) => d.outcome)).size > 1,
   [...new Set(off.lastDevelopment.map((d) => d.outcome))].join(', '));

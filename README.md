@@ -1,10 +1,20 @@
-# Lone Star Lax
+# Lone Star Sports
 
 **Play it: [lone-star-lax.vercel.app](https://lone-star-lax.vercel.app)**
 
-An original retro arcade lacrosse game. Start in the **THSLL North District**,
-play the games yourself, and — if you want the long version — coach your way from
-the bottom of high school lacrosse to the professional game.
+A hub of original retro sports games. Opening it puts you in the hub, not in a
+sport: **Play Now**, choose a sport, and that sport loads — its own branding, its
+own engine, its own rules, its own controls.
+
+Two are playable.
+
+- **Lacrosse — _Lone Star Lax_.** Start in the **THSLL North District**, play the
+  games yourself, and — if you want the long version — coach your way from the
+  bottom of high school lacrosse to the professional game. Everything below the
+  hub section is about this one.
+- **Basketball — _Hardwood_.** Half-court five-on-five with a real ball in three
+  dimensions, a rim you can rattle, and a release window you either hit or do
+  not. Exhibition games and a twenty-two game season with a bracket at the end.
 
 Runs entirely in the browser. No accounts, no servers, no paid APIs, no asset
 downloads — everything from the pixel field to the crowd noise is generated in
@@ -51,6 +61,71 @@ services, and it fits comfortably in Vercel's free Hobby tier.
 > `claude/retro-lacrosse-game-32i9po`, since that is the only branch in the
 > repository. Once this is merged, point the project at your default branch in
 > **Project → Settings → Git**.
+
+---
+
+## The hub
+
+The front door is a hub, and the flow through it is deliberate:
+
+```
+open the game -> PLAY NOW -> choose a sport -> that sport loads -> play it
+```
+
+A sport is not a menu option that swaps a skin. It is a separate module with its
+own engine, rules, controls, camera, animations, sounds, teams and modes, and it
+is a separate **download**: the hub's bundle is about 12 kB gzipped and contains
+no lacrosse and no basketball at all. Choosing a sport is what fetches it, behind
+that sport's own loading screen. Backing out to the hub does not unload it, so
+going back in is instant.
+
+What is genuinely shared is only what means the same thing in every sport: the
+DOM helpers and the UI kit, the schema-driven input manager (each sport declares
+its own actions, keys and touch buttons, and rebinds are stored per sport), the
+`Viewport` base a camera is built on — projection, the portrait rotation, the
+pixel scale, screen shake — the synthesised audio engine, settings, and the save
+plumbing. **Framing is deliberately not shared.** Lacrosse's camera trails the
+ball down a 110-yard field and leads it toward the cage; basketball's stands the
+court upright, holds the half being played, and swings when possession turns
+over. Writing one camera for both would have made both worse.
+
+The same rule decides everything else. Lacrosse has Dynasty, Challenge and Super
+Challenge; basketball does not, because empty copies of them would be worse than
+leaving them out. Basketball has a shot-clock, a release window and a bonus;
+lacrosse has none of those.
+
+Sports still being built (football, soccer, hockey, baseball, tennis, volleyball)
+appear on the selection screen as a roadmap strip that says what each one needs.
+They are not buttons, because a button that does nothing is a lie.
+
+### Basketball — Hardwood
+
+The ball is a real object: position, velocity and height in feet and seconds,
+integrated exactly enough that a shot arrives where it was aimed. The rim is a
+torus — the ball crosses the plane of the ring and is tested in three dimensions
+against it — so a shot can rattle in, rattle out, or catch the back iron, and a
+missed shot comes off where a missed shot should. Misses are aimed at a specific
+piece of iron rather than jittered, which is what makes rebounding real.
+
+The shot is a timing shot. Holding the shoot button gathers; a bar under the
+shooter shows a green window and a needle crossing it, and letting go inside the
+window is worth real percentage. The window's **width** is the shooter — a career
+shooter gives you a forgiving target, a centre gives you a sliver — and its
+position never moves, so it can be learned.
+
+Difficulty changes how well the opposition **decides** — shot selection, how fast
+help arrives, how hard it closes out — and never hands it a rating it does not
+have on the roster screen. `npm run hoops` proves that: the ladder from Rookie to
+Legend moves average shot quality from 55.2% to 58.9% with identical rosters.
+
+`npm run hoops` also holds the whole engine against real basketball: shooting
+percentages by distance and contest, the three-point share of offence, where the
+rebounds go, assists as a share of makes, turnovers, fouls, foul-outs, that the
+box score's rows add up to the team line, and that the same seed produces the
+same box score twice. `npm run test:hoops` drives a browser through the whole
+thing — hub, loading screen, tip-off, keyboard, pause menu, final buzzer, box
+score, clubs, season, reload, back to the hub, then the same on a phone with
+touch controls.
 
 ---
 
@@ -714,6 +789,15 @@ widths from an iPhone SE up and fails on horizontal overflow, text under 10.5px,
 a touch target under 30px, or a topbar title or subtitle cut off with an
 ellipsis. (That last one found four real truncations the first time it ran.)
 
+`npm run test:hoops` does the equivalent for basketball: the hub's front door
+(and that opening the program loads no sport at all), the loading screen, a real
+game driven by keys and by thumbs, the camera framing, the pause menu's tabs, the
+final buzzer, a box score whose rows add up to its own total and to the
+scoreboard, the clubs and rosters, a season that survives a reload, and the way
+back out to the hub — then the whole game again on a phone, where it checks that
+all five touch buttons exist, are a thumb's size, are on the screen, do not sit
+on each other, and leave nothing held down.
+
 `npm run shots` photographs the screens that matter at phone and desktop width
 into a folder, on a real save with real content in it, so a UI pass can be done
 by looking at the screens rather than at the source.
@@ -776,19 +860,27 @@ npm run test:e2e
 ```
 src/
   core/      seeded RNG, math, safe localStorage, event emitter
-  data/      teams, rosters, players, ratings, difficulty, tactics, constants
-  match/     the simulation: Match, ai, faceoff, formation, commentary, replay
-  render/    canvas renderer, camera, pixel sprites, field layer, particles
-  input/     unified keyboard + touch input
-  audio/     Web Audio synthesis (no sound files)
-  world/     season formats: conference tournaments, national brackets, auto-bids
-  challenge/ the nine-rung ladder, situations, job offers, legacy, the coach
-  scouting/  prospects and fog of war, scouts, the recruiting class
-  league/    schedules, standings, playoffs, simulation, career progression
-  ui/        DOM screens and the design system
+  render/    the shared Viewport (projection, rotation, pixel scale, shake)
+  input/     schema-driven keyboard + touch input, shared by every sport
+  audio/     Web Audio synthesis (no sound files), one sound pack per sport
+  state/     settings, keybinds, per-sport preferences, the hub's save index
+  ui/        the design system, the hub, and the DOM screens
+  sports/
+    registry.ts   every sport's manifest, card art, and lazy loader
+    lacrosse/     its controls, sounds, settings and entry point
+    basketball/   court, ball, rim, shot model, AI, camera, renderer, season
+  data/      lacrosse: teams, rosters, players, ratings, difficulty, tactics
+  match/     lacrosse: the simulation — Match, ai, faceoff, commentary, replay
+  world/     lacrosse: conference tournaments, national brackets, auto-bids
+  challenge/ lacrosse: the nine-rung ladder, job offers, legacy, the coach
+  scouting/  lacrosse: prospects and fog of war, scouts, the recruiting class
+  league/    lacrosse: schedules, standings, playoffs, career progression
   dev/       headless balance, human-proxy and AI audit harnesses
 scripts/     browser end-to-end and feature-audit suites
 ```
+
+Each sport is a separate chunk: the hub is about 12 kB gzipped, basketball about
+35 kB, lacrosse about 148 kB, and none of them is fetched until it is chosen.
 
 Gameplay renders to a low-resolution pixel buffer that is upscaled with
 nearest-neighbour filtering; menus and HUD are DOM so text stays crisp and
