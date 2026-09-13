@@ -736,15 +736,21 @@ graded every season and end only by winning three titles in a window. That last
 one is there because it once was not: the season summary tested for the
 Challenge mode by name, so Super Challenge seasons were never graded at all.
 
-`npm run gameplay` drives the match engine itself — the keeper being reachable
-by Switch after a rebound, a screen being callable, quarter simulation, and the
+`npm run gameplay` drives the match engine itself. It plays a full game at the
+longest setting and watches every frame for the things that ruin a match without
+crashing it — a player off the field, a NaN position, a ball held by nobody, a
+loose ball sitting still in live play, a quarter that never ends — and checks
+that the box score adds up afterwards. It covers the keeper being reachable by
+Switch after a rebound, a screen being callable, quarter simulation, and the
 goal replay: that every camera angle gets used, that the same goal always
 replays the same way, that no framing runs twice in a row, and that a real
 engine goal arms the clip with the right scorer, keeper and cage.
 
 `npm run test:e2e` drives a real browser through the title screen, a quick game,
 a full season and playoff bracket, a dynasty offseason, a save reload, the
-practice drills, phone and tablet layouts, and a frame-rate check. Playwright is
+practice drills, phone and tablet layouts, and a frame-rate check. It also
+corrupts the save data on purpose — truncated JSON, an empty career, a null
+settings blob — and requires the game to boot to the menu anyway. Playwright is
 deliberately not a project dependency — install it only when you want to run the
 suite:
 
