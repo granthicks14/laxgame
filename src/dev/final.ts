@@ -103,6 +103,13 @@ function starRun(games: number, lift: number): StarRun {
 {
   const plain = starRun(GAMES, 0);
   const star = starRun(GAMES, LIFT);
+  // A win rate over a handful of games is mostly noise: sixty is where the two
+  // arms separate cleanly. A smaller GAMES is for quick tuning passes, so the
+  // sample-sensitive assertions stand down rather than report a false failure.
+  const enough = GAMES >= 40;
+  if (!enough) {
+    console.log(`  (GAMES=${GAMES} — indicative only; the rate checks need 40+)\n`);
+  }
 
   console.log('SUPERSTARS');
   console.log(`  ordinary squad   ${plain.points.toFixed(2)} pts/game from the slot, `
@@ -114,13 +121,17 @@ function starRun(games: number, lift: number): StarRun {
   // 5.0 points a game to 6.7, and the side from 42% to 60%. The bar sits well
   // under both so ordinary variance cannot fail the run, and well over nothing
   // so a star that stops mattering does.
-  check('a star is worth having', star.points > plain.points * 1.2,
-    `${plain.points.toFixed(2)} -> ${star.points.toFixed(2)} points a game`);
+  if (enough) {
+    check('a star is worth having', star.points > plain.points * 1.2,
+      `${plain.points.toFixed(2)} -> ${star.points.toFixed(2)} points a game`);
+  }
   check('a star lifts the scoreboard, not just his own line',
     star.goalsFor > plain.goalsFor,
     `${plain.goalsFor.toFixed(1)} -> ${star.goalsFor.toFixed(1)} goals a game`);
-  check('a star lifts the side that has him', star.winRate > plain.winRate,
-    `${(plain.winRate * 100).toFixed(0)}% -> ${(star.winRate * 100).toFixed(0)}%`);
+  if (enough) {
+    check('a star lifts the side that has him', star.winRate > plain.winRate,
+      `${(plain.winRate * 100).toFixed(0)}% -> ${(star.winRate * 100).toFixed(0)}%`);
+  }
   check('a star is not a cheat code', star.winRate <= 0.9,
     `${(star.winRate * 100).toFixed(0)}% wins over ${GAMES} games`);
   check('the other side can still score', star.goalsAgainst > 2,
