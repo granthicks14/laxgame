@@ -54,6 +54,30 @@ async function desktop(browser) {
   await boot(page);
   check('title screen boots into the main menu', await page.locator('.menu-btn').count() >= 6);
 
+  // --- a save that is not a save. Storage that has been corrupted, truncated
+  // or written by something else must never leave the player at a dead screen.
+  await page.evaluate(() => {
+    localStorage.setItem('lsl.career.dynasty.v9', '{not json at all');
+    localStorage.setItem('lsl.career.challenge.v9', '{"version":9,"mode":"challenge"}');
+    localStorage.setItem('lsl.settings.v1', 'null');
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.getByText('Press Start').click();
+  await page.waitForTimeout(420);
+  check('corrupt save data still boots to the menu',
+    await page.locator('.menu-btn').count() >= 6);
+  // The warnings the game prints on purpose ("corrupt save … discarding") are
+  // the handling working, so they are not failures; anything else is. Page
+  // errors land in `problems` directly and fail the run on their own.
+  const noisy = problems.filter((p) => /pageerror|console:/.test(p)
+    && !/corrupt save|incompatible/i.test(p));
+  check('and it is handled rather than thrown', noisy.length === 0,
+    noisy.slice(0, 2).join(' | '));
+  await page.evaluate(() => localStorage.clear());
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.getByText('Press Start').click();
+  await page.waitForTimeout(420);
+
   // --- quick game
   await menu(page, 'Play Now');
   await page.waitForTimeout(320);

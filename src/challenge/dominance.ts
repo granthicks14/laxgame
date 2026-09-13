@@ -138,9 +138,13 @@ export function dominanceLine(d: Dominance): string {
     return `Three championships in seasons ${d.achievedIn!.from}-${d.achievedIn!.to}. Dominance proved.`;
   }
   if (d.current.titles === 0) {
+    // A window that closes short is not a loss and must never read like one:
+    // it rolls forward and the career goes on. "Dominance not yet proven" is
+    // the whole verdict.
     return d.seasons <= d.span
       ? `No championships yet. This window runs to season ${d.current.to}.`
-      : `No championships in the last ${d.span} seasons. The window is open.`;
+      : `Dominance not yet proven — no titles in the last ${d.span} seasons. `
+        + 'The window rolls on.';
   }
   if (d.expiresIn !== null && d.expiresIn <= 2) {
     return `${d.current.titles} of ${d.need} in this window, and your oldest title leaves it `

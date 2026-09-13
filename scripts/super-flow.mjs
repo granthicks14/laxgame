@@ -34,19 +34,22 @@ const check = (name, ok, detail = '') => {
   if (!ok) problems.push(name);
 };
 
-/** A Super Challenge career five seasons in, written by the game's own code. */
-const save = execFileSync('npm', ['run', 'seed-save', '--silent'], {
-  env: { ...process.env, MODE: 'superchallenge', STAGE: '1', SEASONS: '5' },
+/** Super Challenge careers written by the game's own code. */
+const seed = (env) => execFileSync('npm', ['run', 'seed-save', '--silent'], {
+  env: { ...process.env, MODE: 'superchallenge', ...env },
   encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
 }).trim();
+/** Five seasons in, and twelve seasons in with nothing to show for them. */
+const save = seed({ STAGE: '1', SEASONS: '5' });
+const barren = seed({ STAGE: '0', SEASONS: '12' });
 const key = `lsl.career.${MODE}.v${JSON.parse(save).version}`;
 
 const browser = await chromium.launch({ executablePath: chromiumPath() });
 const errors = [];
 
-async function open(page) {
+async function open(page, which = save) {
   await page.goto(BASE, { waitUntil: 'networkidle' });
-  await page.evaluate(([k, v]) => { localStorage.clear(); localStorage.setItem(k, v); }, [key, save]);
+  await page.evaluate(([k, v]) => { localStorage.clear(); localStorage.setItem(k, v); }, [key, which]);
   await page.reload({ waitUntil: 'networkidle' });
   await page.getByText('Press Start').click();
   await page.waitForTimeout(420);
@@ -212,6 +215,41 @@ for (const [device, width, height] of [['phone', 390, 844], ['desktop', 1440, 90
     // the one that matters, so this is reported rather than failed.
     console.log('note  the tracker was not on screen at the end of the run');
   }
+  await ctx.close();
+}
+
+/* ------------------------- twelve seasons, no titles, and no way to fail out */
+
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errors.push(`barren: ${e.message}`));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(`barren: ${m.text()}`); });
+  await open(page, barren);
+
+  const long = await page.evaluate((k) => {
+    const c = JSON.parse(localStorage.getItem(k) ?? 'null');
+    const el = document.querySelector('.dom-card');
+    return {
+      seasons: c?.challenge?.steps?.length ?? 0,
+      titles: (c?.challenge?.steps ?? []).filter((s) => s.champion).length,
+      complete: !!c?.challenge?.complete,
+      ended: c?.challenge?.endedReason ?? '',
+      card: el ? (el.textContent ?? '').replace(/\s+/g, ' ').trim() : '',
+    };
+  }, key);
+
+  check('a twelve-season career with no titles is still being coached',
+    long.seasons >= 12 && !long.complete, `${long.seasons} seasons, ${long.titles} titles`);
+  check('nothing about it reads as a failure', !/fail|over|out of time/i.test(long.ended),
+    long.ended || 'no ending');
+  check('the window has rolled past the first ten seasons',
+    /Seasons (\d+)[–-](\d+)/.test(long.card)
+    && Number(long.card.match(/Seasons (\d+)[–-](\d+)/)[1]) > 1,
+    long.card || 'no tracker on screen');
+  check('and the tracker says so in words',
+    /not yet|short|no championships|0\/3/i.test(long.card), long.card);
+
   await ctx.close();
 }
 

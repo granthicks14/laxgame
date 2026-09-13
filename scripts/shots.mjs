@@ -105,6 +105,21 @@ for (const size of SIZES) {
   await settle(800);
   await shot('hub');
 
+  // Simulate a whole season and photograph what the coach lands on: the
+  // summary, then the offseason where the squad decisions are made.
+  if (await tap(/^Simulate the season$/i)) {
+    await settle(900);
+    for (const step of [/Continue to the (playoffs|season)/i, /^Continue$/i, /Advance to (year|season)/i]) {
+      if (await tap(step)) await settle(800);
+    }
+    await shot('season-end');
+    if (await tap(/Advance to (year|season)/i)) {
+      await settle(900);
+      await shot('offseason');
+      if (await tap(/^Start the season$/i)) await settle(700);
+    }
+  }
+
   for (const [label, name] of [
     [/^Team$/i, 'roster'],
     [/Recruiting board/i, 'recruiting'],

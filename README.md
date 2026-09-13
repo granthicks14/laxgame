@@ -62,7 +62,9 @@ levels, three game lengths.
 **Season** — a full district schedule, live standings, and a playoff bracket
 ending in the class championship. Small classes play everyone home and away;
 the playoff field is roughly the top half, so qualifying means something. Play
-every game or simulate the ones you don't want.
+every game, simulate the ones you don't want, or simulate the whole season at
+once — the hub leads with all three, so the button you are going to press is
+never below the fold.
 
 **Dynasty** — the same season, run back year after year, built out of five
 systems that feed each other:
