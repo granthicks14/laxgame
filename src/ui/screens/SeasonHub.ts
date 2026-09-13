@@ -102,41 +102,51 @@ export class SeasonHubScreen implements Screen {
     const standings = standingsSorted(career);
     const rank = standings.findIndex((r) => r.teamId === career.teamId) + 1;
 
+    // THE PRIMARY ACTION COMES FIRST. A coach simulating a career should never
+    // scroll to reach the button he is going to press fifty times — so the
+    // fixture and its controls sit directly under the header, and everything
+    // that informs the decision follows. On a wide screen the tracker and the
+    // table move into a column of their own beside it.
+    // Two side slots rather than one: on a phone the objective belongs at the
+    // top where it is a single compact card, and the table belongs at the
+    // bottom. On a wide screen both sit in a column beside the controls.
+    const objective = career.challenge && isSuperChallenge(mode)
+      ? h('div', { class: 'hub__objective' },
+        dominancePanel(app, dominance(career.challenge),
+          () => app.push((a) => new DominanceScreen(a))))
+      : null;
+    const table = h('div', { class: 'hub__aside' }, this.miniStandings(app, career, mode));
+
     this.el = screenEl(
       topbar(app, team.short, `Year ${career.year}`),
       h('div', { class: 'scroll' },
-        h('div', { class: 'wrapper stack' },
-          this.header(career, rank, standings.length),
-          // The dominance tracker is the FIRST thing on the hub in Super
-          // Challenge. It is the objective of the mode; burying it under the
-          // recruiting panel would make the one rule that matters the hardest
-          // thing on the screen to find.
-          career.challenge && isSuperChallenge(mode)
-            ? dominancePanel(app, dominance(career.challenge),
-              () => app.push((a) => new DominanceScreen(a)))
-            : null,
-          story ? this.storyPanel(story) : null,
-          post ? this.postseasonPanel(app, career, mode, post) : null,
-          game ? this.nextGame(app, career, game) : this.playoffWait(app, career, mode),
-          this.focusPanel(app, career),
-          this.officePanel(app, career, mode),
-          isCareerMode(mode) ? this.recruitingPanel(app, career, mode) : null,
-          career.challenge ? this.challengePanel(app, career, mode) : null,
-          this.newsPanel(career),
-          h('div', { class: 'row row--wrap' },
-            h('button', {
-              class: 'btn', text: 'Team', on: { click: () => app.push((a) => new TeamManageScreen(a, mode)) },
-            }),
-            h('button', {
-              class: 'btn', text: 'Schedule', on: { click: () => app.push((a) => new ScheduleScreen(a, mode)) },
-            }),
-            h('button', {
-              class: 'btn', text: 'Standings', on: { click: () => app.push((a) => new StandingsScreen(a, mode)) },
-            }),
-            h('button', {
-              class: 'btn', text: 'Statistics', on: { click: () => app.push((a) => new DynastyStatsScreen(a, mode)) },
-            })),
-          this.miniStandings(app, career, mode),
+        h('div', { class: 'wrapper' },
+          h('div', { class: 'hub' },
+            h('div', { class: 'hub__main stack' },
+              this.header(career, rank, standings.length),
+              game ? this.nextGame(app, career, game) : this.playoffWait(app, career, mode),
+              story ? this.storyPanel(story) : null,
+              post ? this.postseasonPanel(app, career, mode, post) : null,
+              this.focusPanel(app, career),
+              this.officePanel(app, career, mode),
+              isCareerMode(mode) ? this.recruitingPanel(app, career, mode) : null,
+              career.challenge ? this.challengePanel(app, career, mode) : null,
+              this.newsPanel(career),
+              h('div', { class: 'row row--wrap' },
+                h('button', {
+                  class: 'btn', text: 'Team', on: { click: () => app.push((a) => new TeamManageScreen(a, mode)) },
+                }),
+                h('button', {
+                  class: 'btn', text: 'Schedule', on: { click: () => app.push((a) => new ScheduleScreen(a, mode)) },
+                }),
+                h('button', {
+                  class: 'btn', text: 'Standings', on: { click: () => app.push((a) => new StandingsScreen(a, mode)) },
+                }),
+                h('button', {
+                  class: 'btn', text: 'Statistics', on: { click: () => app.push((a) => new DynastyStatsScreen(a, mode)) },
+                }))),
+            objective,
+            table),
         ),
       ),
     );
@@ -302,22 +312,53 @@ export class SeasonHubScreen implements Screen {
           text: 'Play game',
           on: { click: () => playSeasonGame(app, career, game) },
         }),
-        h('button', {
-          class: 'btn btn--block btn--sm',
-          text: 'Simulate this game',
-          on: {
-            click: () => {
-              const told = simulateUserGame(career, game);
-              saveCareer(career);
-              const you = userIsHome(career, game) ? game.homeScore : game.awayScore;
-              const them = userIsHome(career, game) ? game.awayScore : game.homeScore;
-              app.toast(`${you > them ? 'Won' : you === them ? 'Drew' : 'Lost'} ${you}-${them}`);
-              app.replace((a) => new SeasonHubScreen(a, career.mode, told));
+        h('div', { class: 'row', style: 'gap:8px' },
+          h('button', {
+            class: 'btn btn--sm',
+            style: 'flex:1 1 auto',
+            text: 'Simulate this game',
+            on: {
+              click: () => {
+                const told = simulateUserGame(career, game);
+                saveCareer(career);
+                const you = userIsHome(career, game) ? game.homeScore : game.awayScore;
+                const them = userIsHome(career, game) ? game.awayScore : game.homeScore;
+                app.toast(`${you > them ? 'Won' : you === them ? 'Drew' : 'Lost'} ${you}-${them}`);
+                app.replace((a) => new SeasonHubScreen(a, career.mode, told));
+              },
             },
-          },
-        }),
+          }),
+          // A coach who is building a programme rather than playing every
+          // Tuesday should not have to press the same button twenty times to
+          // reach his offseason.
+          h('button', {
+            class: 'btn btn--sm',
+            style: 'flex:1 1 auto',
+            text: 'Simulate the season',
+            on: { click: () => this.simulateRest(app, career) },
+          })),
       ),
     );
+  }
+
+  /**
+   * Plays out every remaining fixture of the season at once and lands on
+   * whatever comes next — the postseason screens, or the season summary. The
+   * games are the real simulation, one at a time, exactly as pressing the
+   * button that many times would have been.
+   */
+  private simulateRest(app: App, career: Career): void {
+    let played = 0;
+    let guard = 0;
+    while (guard++ < 400) {
+      const next = nextUserGame(career);
+      if (!next) break;
+      simulateUserGame(career, next);
+      played++;
+    }
+    saveCareer(career);
+    app.toast(played ? `Simulated ${played} game${played === 1 ? '' : 's'}` : 'Nothing left to play');
+    app.replace((a) => new SeasonHubScreen(a, career.mode));
   }
 
   /**

@@ -1203,6 +1203,49 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
   border: 2px solid var(--accent); color: var(--accent); font-size: 13px;
 }
 
+/* --- the season hub ------------------------------------------------------- */
+.hub { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.hub__main { min-width: 0; }
+.hub__objective, .hub__aside { min-width: 0; }
+/* Phone: the objective is one compact card at the top, the table at the bottom,
+   and the controls sit directly under the header where they belong. */
+.hub__objective { order: -1; }
+.hub__aside { order: 9; }
+@media (min-width: 900px) {
+  /* Wide: the controls keep the room, and the objective and the table move into
+     a column beside them that stays put while the left column scrolls. */
+  .hub {
+    grid-template-columns: minmax(0, 1fr) 310px;
+    grid-template-rows: auto auto 1fr;
+    align-items: start;
+  }
+  .hub__main { grid-column: 1; grid-row: 1 / span 3; }
+  .hub__objective { grid-column: 2; grid-row: 1; order: 0; position: sticky; top: 10px; }
+  .hub__aside { grid-column: 2; grid-row: 2; order: 0; }
+}
+
+/* --- the dominance card --------------------------------------------------- */
+.dom-card {
+  border: 2px solid var(--accent); background: var(--panel);
+  padding: 9px 12px; cursor: pointer;
+  display: grid; gap: 4px;
+}
+.dom-card--done { border-color: var(--green); }
+.dom-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dom-card__head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+}
+.dom-card__title { font-size: 12px; letter-spacing: .18em; color: var(--accent); }
+.dom-card--done .dom-card__title { color: var(--green); }
+.dom-card__window { color: var(--muted); white-space: nowrap; }
+.dom-card__body { display: flex; align-items: center; gap: 12px; }
+.dom-card__count { font-size: 26px; line-height: 1; }
+.dom-card__line { color: var(--text-2); }
+.dom-card__more { color: var(--accent); }
+@media (max-width: 560px) {
+  .dom-card__line { display: none; }
+}
+
 /* --- roster needs --------------------------------------------------------- */
 .need__top {
   display: flex; align-items: baseline; justify-content: space-between; gap: 10px;

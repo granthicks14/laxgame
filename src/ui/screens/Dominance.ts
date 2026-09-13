@@ -15,7 +15,7 @@
  * so the tracker cannot disagree with the seasons it is counting.
  * ------------------------------------------------------------------------- */
 
-import { h } from '../dom';
+import { activatable, h } from '../dom';
 import type { App, Screen } from '../App';
 import { screenEl, topbar, panel, emptyPanel } from '../components';
 import { loadCareer } from '../../state/saves';
@@ -44,35 +44,29 @@ function stat(label: string, value: string, tone = ''): HTMLElement {
 }
 
 /**
- * The compact panel for the season hub. Big enough to read in one glance and
- * small enough to live above the next fixture.
+ * The tracker as it appears on the hub: a compact card.
+ *
+ * It used to be a full panel at the top of the hub, which meant a coach who
+ * wanted to simulate a season scrolled past the objective to reach the
+ * simulate button — every game, every season. The rule it reports has not
+ * changed; the room it takes has.
  */
 export function dominancePanel(app: App, d: Dominance, onOpen: () => void): HTMLElement {
   const done = d.achieved;
-  return h('div', { class: `panel dom${done ? ' dom--done' : ''}` },
-    h('div', { class: 'panel__head row', style: 'justify-content:space-between;align-items:baseline' },
-      h('span', { text: done ? 'Dominance proved' : 'Dominance tracker' }),
-      h('span', {
-        class: 'tiny',
-        text: done ? '' : `Seasons ${d.current.from}–${d.current.to}`,
-      })),
-    h('div', { class: 'panel__body stack', style: 'gap:10px' },
-      h('div', { class: 'row', style: 'justify-content:space-between;align-items:center;gap:12px' },
-        h('div', { class: 'stack', style: 'gap:3px;min-width:0' },
-          h('div', {
-            class: 'display',
-            style: `font-size:26px;line-height:1;color:${done ? 'var(--green)' : 'var(--text)'}`,
-            text: `${d.current.titles} / ${d.need}`,
-          }),
-          h('div', { class: 'tiny', text: 'championships in this window' })),
-        pips(d)),
-      h('div', { class: 'small', text: dominanceLine(d) }),
-      h('button', {
-        class: 'btn btn--block btn--sm',
-        text: 'Open the dominance tracker',
-        on: { click: onOpen },
-      })),
-  );
+  return activatable(h('div', { class: `dom-card${done ? ' dom-card--done' : ''}` },
+    h('div', { class: 'dom-card__head' },
+      h('span', { class: 'dom-card__title display', text: done ? 'Dominance proved' : 'Dominance' }),
+      h('span', { class: 'dom-card__window tiny', text: `Seasons ${d.current.from}–${d.current.to}` })),
+    h('div', { class: 'dom-card__body' },
+      h('div', {
+        class: 'dom-card__count display',
+        style: `color:${done ? 'var(--green)' : 'var(--text)'}`,
+        text: `${d.current.titles}/${d.need}`,
+      }),
+      pips(d)),
+    h('div', { class: 'dom-card__line tiny', text: dominanceLine(d) }),
+    h('div', { class: 'dom-card__more tiny', text: 'Open the tracker ▸' })),
+  onOpen);
   void app;
 }
 

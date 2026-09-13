@@ -257,9 +257,14 @@ function shotRateFactor(side: SideInput, opponent: SideInput, par: number, rain:
   const iq = (side.ratings.chemistry - 70) / 500 + side.coaching * 0.05;
   const styleGreed = 0.82 + off.shotGreed * 0.18;
   const packed = def.creaseBias > 1.2 ? 1.06 : def.creaseBias < 0.85 ? 0.97 : 1;
+  // The gap between what an offence can create and what a defence can deny.
+  // This used to be divided by 300, which made a 24-point advantage worth 8% —
+  // so an elite attack scored almost exactly what an average one did while a
+  // weak defence was punished hard, and the model only really believed in one
+  // half of a roster.
   return clamp(
-    styleGreed * packed * (1 + (creation - denial) / 300 + iq - rain * 0.05),
-    0.6, 1.5,
+    styleGreed * packed * (1 + (creation - denial) / 210 + iq - rain * 0.05),
+    0.6, 1.55,
   );
 }
 
@@ -274,7 +279,7 @@ function onGoalFactor(side: SideInput, opponent: SideInput, par: number, w: SimW
   // A shooting coach, better ball movement and better shot selection all land
   // here: the same number of shots, more of them worth taking.
   return clamp(
-    patience * weather * side.staff.shotQuality * (1 + (shooting - contest) / 470),
+    patience * weather * side.staff.shotQuality * (1 + (shooting - contest) / 300),
     0.72, 1.4,
   );
 }
@@ -404,8 +409,15 @@ export function simulateMatch(
     const onGoal = clamp(profile.onGoal * onGoalFactor(side, opp, par, weather), 0.4, 0.82);
     const sog = shots * onGoal;
 
-    // --- 4. Conversion. The keeper he is shooting at.
-    const savePct = saveFactor(opp, par, profile);
+    // --- 4. Conversion. The keeper he is shooting at — and the quality of the
+    //        look he is facing. A keeper's rating was the only thing that
+    //        decided a save, which handed the defensive half of a roster a
+    //        lever the offensive half had no answer to: a 94 attack scored
+    //        almost exactly what an 83 one did. A better offence does not only
+    //        shoot more often and hit the cage more often, it shoots from
+    //        places a keeper finds harder.
+    const quality = onGoal / profile.onGoal;
+    const savePct = clamp(saveFactor(opp, par, profile) - (quality - 1) * 0.34, 0.28, 0.78);
     // A home crowd is worth a little, and it is worth more the bigger the ground.
     const homeEdge = side.home && opts.homeAdvantage !== false ? 1.035 : 1;
     const goalsMean = sog * (1 - savePct) * homeEdge;

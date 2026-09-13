@@ -20,7 +20,7 @@ import { audio } from '../../audio/Audio';
 import { trophyIcon } from '../icons';
 import { LADDER_LABEL, type Movement, type MovementReport } from '../../league/promotion';
 import { LEVELS } from '../../data/levels';
-import { isCareerMode } from '../../league/modes';
+import { isCareerMode, isClimbMode } from '../../league/modes';
 import { marketFor } from '../../league/transfers';
 import { RecruitingScreen } from './Recruiting';
 import { staffSummary } from '../../league/coaching';
@@ -42,14 +42,22 @@ export class SeasonSummaryScreen implements Screen {
       .sort((a, b) => (b.season.goals * 2 + b.season.assists) - (a.season.goals * 2 + a.season.assists))
       .slice(0, 10);
 
-    // Challenge grades the season the moment it ends: reputation, the hot seat,
-    // and whether the phone rings.
-    const verdict = career.mode === 'challenge' ? resolveChallengeSeason(career) : null;
+    // A CLIMB grades the season the moment it ends: reputation, the hot seat,
+    // the record of the season, and whether the phone rings.
+    //
+    // This asked for `mode === 'challenge'` and so did the block below, which
+    // meant a SUPER CHALLENGE season was never graded at all: no step written
+    // to the record, no reputation, no sacking, no promotion, and — because the
+    // dominance tracker is derived from those steps — a rolling window frozen
+    // on the seasons that existed when the career was last graded. The whole
+    // mode was stuck the moment it was played through the screens rather than
+    // the harness. `isClimbMode` is the question both of them meant to ask.
+    const verdict = isClimbMode(career.mode) ? resolveChallengeSeason(career) : null;
     if (verdict) saveCareer(career);
     const climb = career.challenge;
 
     const actions: HTMLElement[] = [];
-    if (career.mode === 'challenge' && climb) {
+    if (isClimbMode(career.mode) && climb) {
       if (climb.complete) {
         actions.push(h('button', {
           class: 'btn btn--primary btn--block',

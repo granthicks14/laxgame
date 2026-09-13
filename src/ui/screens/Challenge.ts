@@ -376,7 +376,10 @@ export class JobOffersScreen implements Screen {
               return;
             }
             app.toast(wasFired ? 'A year out of the game.' : 'You stay put.');
-            app.replace((a) => new SeasonHubScreen(a, 'challenge'));
+            // The career's OWN mode. Hardcoding 'challenge' sent a Super
+            // Challenge coach to the Challenge save slot, which is a different
+            // career entirely.
+            app.replace((a) => new SeasonHubScreen(a, career.mode));
           },
         },
       }));
@@ -427,7 +430,7 @@ function offerCard(app: App, career: Career, offer: JobOffer, redraw: () => void
           click: () => {
             takeChallengeJob(career, offer);
             saveCareer(career);
-            app.replace((a) => new SeasonHubScreen(a, 'challenge'));
+            app.replace((a) => new SeasonHubScreen(a, career.mode));
             void redraw;
           },
         },

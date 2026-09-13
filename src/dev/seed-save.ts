@@ -5,9 +5,11 @@
  *
  *   STAGE=4 node ... seed-save.mjs > save.json
  *   STAGE=3 CHAMPION=1 ...          # a save sitting on the Class A title
+ *   MODE=superchallenge SEASONS=6 ... # a Super Challenge career a few years in
  */
 import {
-  advancePhase, nextUserGame, runOffseason, simulateUserGame, startChallenge, takeChallengeJob,
+  advancePhase, nextUserGame, resolveChallengeSeason, runOffseason, simulateUserGame,
+  startChallenge, takeChallengeJob,
 } from '../league/career';
 import { programmesAt, stageAt } from '../challenge/ladder';
 import { expectationFor } from '../challenge/state';
@@ -17,6 +19,9 @@ const env = (globalThis as { process?: { env?: Record<string, string | undefined
 const STAGE = Number(env.STAGE ?? 4);
 const CHAMPION = env.CHAMPION === '1';
 const PLAY = env.PLAY === '1';
+const MODE = env.MODE === 'superchallenge' ? 'superchallenge' : 'challenge';
+/** Seasons to play out before writing the save, for a career with a history. */
+const SEASONS = Number(env.SEASONS ?? 0);
 
 function playSeason(c: Career) {
   let g = 0;
@@ -29,7 +34,7 @@ function wonIt(c: Career): boolean {
   return c.history[c.history.length - 1]?.champion === true;
 }
 
-const career = startChallenge({ difficulty: 'varsity', gameLength: 'short', seed: 2468 });
+const career = startChallenge({ difficulty: 'varsity', gameLength: 'short', seed: 2468, mode: MODE });
 const state = career.challenge!;
 if (STAGE > 0) {
   state.reputation = 88;
@@ -58,5 +63,12 @@ if (PLAY || CHAMPION) {
       throw new Error(`no championship at stage ${STAGE} in ${seasons} seasons — pick another team or seed`);
     }
   }
+}
+for (let i = 0; i < SEASONS; i++) {
+  playSeason(career);
+  resolveChallengeSeason(career);
+  if (career.challenge?.offers) career.challenge.offers = null;
+  if (career.challenge?.complete) break;
+  runOffseason(career);
 }
 console.log(JSON.stringify(career));

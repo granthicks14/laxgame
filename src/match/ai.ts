@@ -506,8 +506,18 @@ function defenseAI(m: Match, p: MatchPlayer, dt: number): void {
   // A coached defence slides on time and covers lanes; an uncoached one waits
   // for the ball to come to it.
   const dIQ = m.coachingOf(p.side).defenseIQ;
-  const markDist = Math.min(tac.markDistance, d.markDistance) * (onBall ? starTight : 1) * (1 - dIQ * 0.1);
-  const slideRange = Math.max(tac.slideTrigger, d.slideTrigger) * starHelp * (1 + dIQ * 0.14);
+  // AND THE DEFENDER'S OWN STANDARD. A poor defenceman plays a step loose and
+  // reads the slide late; a good one is on the hands early and gone before the
+  // dodge. Without this a squad's defensive rating only showed up once contact
+  // happened, so a bad defence conceded barely more than an average one while a
+  // good one conceded far fewer — the thing a coach builds a defence to change
+  // was the thing that moved least.
+  const grade = clamp((p.data.attrs.defense * 0.6 + p.data.attrs.awareness * 0.4 - m.par) / 100,
+    -0.3, 0.3);
+  const markDist = Math.min(tac.markDistance, d.markDistance)
+    * (onBall ? starTight : 1) * (1 - dIQ * 0.1) * (1 - grade * 0.5);
+  const slideRange = Math.max(tac.slideTrigger, d.slideTrigger)
+    * starHelp * (1 + dIQ * 0.14) * (1 + grade * 0.45);
 
   // --- on-ball defender: body up and look for a check.
   if (onBall) {
