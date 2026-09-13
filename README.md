@@ -545,6 +545,15 @@ The match is a real simulation, not a dice roll:
   (They used to: the whistle delay was a live `Math.random()`, which nudged the
   timing of everything after every faceoff and made the engine impossible to
   measure to within a goal.)
+- **One seed, one career.** The same holds a level up. A player's id is drawn
+  from the generator's own seeded stream, which matters because that id is
+  hashed into the rng that resolves a transfer pitch and into the scouting
+  sheet's per-attribute offsets — while it carried a `Math.random()` and a
+  process-wide counter, the portal was not reproducible and a career's outcome
+  depended on how many players happened to have been generated before it. Two
+  runs of `npm run start-check` now come back byte-identical, and a tier
+  measured on its own gives the same answer as the same tier measured after
+  four others.
 
 - **Faceoffs.** Your FOGO's rating sets how wide the clamp window is; your timing
   decides how well you hit it. A specialist is worth having, but the draw is
