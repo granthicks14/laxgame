@@ -1,6 +1,10 @@
 import { HoopsGame } from '../sports/basketball/Game';
 import { DIFFICULTIES, GAME_LENGTHS, HOOPS } from '../sports/basketball/tuning';
 import { TEAMS, generateRoster, teamRatings } from '../sports/basketball/data';
+import {
+  beginPlayoffs, createSeason, nextPlayoffGame, playoffGameFor, playoffSeeds,
+  recordPlayoff, rollOver, simulateGame, standings,
+} from '../sports/basketball/season';
 import { COURT, isThree } from '../sports/basketball/court';
 import { makeChance, releaseQuality, releaseWindow } from '../sports/basketball/shot';
 import type { DifficultyKey, TeamBox } from '../sports/basketball/types';
@@ -290,6 +294,75 @@ check('the box score adds up to the team line', boxDrift === 0,
   `${boxDrift} sides drifted (${fouledOut} men fouled out)`);
 check('points are scored inside as well as out',
   pct(t.paint, t.points) > 0.15, fmt(pct(t.paint, t.points)));
+
+/* ------------------------------------------------------------------ season */
+
+console.log('\nA WHOLE SEASON\n');
+{
+  const season = createSeason(TEAMS[0].id, 'pro', LENGTH, 77123);
+  const games = new Map<string, { played: number; home: number }>();
+  for (const t of TEAMS) games.set(t.id, { played: 0, home: 0 });
+  for (const f of season.schedule) {
+    const h = games.get(f.homeId);
+    const a = games.get(f.awayId);
+    if (h) { h.played++; h.home++; }
+    if (a) a.played++;
+    if (f.homeId === f.awayId) throw new Error('a club is scheduled against itself');
+  }
+  const counts = [...games.values()];
+  check('every club plays the same number of games',
+    new Set(counts.map((c) => c.played)).size === 1, `${counts[0].played} each`);
+  check('and half of them at home',
+    counts.every((c) => c.home * 2 === c.played), `${counts[0].home} home`);
+
+  // Play it out, then the bracket.
+  for (let i = 0; i < season.schedule.length; i++) simulateGame(season, i);
+  const table = standings(season);
+  const wins = table.reduce((n, r) => n + r.wins, 0);
+  const losses = table.reduce((n, r) => n + r.losses, 0);
+  check('every fixture produced exactly one winner and one loser',
+    wins === season.schedule.length && losses === season.schedule.length,
+    `${wins}W ${losses}L of ${season.schedule.length}`);
+  check('the table is ordered by record',
+    table.every((r, i) => i === 0 || table[i - 1].wins >= r.wins),
+    table.map((r) => `${r.team.abbr} ${r.wins}-${r.losses}`).slice(0, 3).join(', '));
+  check('somebody is better than somebody else',
+    table[0].wins - table[table.length - 1].wins >= 4,
+    `${table[0].wins} to ${table[table.length - 1].wins}`);
+  check('points for and against balance across the league',
+    table.reduce((n, r) => n + r.pointsFor - r.pointsAgainst, 0) === 0);
+
+  beginPlayoffs(season);
+  let guard = 0;
+  while (guard++ < 40) {
+    const g = nextPlayoffGame(season);
+    if (!g) break;
+    const sim = playoffGameFor(season, g, null);
+    sim.simulateRest();
+    recordPlayoff(g, sim.score.home, sim.score.away);
+  }
+  check('the bracket is seven games', season.playoffs.length === 7,
+    `${season.playoffs.length}`);
+  check('and it produces a champion', !!season.championId,
+    season.championId ?? 'nobody');
+  const champ = TEAMS.find((t) => t.id === season.championId);
+  const seeded = playoffSeeds(season);
+  check('who was in the field',
+    [...seeded.East, ...seeded.West].some((r) => r.team.id === season.championId),
+    champ?.name ?? '');
+  check('no playoff game ended level',
+    season.playoffs.every((g) => g.homeScore !== g.awayScore));
+
+  const next = rollOver(season);
+  check('next year starts empty but remembers the titles',
+    next.year === 2 && next.results.length === 0 && next.schedule.length === season.schedule.length,
+    `year ${next.year}`);
+
+  // The same seed builds the same schedule, so a season is reproducible too.
+  const twin = createSeason(TEAMS[0].id, 'pro', LENGTH, 77123);
+  check('the same seed builds the same schedule',
+    JSON.stringify(twin.schedule) === JSON.stringify(season.schedule));
+}
 
 /* -------------------------------------------------------------- determinism */
 
