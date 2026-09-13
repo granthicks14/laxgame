@@ -41,7 +41,14 @@ function check(name: string, ok: boolean, detail = ''): void {
   if (!ok) problems.push(name);
 }
 
-const GAMES = Number(env?.env?.GAMES ?? 24);
+/**
+ * Enough games that a RATE means something. Twenty-four was not: the defensive
+ * rebound share and the assist rate both swung three to five points between one
+ * set of seeds and another, which is wider than the bars they are held to, so
+ * the suite failed on whichever league happened to be generated rather than on
+ * anything about the basketball.
+ */
+const GAMES = Number(env?.env?.GAMES ?? 90);
 const LENGTH = (env?.env?.LENGTH ?? 'standard') as keyof typeof GAME_LENGTHS;
 
 const pct = (a: number, b: number): number => (b > 0 ? a / b : 0);

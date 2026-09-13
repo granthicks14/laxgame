@@ -47,7 +47,8 @@
     "dominance": "esbuild src/dev/dominance.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-dominance.mjs --log-level=error && node node_modules/.cache/lsl-dominance.mjs",
     "super": "esbuild src/dev/superchallenge.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-super.mjs --log-level=error && node node_modules/.cache/lsl-super.mjs",
     "sounds": "node scripts/sounds.mjs",
-    "hoops": "esbuild src/dev/hoops.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops.mjs --log-level=warning && node node_modules/.cache/hoops.mjs"
+    "hoops": "esbuild src/dev/hoops.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops.mjs --log-level=warning && node node_modules/.cache/hoops.mjs",
+    "hoops-world": "esbuild src/dev/hoopsWorld.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-world.mjs --log-level=warning && node node_modules/.cache/hoops-world.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

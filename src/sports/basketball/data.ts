@@ -133,8 +133,25 @@ export interface HoopsPlayer {
   heightIn: number;
   attrs: HoopsAttrs;
   overall: number;
-  /** Years in the league, which is what experience means here. */
+  /**
+   * How long he has been here. At a school or a college that is his CLASS —
+   * 1 is a freshman, 4 a senior, and the year after his last one he is gone. In
+   * a professional league it is seasons of experience and nobody graduates.
+   */
   years: number;
+  /** Years old. Drives the professional decline curve. */
+  age: number;
+  /**
+   * The overall he could reach if everything goes right. Never visible to the
+   * coach as a number — scouting shows a range — but every development system
+   * reads it, and it is what makes a raw freshman worth a scholarship.
+   */
+  potential: number;
+  /**
+   * 25-99. How hard he works at it. Two players with the same potential and the
+   * same minutes do not develop the same amount, and this is why.
+   */
+  work: number;
 }
 
 export const shortName = (p: HoopsPlayer): string => `${p.first[0]}. ${p.last}`;
@@ -153,7 +170,12 @@ export interface HoopsTeam {
   primary: string;
   secondary: string;
   arena: string;
-  conference: 'East' | 'West';
+  /**
+   * Which conference the club plays in. The original twelve use 'East' and
+   * 'West'; a programme in the wider world uses its own conference id, so one
+   * type covers a high school district and a professional conference alike.
+   */
+  conference: string;
   /**
    * 1..5. Drives how strong a generated roster is, so the league has a real
    * pecking order rather than twelve identical teams.
@@ -274,28 +296,100 @@ export interface GeneratedTeam {
   roster: HoopsPlayer[];
 }
 
+/** What a roster is being built for. Defaults reproduce the original league. */
+export interface RosterOptions {
+  /** The attribute pool the squad is drawn from. */
+  par: number;
+  /** How many players. */
+  size: number;
+  /** How many at each position. */
+  shape: Record<HoopsPosition, number>;
+  /** Schoolboys and students graduate; professionals age. */
+  ageSystem: 'class' | 'pro';
+  /** Years of eligibility at a class level: four at a school, two at a JUCO. */
+  eligibility: number;
+}
+
+/** The top league's shape, which is what the original twelve clubs were built to. */
+export const PRO_ROSTER: Omit<RosterOptions, 'par'> = {
+  size: 15,
+  shape: { PG: 3, SG: 3, SF: 3, PF: 3, C: 3 },
+  ageSystem: 'pro',
+  eligibility: 0,
+};
+
 /**
- * Build a team's roster from a seed. Same seed, same roster — the whole league is
- * reproducible, which is what lets the balance harnesses mean anything.
+ * How much a class player has already become. A freshman is a long way below
+ * what his programme plays at; a senior is above it. This curve, and not a
+ * rating bonus, is why a squad full of seniors is a good squad.
+ *
+ * A programme with FEWER years of eligibility starts further along it. A junior
+ * college takes players who have already finished school, so its first-years are
+ * college sophomores rather than fourteen-year-olds — read the curve from the
+ * bottom and a two-year programme comes out weaker than a high school, which is
+ * not a thing that happens.
  */
-export function generateRoster(team: HoopsTeam, seed: number | string): HoopsPlayer[] {
-  const rng = new Rng(`hoops:${team.id}:${seed}`);
-  // Prestige is the pecking order: the best club's rotation is roughly fifteen
-  // rating points above the worst one's, which is about a real league's spread.
-  const pool = 52 + team.prestige * 3.4;
+const CLASS_CURVE = [-11, -3.5, 2.5, 6.5];
+
+function classArc(years: number, eligibility: number): number {
+  const start = Math.max(0, CLASS_CURVE.length - eligibility - 1);
+  const i = Math.min(CLASS_CURVE.length - 1, start + years - 1);
+  return CLASS_CURVE[i];
+}
+
+/** The professional arc: rising to 27, level to 30, then away. */
+function ageCurve(age: number): number {
+  if (age <= 21) return -9;
+  if (age <= 23) return -5;
+  if (age <= 25) return -1.5;
+  if (age <= 29) return 1.5;
+  if (age <= 32) return -1;
+  if (age <= 35) return -5;
+  return -10;
+}
+
+/**
+ * Build a squad from a seed. Same seed, same squad — the whole world is
+ * reproducible, which is what lets a career be replayed and the balance
+ * harnesses mean anything.
+ */
+export function buildRoster(
+  teamId: string, seed: number | string, opts: RosterOptions,
+): HoopsPlayer[] {
+  const rng = new Rng(`hoops:${teamId}:${seed}`);
   const used = new Set<number>();
   const names = new Set<string>();
   const roster: HoopsPlayer[] = [];
 
-  // Ten players: a starting five and a five-man bench, which is the rotation a
-  // game actually uses.
-  const slots: HoopsPosition[] = ['PG', 'SG', 'SF', 'PF', 'C', 'PG', 'SG', 'SF', 'PF', 'C'];
+  // The squad's positional shape, as a flat list of slots to fill. The first
+  // one at each position is a starter, so a starting five always exists.
+  const slots: HoopsPosition[] = [];
+  for (const pos of POSITIONS) for (let i = 0; i < opts.shape[pos]; i++) slots.push(pos);
+  while (slots.length > opts.size) slots.pop();
+  while (slots.length < opts.size) slots.push(POSITIONS[slots.length % POSITIONS.length]);
+  const depth = new Map<HoopsPosition, number>();
 
-  slots.forEach((pos, i) => {
-    const starter = i < 5;
-    // Bench players are worse, and the drop is real: a thin bench should hurt.
-    const tier = starter ? rng.range(3.5, 9) : rng.range(-11, -2.5);
-    const attrs = baseAttrs(rng, pool + tier, pos);
+  for (const pos of slots) {
+    const rank = depth.get(pos) ?? 0;
+    depth.set(pos, rank + 1);
+    const starter = rank === 0;
+
+    let years: number;
+    let age: number;
+    let arc: number;
+    if (opts.ageSystem === 'class') {
+      years = rng.int(1, opts.eligibility);
+      age = (opts.eligibility === 2 ? 18 : 17) + years;
+      arc = classArc(years, opts.eligibility);
+    } else {
+      age = Math.round(clamp(rng.gauss(27, 4), 19, 38));
+      years = clamp(age - 19 - rng.int(0, 2), 0, 18);
+      arc = ageCurve(age);
+    }
+
+    // Depth is real: the eleventh man on a roster is a long way from the first.
+    const tier = starter ? rng.range(4, 9) : rng.range(-3, -1) - rank * 2.6;
+    const attrs = baseAttrs(rng, opts.par + tier + arc, pos);
 
     const arch = rng.pick(ARCHETYPES[pos]);
     for (const [key, delta] of Object.entries(arch.bias) as [AttrKey, number][]) {
@@ -325,16 +419,33 @@ export function generateRoster(team: HoopsTeam, seed: number | string): HoopsPla
     }
     names.add(`${first} ${last}`);
 
+    const overall = computeOverall(pos, attrs);
+    // Room to grow: a lot for a young player, none at all for a veteran. The
+    // gap is drawn skewed, so most players are roughly what they look like and
+    // a few are worth the wait.
+    const youth = opts.ageSystem === 'class'
+      ? clamp((opts.eligibility + 1 - years) / opts.eligibility, 0, 1)
+      : clamp((27 - age) / 8, 0, 1);
+    const gap = Math.round(rng.range(0, 1) ** 1.8 * (4 + youth * 26));
+
     roster.push({
       id: `h${rng.int(0, 0x7fff_ffff).toString(36)}${rng.int(0, 0x7fff_ffff).toString(36)}`,
-      first, last, pos, number: num, heightIn, attrs,
-      overall: computeOverall(pos, attrs),
-      years: rng.int(0, 14),
+      first, last, pos, number: num, heightIn, attrs, overall, years, age,
+      potential: clamp(overall + gap, overall, 99),
+      work: clamp(Math.round(rng.gauss(62, 14)), 25, 99),
     });
-  });
+  }
 
-  // Best first inside each position, so the starting five really is the best five.
   return roster;
+}
+
+/**
+ * The original league's rosters, unchanged in shape and in scale: the pool is
+ * still `52 + prestige * 3.4`, so the twelve clubs are the competition they
+ * always were.
+ */
+export function generateRoster(team: HoopsTeam, seed: number | string): HoopsPlayer[] {
+  return buildRoster(team.id, seed, { ...PRO_ROSTER, par: 52 + team.prestige * 3.4 });
 }
 
 /** The five who start: the best player at each position. */
