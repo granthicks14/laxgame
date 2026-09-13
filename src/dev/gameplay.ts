@@ -16,6 +16,7 @@ import { Match } from '../match/Match';
 import { makeMatchConfig } from '../league/matchSetup';
 import { getTeam } from '../data/teams';
 import type { MatchPlayer } from '../match/types';
+import { FIELD } from '../data/constants';
 import {
   MAX_REPLAY_ZOOM, REPLAY_ANGLES, pickAngle, replayCamera, type ReplayAngle,
 } from '../match/replay';
@@ -346,6 +347,104 @@ const goalieOf = (m: Match, side: 'home' | 'away'): MatchPlayer => m.goalieOf(si
     + `${other.stats.home.faceoffWins}/${other.stats.away.faceoffWins}`;
   check('a different seed plays a different game', otherLine !== first,
     `${first} vs ${otherLine}`);
+}
+
+/* ------------------------------------------- 9. a long game, watched closely
+ * The failure modes that ruin a match are not crashes: a ball that stops being
+ * anywhere, a player parked outside the field, a quarter that never ends, a
+ * carrier who is not on the pitch. This plays a full game at the longest
+ * setting and watches every frame of it for all of them.
+ * -------------------------------------------------------------------------- */
+
+{
+  const m = new Match(makeMatchConfig({
+    homeTeam: getTeam('highland-park'),
+    awayTeam: getTeam('dallas-jesuit'),
+    difficulty: 'allstate',
+    gameLength: 'long',
+    humanSide: null,
+    seed: 24680,
+    replays: false,
+  }));
+
+  let offField = 0;
+  let badCarrier = 0;
+  let nanSeen = 0;
+  let stillBall = 0;
+  let stillFor = 0;
+  let lastQuarter = m.quarter;
+  let quarterStuck = 0;
+  let sinceQuarter = 0;
+  const seenPhases = new Set<string>();
+
+  let steps = 0;
+  const MAX = 60 * 60 * 30; // half an hour of game time: far beyond a long game
+  while (m.phase !== 'final' && steps++ < MAX) {
+    m.update(DT);
+    seenPhases.add(m.phase);
+
+    // Nobody leaves the venue, and nothing becomes NaN.
+    for (const p of m.players) {
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) nanSeen++;
+      if (p.x < -12 || p.x > FIELD.length + 12 || p.y < -12 || p.y > FIELD.width + 12) offField++;
+    }
+    if (!Number.isFinite(m.ball.x) || !Number.isFinite(m.ball.y)) nanSeen++;
+
+    // A carrier must be a player who is actually in this match.
+    if (m.ball.state === 'carried') {
+      if (!m.ball.carrier || !m.players.includes(m.ball.carrier)) badCarrier++;
+    }
+
+    // A loose ball that never moves is a stuck ball. Restarts legitimately park
+    // it for a second or two, so this only counts live play.
+    if (m.phase === 'live' && m.ball.state === 'loose') {
+      const speed = Math.hypot(m.ball.vx, m.ball.vy);
+      stillFor = speed < 0.05 ? stillFor + DT : 0;
+      if (stillFor > 6) { stillBall++; stillFor = 0; }
+    } else {
+      stillFor = 0;
+    }
+
+    // A quarter that never ends is the other way a game hangs.
+    sinceQuarter += DT;
+    if (m.quarter !== lastQuarter) { lastQuarter = m.quarter; sinceQuarter = 0; }
+    if (sinceQuarter > m.cfg.quarterSeconds + 240) { quarterStuck++; sinceQuarter = 0; }
+  }
+
+  check('a long game reaches its final whistle', m.phase === 'final',
+    `${m.phase} after ${(steps / 60) | 0}s of play`);
+  check('nobody leaves the field', offField === 0, `${offField} frames off the field`);
+  check('nothing becomes NaN', nanSeen === 0, `${nanSeen} frames`);
+  check('the ball is always held by somebody who is playing', badCarrier === 0,
+    `${badCarrier} frames`);
+  check('no loose ball sits still in live play', stillBall === 0, `${stillBall} times`);
+  check('every quarter ends', quarterStuck === 0, `${quarterStuck} stalls`);
+  check('the game played through its phases', seenPhases.has('live') && seenPhases.has('faceoff'),
+    [...seenPhases].join(', '));
+
+  // The box score has to survive the whole thing.
+  const box = m.stats;
+  const scored = m.score.home + m.score.away;
+  check('the scoreboard matches the box score',
+    box.home.goals === m.score.home && box.away.goals === m.score.away,
+    `${m.score.home}-${m.score.away} v ${box.home.goals}-${box.away.goals}`);
+  check('nobody scored more than they shot',
+    box.home.goals <= box.home.shots && box.away.goals <= box.away.shots,
+    `${box.home.goals}/${box.home.shots} and ${box.away.goals}/${box.away.shots}`);
+  check('saves and goals account for the shots on target',
+    box.home.shotsOnGoal >= box.home.goals && box.away.shotsOnGoal >= box.away.goals);
+  check('the game produced a real result', scored > 0, `${m.score.home}-${m.score.away}`);
+
+  // And every player's own line adds up.
+  const stats = m.playerStats();
+  let bad = 0;
+  for (const p of m.players) {
+    const line = stats.get(p.data.id);
+    if (!line) continue;
+    if (line.goals > line.shots) bad++;
+    if (line.goals < 0 || line.assists < 0 || line.saves < 0) bad++;
+  }
+  check('every player line adds up', bad === 0, `${bad} broken lines`);
 }
 
 console.log();

@@ -1149,6 +1149,16 @@ export class Match {
     this.stats[side].goals++;
     if (shooter) {
       shooter.stat.goals++;
+      // A goal always carries a shot on the scorer's line. Not every goal comes
+      // from a shot — a pass that finds the net off a stick counts to whoever
+      // touched it last — and those used to be credited as a goal with no shot
+      // behind it, which left a player with more goals than shots in his own
+      // box score and a team's shooting percentage quietly over 100 on that
+      // possession.
+      if (this.ball.state !== 'shot') {
+        shooter.stat.shots++;
+        this.stats[side].shots++;
+      }
       if (!this.ball.onGoalCounted) {
         shooter.stat.shotsOnGoal++;
         this.stats[side].shotsOnGoal++;

@@ -195,9 +195,16 @@ whole mode. **Win three championships inside any rolling ten-season window.**
 - There is **no total time limit** and no permanent failure. A window that
   closes without three titles is not a loss — the tracker says *dominance not
   yet proven* and the career continues. The mode has no "you failed" ending.
-- The hub leads with the tracker: the season you are in, the window being
-  measured, titles inside it, the best ten-year run of the career so far,
-  career championships, and how far off the requirement you are.
+- The hub is built for a coach who wants to simulate. The fixture and its
+  controls — play, simulate the game, simulate the whole season — sit directly
+  under the header, and the tracker is a compact card: on a phone it is 92px at
+  the top of the screen; on a wide screen it moves into a sticky column beside
+  the controls with the table. `npm run test:super` measures it in a real
+  browser at 390px and 1440px: every control on the first screenful, and eight
+  consecutive simulations without a scroll at either size.
+- The tracker itself opens into the full record: the window being measured,
+  titles inside it, the best ten-year run of the career, career championships,
+  every season laid out, and how far off the requirement you are.
 - It is **derived**, never stored. `dominance()` searches every ten-season
   window in the career's own step history, so there is no counter to drift, no
   migration to write, and no way for the display and the rule to disagree.
@@ -316,6 +323,46 @@ staff narrows the gap.
 | D-III / D-II | Transfer portal | 4 | 12 | yes |
 | D-I | Transfer portal | 5 | 14 | yes |
 | Semi-pro / PLL | Free agency | 3–4 | 8–10 | yes |
+
+**Roster needs** — a squad is not a pile of players, and recruiting knows it.
+Every position is measured against the roster shape the level carries: who is on
+the books, who graduates, who is coming back, who has already committed —
+recruits and transfers both — how many places that leaves open, the average
+rating, the projected starting line, and how far that line sits below the
+standard of the level. Nothing is stored: it is recomputed from the squad, the
+class and the portal every time it is read, which is what makes a commitment
+change it the moment it lands.
+
+Both markets read the same numbers. A recruit weighs the depth chart he would
+JOIN — whether a starting place is open, whether he beats the man who would
+otherwise be last in the line-up, whether there is any room at all — so three
+goalkeepers can no longer all commit to a programme that needed one, and an
+84 attacker behind a 95-90-88 line can see the queue he would be joining. A
+transfer counts the players already committed when he works out who is ahead of
+him. `npm run needs` drives the real interest models and reports it: three
+keepers commit and a fourth's interest falls from 10 to 0 with "You are already
+full at goalie" on his card; gut a defence and the identical player prefers it
+to the stacked attack by ten points of interest.
+
+The panel is on the offseason, the recruiting board and the transfer window,
+sorted by urgency, with the open places, the projected depth and a line saying
+what each position actually needs.
+
+**A team plays like its roster, not like its average.** Attack, midfield,
+defence and goalkeeping drive results separately, in the simulation and in the
+match engine alike. `npm run profiles` plays the same three squads — an elite
+offence with a poor defence, a balanced side, and an elite defence with no
+attack — hundreds of times through the league simulation and two dozen times
+through the real engine, and holds them to what a coach would expect:
+
+| Squad | Simulated | Played |
+| --- | --- | --- |
+| A94 M93 D70 G72 | 10.3 - 13.4 | 16.4 - 15.0 |
+| A83 M83 D83 G83 | 9.4 - 8.9 | 13.7 - 10.6 |
+| A70 M75 D94 G95 | 8.0 - 5.6 | 10.6 - 8.5 |
+
+The shoot-out team's games run ten goals higher than the defensive team's, in
+both engines, and neither arrangement is a free win.
 
 **Player development** — every player has an archetype, a development curve and
 a hidden work rate. An early developer arrives close to finished; a late bloomer
@@ -673,6 +720,19 @@ the spots the rule actually uses.
 tier, twice with the same seeds: once with a coach who does nothing and once
 with a coach who works. It fails if the opening job is a coronation or a dead
 end.
+
+`npm run needs` drives the real recruiting and transfer interest models against
+constructed squads: three keepers committing, a gutted defence beside a stacked
+attack, a position with no room left. `npm run profiles` plays three squad
+shapes through both the simulation and the match engine and fails if a roster
+stops deciding how a team plays.
+
+`npm run test:super` plays a Super Challenge career through the actual screens
+at phone and desktop size — the controls have to be on the first screenful and
+stay there, the tracker has to be compact and visible, and the career has to be
+graded every season and end only by winning three titles in a window. That last
+one is there because it once was not: the season summary tested for the
+Challenge mode by name, so Super Challenge seasons were never graded at all.
 
 `npm run gameplay` drives the match engine itself — the keeper being reachable
 by Switch after a rebound, a screen being callable, quarter simulation, and the

@@ -1271,7 +1271,9 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
 }
 .need__cell { min-width: 0; }
 .need__label {
-  font-family: var(--display); font-size: 9px; letter-spacing: .12em;
+  /* 10.5px is the floor the responsive suite enforces, and it enforces it
+     because 9px labels are not readable on a phone. */
+  font-family: var(--display); font-size: 10.5px; letter-spacing: .1em;
   text-transform: uppercase; color: var(--muted); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis;
 }

@@ -168,9 +168,10 @@ export const PITCH_ORDER: PitchAngle[] = [
  */
 export function angleFit(angle: PitchAngle, c: TransferCandidate, prog: ProgramSnapshot): number {
   const fx = coachEffects(prog.staff);
-  const have = prog.roster.filter((p) => p.pos === c.player.pos).length;
-  const needed = NEEDED[c.player.pos] ?? 3;
-  const room = needed - have;
+  // Room measured the way everything else measures it: against the squad he
+  // would join, commitments included. Pitching playing time at a position you
+  // have just filled is the pitch this number exists to punish.
+  const room = prog.needs.byPos[c.player.pos]?.open ?? 0;
   const winning = prog.wins > prog.losses + 1;
   const strong = prog.prestige >= 72;
 
@@ -223,6 +224,8 @@ function rivalProgrammes(teamId: string): GameTeam[] {
 }
 
 /** Starters plus one for cover: the point past which a team stops being short. */
+/** The floor a position cannot be stripped below: what it takes to field a
+ *  team. Used when deciding who leaves, not when deciding who arrives. */
 const NEEDED: Record<Position, number> = { A: 4, M: 4, D: 4, G: 2, FO: 1 };
 
 /** How many players are on the market in one offseason. */

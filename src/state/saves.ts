@@ -3,6 +3,7 @@ import { CAREER_VERSION, type Career, type CareerMode } from '../league/types';
 import { tryGetTeam } from '../data/teams';
 import { tryWorldTeam } from '../data/world';
 import { EMPTY_STAFF } from '../league/coaching';
+import { ALL_MODES } from '../league/modes';
 import { LEVELS, type Level } from '../data/levels';
 import { DEFAULT_TIER } from '../challenge/difficulty';
 
@@ -247,7 +248,10 @@ export function loadCareer(mode: CareerMode): Career | null {
  */
 export function retireOldSaves(): void {
   const found: string[] = [];
-  for (const mode of ['season', 'dynasty', 'challenge'] as const) {
+  // Every mode, from the one list of them. This was a hand-written trio, so a
+  // retired Super Challenge save sat in storage for ever with nothing to read
+  // it and nothing to tell the player it was there.
+  for (const mode of ALL_MODES) {
     for (let v = 1; v < CAREER_VERSION; v++) {
       if (MIGRATABLE.includes(v)) continue; // these are upgraded, not retired
       const oldKey = `lsl.career.${mode}.v${v}`;
