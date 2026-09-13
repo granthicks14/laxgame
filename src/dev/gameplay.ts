@@ -294,6 +294,60 @@ const goalieOf = (m: Match, side: 'home' | 'away'): MatchPlayer => m.goalieOf(si
   }
 }
 
+/* ------------------------------------------- 8. the engine repeats itself
+ * The same fixture from the same seed has to produce the same game. It did
+ * not: the faceoff rolled its whistle delay from a live Math.random(), so
+ * every draw nudged the timing of everything after it and two runs of one
+ * seed came back with different scores. Nothing measured about balance means
+ * anything without this, and a "deterministic" simulated fixture that is not
+ * deterministic is a bug in the league, not only in the tooling.
+ * ---------------------------------------------------------------------- */
+
+{
+  const play = (): string => {
+    const m = new Match(makeMatchConfig({
+      homeTeam: getTeam('highland-park'),
+      awayTeam: getTeam('dallas-jesuit'),
+      difficulty: 'varsity',
+      gameLength: 'short',
+      humanSide: null,
+      seed: 987654,
+      replays: false,
+    }));
+    let guard = 0;
+    while (m.phase !== 'final' && guard++ < 40) m.simulateQuarter();
+    return `${m.score.home}-${m.score.away} `
+      + `${m.stats.home.shots}/${m.stats.away.shots} `
+      + `${m.stats.home.saves}/${m.stats.away.saves} `
+      + `${m.stats.home.faceoffWins}/${m.stats.away.faceoffWins}`;
+  };
+  const first = play();
+  const second = play();
+  const third = play();
+  check('the same seed plays the same game', first === second && second === third,
+    `${first} | ${second} | ${third}`);
+
+  // And a different seed has to produce a different one, or the seed is doing
+  // nothing at all.
+  const other = new Match(makeMatchConfig({
+    homeTeam: getTeam('highland-park'),
+    awayTeam: getTeam('dallas-jesuit'),
+    difficulty: 'varsity',
+    gameLength: 'short',
+    humanSide: null,
+    seed: 123456,
+    replays: false,
+  }));
+  let g = 0;
+  while (other.phase !== 'final' && g++ < 40) other.simulateQuarter();
+  const otherLine = `${other.score.home}-${other.score.away} `
+    + `${other.stats.home.shots}/${other.stats.away.shots} `
+    + `${other.stats.home.saves}/${other.stats.away.saves} `
+    + `${other.stats.home.faceoffWins}/${other.stats.away.faceoffWins}`;
+  check('a different seed plays a different game', otherLine !== first,
+    `${first} vs ${otherLine}`);
+}
+
 console.log();
 if (problems.length) {
   console.log(`${problems.length} of ${checks} checks FAILED:`);

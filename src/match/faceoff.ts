@@ -44,6 +44,8 @@ export interface FaceoffState {
   message: string;
   /** Set when the human side is not playing this faceoff (AI vs AI). */
   auto: boolean;
+  /** Seconds between "set" and the whistle, rolled with the rest of the draw. */
+  downDelay: number;
 }
 
 const SWEEP_TIME = 1.05;
@@ -93,6 +95,7 @@ export function createFaceoff(
     winner: null,
     message: 'SET',
     auto: !humanInvolved,
+    downDelay: rng.range(0.35, 0.95),
   };
 }
 
@@ -115,7 +118,13 @@ export function stepFaceoff(
     }
     if (fo.timer <= 0) {
       fo.stage = 'down';
-      fo.timer = 0.35 + Math.random() * 0.6;
+      // Drawn when the faceoff was created, from the match's own seeded
+      // stream. It used to be a live Math.random() here, which made every
+      // faceoff — and therefore everything after it — unrepeatable: the same
+      // game from the same seed produced different scores, and no measurement
+      // of the engine could be trusted to a tenth of a goal. The delay is
+      // still unpredictable to the player, who cannot see the seed.
+      fo.timer = fo.downDelay;
       fo.message = 'DOWN';
     }
     return false;

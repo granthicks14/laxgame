@@ -489,6 +489,14 @@ The match is a real simulation, not a dice roll:
   to move first beats him more often. League-wide save rate lands near 50%.
 - **Defence.** Man marking with help slides, timing-based checks, and real
   consequences for missing one.
+- **One seed, one game.** Everything the match engine rolls — the clamp window,
+  the whistle, the shots, the saves — comes from the match's own seeded stream,
+  so the same fixture from the same seed plays out identically every time.
+  `npm run gameplay` plays one three times and fails if the box scores differ.
+  (They used to: the whistle delay was a live `Math.random()`, which nudged the
+  timing of everything after every faceoff and made the engine impossible to
+  measure to within a goal.)
+
 - **Faceoffs.** Your FOGO's rating sets how wide the clamp window is; your timing
   decides how well you hit it. A specialist is worth having, but the draw is
   yours to win.
