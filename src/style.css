@@ -1203,6 +1203,41 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
   border: 2px solid var(--accent); color: var(--accent); font-size: 13px;
 }
 
+/* --- roster needs --------------------------------------------------------- */
+.need__top {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  flex-wrap: wrap; padding: 8px 12px; border-bottom: 2px solid var(--line-soft);
+}
+.need__list { display: grid; gap: 1px; background: var(--line-soft); }
+.need { background: var(--panel); padding: 9px 12px; }
+.need--3, .need--4 { background: linear-gradient(90deg, rgba(240,138,60,.10), transparent 60%); }
+.need--4 { background: linear-gradient(90deg, rgba(232,80,58,.13), transparent 60%); }
+.need__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.need__pos { font-size: 15px; letter-spacing: .08em; }
+.need__mark {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--display); font-size: 11px; letter-spacing: .14em;
+}
+.need__mark--full { color: var(--muted); }
+.need__stars { letter-spacing: .04em; font-size: 12px; }
+.need__grid {
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px; margin-top: 7px;
+}
+.need__cell { min-width: 0; }
+.need__label {
+  font-family: var(--display); font-size: 9px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--muted); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.need__value { font-size: 15px; }
+.need__note { color: var(--text-2); margin-top: 5px; }
+@media (max-width: 480px) {
+  .need__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; }
+}
+
 /* --- the championship moment ---------------------------------------------- */
 .champ { position: absolute; inset: 0; overflow: hidden; display: flex; flex-direction: column; }
 .champ__wash {

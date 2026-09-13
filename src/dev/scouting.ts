@@ -15,10 +15,11 @@ import {
   newRecruitingClass, signingDay, type RecruitContext,
 } from '../scouting/recruiting';
 import { getTeam } from '../data/teams';
+import { generateRoster } from '../data/players';
 import { worldTeam } from '../data/world';
 import type { Level } from '../data/levels';
-import type { Position } from '../data/constants';
 import { coachPerks } from '../challenge/coach';
+import { computeNeeds } from '../league/rosterNeeds';
 
 const line = (s = '') => console.log(s);
 const pct = (n: number, d: number) => `${((n / Math.max(1, d)) * 100).toFixed(1)}%`;
@@ -69,7 +70,9 @@ function cycle(level: Level, teamId: string, scouts: number, seed: number): {
 } {
   const shell = level === 'hs' ? getTeam(teamId) : worldTeam(teamId);
   const state = newRecruitingClass({ seed, cycle: 1, level, prestige: 70, shell });
-  const depth = { A: 3, M: 5, D: 4, G: 1, FO: 1 } as Record<Position, number>;
+  // A real squad's needs, not a made-up depth count: one goalie and four
+  // defenders at a level that wants more of both.
+  const needs = computeNeeds(generateRoster(shell, `${seed}:squad`, level).slice(0, 18), level);
   const ctx: RecruitContext = {
     perks: coachPerks(null),
     rivalPush: 1, rivalScouting: 0.35, interestGain: 1,
@@ -81,7 +84,7 @@ function cycle(level: Level, teamId: string, scouts: number, seed: number): {
     wins: 8,
     losses: 4,
     championships: 1,
-    depth,
+    needs,
     rivals: [
       { id: 'r1', name: 'Rival A', recruiting: 82 },
       { id: 'r2', name: 'Rival B', recruiting: 74 },
@@ -151,7 +154,7 @@ line('AI PROGRAMMES — do gems get taken if you leave them alone?');
       perks: coachPerks(null), commitments: 0,
       rivalPush: 1, rivalScouting: 0.35, interestGain: 1,
       teamId: 'me', teamName: 'Me', prestige: 40, appeal: 0, wins: 2, losses: 10, championships: 0,
-      depth: { A: 6, M: 9, D: 8, G: 3, FO: 2 } as Record<Position, number>,
+      needs: computeNeeds(generateRoster(shell, `full:${i}`, 'd1'), 'd1'),
       rivals: [
         { id: 'r1', name: 'A', recruiting: 88 }, { id: 'r2', name: 'B', recruiting: 80 },
         { id: 'r3', name: 'C', recruiting: 72 }, { id: 'r4', name: 'D', recruiting: 64 },

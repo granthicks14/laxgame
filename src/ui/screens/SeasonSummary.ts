@@ -12,6 +12,7 @@ import { stageAt } from '../../challenge/ladder';
 import { recruitingSummary } from '../../league/career';
 import type { Career } from '../../league/types';
 import { reportPortrait } from '../portrait';
+import { rosterNeedsPanel } from '../rosterNeedsPanel';
 import { GRADE_LABEL, sortDepthChart } from '../../data/players';
 import { SeasonHubScreen } from './SeasonHub';
 import { MainMenuScreen } from './MainMenu';
@@ -241,6 +242,8 @@ export class OffseasonScreen implements Screen {
                 text: career.level === 'hs' ? `Now in ${LADDER_LABEL[career.classKey]}` : LEVELS[career.level].name,
               }))),
 
+          // What the squad is short of, before any decision about filling it.
+          rosterNeedsPanel(career, 'Roster needs'),
           this.developmentPanel(report),
           this.recruitingPanel(career),
           this.movementPanel(app, career, report),

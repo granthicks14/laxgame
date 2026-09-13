@@ -31,6 +31,7 @@ import {
 import { TRAITS, qualityLabel, specialtyLabel, type Scout } from '../../scouting/scouts';
 import { POSITION_LABEL, type Position } from '../../data/constants';
 import { LEVELS } from '../../data/levels';
+import { rosterNeedsPanel } from '../rosterNeedsPanel';
 
 /**
  * Recruiting has depth, and depth is worthless if the coach cannot see what to
@@ -150,6 +151,9 @@ export class RecruitingScreen implements Screen {
           helpSlot,
           this.nextStep(career),
           this.summary(career),
+          // The squad you are recruiting FOR, on the screen where you decide
+          // who to chase. Every prospect below is weighing these same numbers.
+          rosterNeedsPanel(career, 'What the squad needs'),
           this.staffPanel(app, career),
           segmented(
             boardTabs(state).map((t) => ({ value: t, label: BOARD_TAB[t] })),

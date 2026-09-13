@@ -114,6 +114,11 @@ for (const size of SIZES) {
     if (await tap(label)) {
       await settle(520);
       await shot(name);
+      if (name === 'recruiting') {
+        // The first visit opens the walkthrough, which is a teaching screen
+        // rather than the board: step past it and photograph the board.
+        if (await tap(/^Got it$/i)) { await settle(420); await shot('recruiting-board'); }
+      }
       if (name === 'roster') {
         const row = page.locator('tr[role="button"]').first();
         if (await row.count()) {

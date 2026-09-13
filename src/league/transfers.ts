@@ -32,6 +32,7 @@ import {
 import type { GameTeam, TeamData } from '../data/teams';
 import { teamsInConference as WORLD_TEAMS_IN, tryWorldTeam } from '../data/world';
 import { LEVELS, type Level } from '../data/levels';
+import type { RosterNeeds } from './rosterNeeds';
 import { coachEffects, type CoachStaff } from './coaching';
 import type { CoachPerks } from '../challenge/coach';
 
@@ -526,6 +527,10 @@ export interface ProgramSnapshot {
   roster: PlayerData[];
   /** Which level the programme plays at — a star is a star among his own. */
   level: Level;
+  /** What the squad is short of, commitments included. */
+  needs: RosterNeeds;
+  /** Players already committed to join, for the depth a mover would land in. */
+  committed: { pos: Position; overall: number }[];
   prestige: number;
   staff: CoachStaff;
   /** Last season's record, for "are they winning" questions. */
@@ -539,15 +544,24 @@ export interface ProgramSnapshot {
  * dominates on purpose: a 90 behind a 95 is the same player as a 90 with a
  * starting job, and only one of those is worth moving for.
  */
+/** Overalls of the players already committed to this programme at a position. */
+function incomingAt(prog: ProgramSnapshot, pos: Position): number[] {
+  return prog.committed.filter((p) => p.pos === pos).map((p) => p.overall);
+}
+
 export function interestIn(c: TransferCandidate, prog: ProgramSnapshot): InterestBreakdown {
   const factors: { label: string; delta: number }[] = [];
   const fx = coachEffects(prog.staff);
 
-  // --- playing time: where would he sit on our depth chart?
-  const samePos = prog.roster
-    .filter((p) => p.pos === c.player.pos && p.grade < 12)
-    .sort((a, b) => b.overall - a.overall);
-  const ahead = samePos.filter((p) => p.overall > c.player.overall).length;
+  // --- playing time: where would he sit on the depth chart he would JOIN?
+  //     Players already committed count — a transfer who cannot see the two
+  //     goalkeepers the programme signed last week is not evaluating anything.
+  const n = prog.needs.byPos[c.player.pos];
+  const projected = [
+    ...prog.roster.filter((p) => p.pos === c.player.pos && p.grade < 12).map((p) => p.overall),
+    ...incomingAt(prog, c.player.pos),
+  ].sort((a, b) => b - a);
+  const ahead = projected.filter((o) => o > c.player.overall).length;
   let playing: number;
   let playingLabel: string;
   if (ahead === 0) {
@@ -565,12 +579,22 @@ export function interestIn(c: TransferCandidate, prog: ProgramSnapshot): Interes
   }
   factors.push({ label: playingLabel, delta: playing });
 
-  // --- does this team even need him? Measured against the starters plus cover,
-  //     not the whole squad: a team carrying six defensemen is not short of one,
-  //     and nobody is short of a third goalkeeper.
-  const want = NEEDED[c.player.pos];
-  const need = Math.max(0, want - samePos.length);
-  if (need > 0) factors.push({ label: `Thin at ${POSITION_LABEL[c.player.pos]}`, delta: Math.min(10, need * 5) });
+  // --- does this team even need him? The squad's own open places answer it,
+  //     counting everyone already on the way in, so a programme that has just
+  //     filled a position stops looking short of it immediately.
+  if (n) {
+    if (n.open > 0) {
+      factors.push({
+        label: `${n.open} open ${POSITION_LABEL[c.player.pos].toLowerCase()} place${n.open === 1 ? '' : 's'}`,
+        delta: Math.min(12, n.open * 5),
+      });
+    } else {
+      factors.push({ label: `No room left at ${POSITION_LABEL[c.player.pos].toLowerCase()}`, delta: -14 });
+    }
+    if (n.need >= 3) {
+      factors.push({ label: `${n.label} is their priority`, delta: n.need === 4 ? 8 : 5 });
+    }
+  }
 
   // --- team strength and recent results
   const strength = Math.round((prog.team.overall - 72) * 0.8);

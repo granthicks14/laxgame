@@ -37,6 +37,7 @@ import {
   situationRatingShift, type SituationKey,
 } from '../challenge/situations';
 import { difficultyFor } from '../data/levels';
+import { incomingPlayers, rosterNeeds } from './rosterNeeds';
 import { STAR_OVERALL } from '../data/players';
 import {
   buyUpgrade, coachPerks, levelOf, newCoachProfile, seasonXp,
@@ -170,8 +171,6 @@ export function recruitContext(career: Career): RecruitContext {
   const team = userTeam(career);
   const row = career.standings[career.teamId];
   const fx = coachingOf(career);
-  const depth = { A: 0, M: 0, D: 0, G: 0, FO: 0 } as Record<Position, number>;
-  for (const p of career.roster) depth[p.pos] = (depth[p.pos] ?? 0) + 1;
   // A rival's pull is its WITHIN-LEVEL recruiting rating at every level. It
   // used to be the raw team overall for high school, which stopped meaning the
   // same thing the moment ratings became universal.
@@ -198,7 +197,7 @@ export function recruitContext(career: Career): RecruitContext {
     wins: row?.wins ?? 0,
     losses: row?.losses ?? 0,
     championships: career.championships,
-    depth,
+    needs: rosterNeeds(career),
     rivals: pool.filter((t) => t.id !== career.teamId).slice(0, 14),
   };
 }
@@ -1253,6 +1252,8 @@ export function programSnapshot(career: Career): ProgramSnapshot {
     team: userTeam(career),
     roster: career.roster,
     level: career.level,
+    needs: rosterNeeds(career),
+    committed: incomingPlayers(career),
     prestige: career.prestige,
     staff: career.staff,
     wins: last?.wins ?? row?.wins ?? 0,

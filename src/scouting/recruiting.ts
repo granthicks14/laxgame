@@ -34,6 +34,7 @@ import {
   noiseDecay, scoutMarket, weeklyProgress, weeklyRapport, type Scout,
 } from './scouts';
 import type { CoachPerks } from '../challenge/coach';
+import { playingTimeOutlook, type RosterNeeds } from '../league/rosterNeeds';
 
 export interface RecruitNews {
   week: number;
@@ -366,8 +367,13 @@ export interface RecruitContext {
   championships: number;
   /** Commitments already landed this cycle, for momentum. */
   commitments: number;
-  /** How many players you already carry at each position. */
-  depth: Record<Position, number>;
+  /**
+   * What the squad actually needs, including everyone already committed. A
+   * prospect weighs a depth chart he would be joining, not the one that exists
+   * today — which is why three goalies can no longer all commit to a programme
+   * that needed one.
+   */
+  needs: RosterNeeds;
   /** Programmes that can compete for these players. */
   rivals: { id: string; name: string; recruiting: number }[];
 }
@@ -399,9 +405,22 @@ export function interestFactors(
   }
   if (ctx.appeal > 0.05) out.push({ label: 'Programme reputation', delta: Math.round(ctx.appeal * 16) });
 
-  const have = ctx.depth[p.player.pos] ?? 0;
-  const room = have <= 2 ? 12 : have <= 4 ? 4 : -10;
-  out.push({ label: room > 0 ? 'He would play right away' : 'You are stacked at his position', delta: room });
+  // PLAYING TIME, judged against the squad he would actually join: who is
+  // coming back, who has already committed, and whether he beats the man who
+  // would otherwise be last in the line-up.
+  const outlook = playingTimeOutlook(ctx.needs, p.player.pos, p.player.overall);
+  if (outlook.label) out.push({ label: outlook.label, delta: outlook.delta });
+
+  // And the squad's own priority. A position the programme is desperate at is
+  // a promise of a role; one it has already filled is not.
+  const n = ctx.needs.byPos[p.player.pos];
+  if (n) {
+    if (n.need >= 3 && n.open > 0) {
+      out.push({ label: `${n.label} is a priority for you`, delta: n.need === 4 ? 10 : 6 });
+    } else if (n.need === 0) {
+      out.push({ label: `Nothing left to win at ${n.label.toLowerCase()}`, delta: -8 });
+    }
+  }
 
   if (p.offered) out.push({ label: 'You have offered', delta: 16 + ctx.perks.closing });
   const landed = ctx.commitments * ctx.perks.momentum;
@@ -411,7 +430,9 @@ export function interestFactors(
   return out;
 }
 
-function interestTarget(p: Prospect, ctx: RecruitContext, level: Level): number {
+/** Where this prospect's interest is heading, before the week's dice. Exported
+ *  so the screens and the balance harnesses read the same number the class does. */
+export function interestTarget(p: Prospect, ctx: RecruitContext, level: Level): number {
   const base = 30;
   const sum = interestFactors(p, ctx, level).reduce((n, f) => n + f.delta, 0);
   return clamp(base + sum, 0, 100);

@@ -4,6 +4,7 @@ import type { CareerMode } from '../../league/types';
 import { screenEl, topbar, panel, emptyPanel, teamBadge } from '../components';
 import { loadCareer, saveCareer } from '../../state/saves';
 import { pitchTo, programSnapshot } from '../../league/career';
+import { rosterNeedsPanel } from '../rosterNeedsPanel';
 import { playerPortrait } from '../portrait';
 import {
   PITCH_ANGLES, PITCH_ORDER, REASON_TEXT, angleFit, interestIn, marketFor,
@@ -47,6 +48,10 @@ export class TransferPortalScreen implements Screen {
     const render = () => {
       clear(body);
       sub.textContent = `${career.pitchesLeft} left`;
+      // The same needs the market is reading, at the top of the window where
+      // the decisions are made. Rebuilt on every render, so a commitment
+      // changes it immediately.
+      body.appendChild(rosterNeedsPanel(career, 'What the squad needs'));
 
       // Players you LOST are shown whether or not the window has anyone in it:
       // that half of the portal is the half a coach needs to see.
