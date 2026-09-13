@@ -25,6 +25,9 @@ import {
   startChallenge, validateRecords,
 } from '../league/career';
 import type { Career, CareerMode } from '../league/types';
+import {
+  planMovement, promotionSpots, relegationSpots, type DivisionResult,
+} from '../league/promotion';
 
 const env = (globalThis as {
   process?: { exit(n: number): void; env?: Record<string, string | undefined> };
@@ -223,6 +226,55 @@ function seasonOf(mode: CareerMode): Career {
     }
     const issues = validateRecords(back);
     check(`${mode}: the loaded career validates`, issues.length === 0, issues.slice(0, 2).join('; '));
+  }
+}
+
+/* ------------------------------------------------- promotion and relegation */
+
+{
+  console.log('\nPROMOTION AND RELEGATION');
+  // Synthetic final tables, so the rule is tested rather than a season's luck.
+  const divisions: DivisionResult[] = [
+    { key: 'a', order: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8'], champion: 'a1' },
+    { key: 'b', order: ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8'], champion: 'b2' },
+    { key: 'c-east', order: ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'], champion: 'e1' },
+    { key: 'c-west', order: ['w1', 'w2', 'w3', 'w4', 'w5', 'w6'], champion: 'w3' },
+    { key: 'd', order: ['d1', 'd2', 'd3', 'd4', 'd5', 'd6'], champion: 'd1' },
+  ];
+  const sizes = new Map(divisions.map((d) => [d.key, d.order.length]));
+  const report = planMovement(divisions, 2);
+
+  // Every division has to be the same size next season: a promotion without a
+  // matching relegation drains one division and inflates the other, year on
+  // year, which is what this rule replaced.
+  const after = new Map(sizes);
+  for (const m of report.moves) {
+    after.set(m.from, (after.get(m.from) ?? 0) - 1);
+    after.set(m.to, (after.get(m.to) ?? 0) + 1);
+  }
+  const kept = [...sizes.entries()].every(([k, n]) => after.get(k) === n);
+  check('no division changes size', kept,
+    [...after.entries()].map(([k, n]) => `${k}:${n}/${sizes.get(k)}`).join(' '));
+  check('promotions and relegations are matched',
+    report.moves.filter((m) => m.direction === 'up').length
+    === report.moves.filter((m) => m.direction === 'down').length,
+    `${report.moves.filter((m) => m.direction === 'up').length} up`);
+  check('nobody moves twice',
+    new Set(report.moves.map((m) => m.teamId)).size === report.moves.length);
+  check('every move has a reason', report.moves.every((m) => !!m.reason));
+  check('a champion goes up', report.moves.some((m) => m.direction === 'up' && /won the/i.test(m.reason)),
+    report.moves.filter((m) => m.direction === 'up').map((m) => m.reason)[0] ?? 'none');
+  check('the drop comes from the bottom',
+    report.moves.filter((m) => m.direction === 'down')
+      .every((m) => /finished \d+\w+ of/i.test(m.reason)));
+  // The spots the screens quote have to be the spots the rule uses.
+  for (const key of ['a', 'b', 'c-east', 'c-west', 'd'] as const) {
+    const up = report.moves.filter((m) => m.direction === 'up' && m.from === key).length;
+    const down = report.moves.filter((m) => m.direction === 'down' && m.from === key).length;
+    check(`${key}: the promotion spots match what a coach is told`, up === promotionSpots(key),
+      `${up} moved, ${promotionSpots(key)} advertised`);
+    check(`${key}: the relegation spots match`, down === relegationSpots(key),
+      `${down} moved, ${relegationSpots(key)} advertised`);
   }
 }
 

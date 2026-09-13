@@ -416,7 +416,17 @@ export class LeagueMovementScreen implements Screen {
       topbar(app, 'League movement', `Year ${movement.season}`),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
-          h('div', { class: 'small', text: 'The champion of each division goes up, and the bottom two of each division above the entry level go down. Divisions never fall below six teams or rise above twelve.' }),
+          // Describes what planMovement ACTUALLY does. It used to describe the
+          // rule this replaced — champion up, bottom two down, sizes clamped —
+          // which has not been how the league works for some time.
+          h('div', {
+            class: 'small',
+            text: 'Every promotion is matched by a relegation in the same direction, so a division '
+              + 'is exactly the size next season that it was this one. Two go up from Class B, one '
+              + 'from each Class C division, and one from Class D into each — champions first, then '
+              + 'the next best finishers. The same number comes down from the bottom of the '
+              + 'division above.',
+          }),
           up.length ? panel('Promoted', ...up.map(row)) : null,
           down.length ? panel('Relegated', ...down.map(row)) : null,
           movement.blocked.length

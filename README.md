@@ -113,7 +113,17 @@ driving a full season and offseason in each.
   squad of underclassmen; a goalie problem genuinely means the man in the cage
   cannot stop the ball. The situation is applied to the roster you inherit, and
   it lowers what the programme expects of you — you are not sacked for failing
-  to win with a roster that cannot win. What it costs you is *time*.
+  to win with a roster that cannot win. What it costs you is *time*. No two
+  offers on the same screen carry the same problem if it can be helped.
+- **The first job is the worst job in the district.** The squad you are handed
+  sits 6 rating points below its class on Standard and 12 on the Final
+  Challenge, with a thinner bench and a colder room — but untouched ceilings, so
+  the hole is a coaching problem rather than a life sentence. `npm run
+  start-check` plays the opening seasons twice with the same seeds, once with a
+  coach who does nothing and once with a coach who actually coaches: the first
+  wins 26–34% of his games in year one, takes the class in 0–20% of careers, and
+  is still 5–7 points behind after eight seasons; the second climbs to roughly
+  class average and wins it in 11 careers of 20.
 - **Each rung is harder because the players are better.** Every level maps its
   teams onto a higher band of actual attributes (D-III 62–93, D-I 74–99, PLL
   84–99), carries deeper squads, and floors the AI's decision quality. A
@@ -141,21 +151,31 @@ driving a full season and offseason in each.
 | Continental Lacrosse League | 12 | 2 |
 | Premier Lacrosse League | 8 | 1 |
 
-**Four difficulties, chosen once before the first job.** They are not a bonus on
+**Five difficulties, chosen once before the first job.** They are not a bonus on
 the opposition's rating — no tier gives a rival programme a player, a point of
-rating or a resource you do not have. What changes is DECISIONS and RESOURCES.
+rating or a resource you do not have. What changes is DECISIONS and RESOURCES,
+and one thing on the field: the programme you are handed at the bottom of the
+ladder is further behind its class the harder the tier.
 
-| | Standard | Elite | Impossible | Final |
-| --- | --- | --- | --- | --- |
-| Coach Points earned | 100% | 82% | 64% | 50% |
-| Coach upgrade cost | 100% | 130% | 170% | 215% |
-| Rival recruiting effort | 100% | 125% | 155% | 190% |
-| Rival scouting accuracy | 35% | 55% | 75% | 92% |
-| Transfer resistance | none | −6 | −13 | −20 |
-| Rivals per transfer | — | +1 | +2 | +3 |
-| Player development | 100% | 92% | 84% | 76% |
-| Quality of jobs offered | standard | −12pts | −24pts | −34pts |
-| Legacy multiplier | 1.0× | 1.35× | 1.8× | 2.4× |
+|  | Standard | Hard | Very Hard | Impossible | Final Challenge |
+| --- | --- | --- | --- | --- | --- |
+| Coach Points earned | 100% | 82% | 73% | 64% | 50% |
+| Coaching experience | 100% | 88% | 82% | 76% | 66% |
+| Coach upgrade cost | 100% | 130% | 150% | 170% | 215% |
+| Programme staff cost | 100% | 120% | 132% | 145% | 175% |
+| Rival recruiting effort | 100% | 125% | 140% | 155% | 190% |
+| Rival scouting accuracy | 35% | 55% | 65% | 75% | 92% |
+| Your interest builds at | 100% | 90% | 85% | 80% | 72% |
+| Scholarship offers | Standard | -1 | -1 | -2 | -3 |
+| Transfer resistance | None | -6 pts | -9 pts | -13 pts | -20 pts |
+| Rivals per transfer | Standard | +1 | +2 | +2 | +3 |
+| Your players leaving | 100% | 120% | 132% | 145% | 170% |
+| Player development | 100% | 92% | 88% | 84% | 76% |
+| Breakout seasons | 100% | 85% | 77% | 70% | 55% |
+| Quality of jobs offered | Standard | -12% | -18% | -24% | -34% |
+| The squad you start with | 6 OVR below the class | 7 | 8 | 10 | 12 |
+| Broken programmes | Standard | +30% | +47% | +65% | +100% |
+| What they demand of you | Standard | +2 win% | +3 win% | +4 win% | +6 win% |
 
 That table is not written down twice. The difficulty screen, the comparison
 screen and the simulation all read the same `MODIFIER_SPECS` list in
@@ -167,6 +187,24 @@ On the harder tiers the coach tree **cannot be finished**, which is the point:
 you have to decide what kind of coach you are. The office reads back the
 identity your spending has actually formed — The Scout, The Recruiter, The
 Developer, The Strategist — rather than leaving it implicit.
+
+**Super Challenge** — the same career engine, the same ladder, the same
+difficulty tiers, the same coach: one objective is different, and it is the
+whole mode. **Win three championships inside any rolling ten-season window.**
+
+- There is **no total time limit** and no permanent failure. A window that
+  closes without three titles is not a loss — the tracker says *dominance not
+  yet proven* and the career continues. The mode has no "you failed" ending.
+- The hub leads with the tracker: the season you are in, the window being
+  measured, titles inside it, the best ten-year run of the career so far,
+  career championships, and how far off the requirement you are.
+- It is **derived**, never stored. `dominance()` searches every ten-season
+  window in the career's own step history, so there is no counter to drift, no
+  migration to write, and no way for the display and the rule to disagree.
+  `npm run dominance` checks the window arithmetic on 19 constructed careers and
+  `npm run super` drives the mode end to end, including the awkward cases:
+  titles exactly ten seasons apart, three in a row at the start, a gap that
+  breaks a window, and a career that qualifies only on its last season.
 
 **The hall of careers.** A Challenge career ends and its save is gone, so each
 difficulty keeps one line outside any save: the best legacy scored on it, the
@@ -194,12 +232,14 @@ he has run and every upgrade he owns travel with him from Class D to the PLL.
 Only the programme changes: a new roster, a new division, a new set of problems,
 and a staff he has to build again.
 
-- **His own upgrade tree**, 25 upgrades over five branches (Scouting, Recruiting,
-  Transfers, Development, Sideline), gated by *both* Coach Points and coach
-  level, and with prerequisites inside each branch. It is deliberately longer
-  than one climb: a career that spends everything on it still finishes around
-  level 11–12 after thirty seasons, and nothing in it is a label with no effect —
-  every perk is read by the system it belongs to.
+- **His own upgrade tree**, 64 upgrades over eight branches (Offence, Defence,
+  Strength & Conditioning, Player Development, Scouting, Recruiting, Transfers
+  and Programme Management), gated by *both* Coach Points and coach level, with
+  prerequisites inside each branch and twenty coach levels to climb. It cannot
+  be finished in one career, which is the point — `npm run careers` reports what
+  a full run actually buys, from about 20 of 64 on Standard down to 9 on the
+  Final Challenge — and nothing in it is a label with no effect: the sweep fails
+  if any upgrade leaves every perk unchanged, or if any upgrade is unreachable.
 - **Levels and titles.** Experience comes from playing, winning, and finishing
   seasons; twelve levels run from *Volunteer Assistant* up.
 - **The record follows him.** Wins, losses, titles, seasons, and the list of
@@ -284,12 +324,47 @@ player for a season: they cost Coach Points, concentrate his growth into named
 attributes, and suppress everything outside them. Each player carries the history
 of what every offseason actually did to him.
 
+**Every player has a face and a page.** Portraits are generated, never
+photographed: the id is hashed into skin tone, face shape, hair style and
+colour, brows, facial hair, eye black, a headband and a helmet in the
+programme's colours, so the same player looks the same everywhere he appears and
+no two look alike. Nothing is scraped, downloaded or traced from a real person —
+it is a few hundred lines of canvas drawing, cached and drawn at 24, 48 or 96
+pixels so the sprite never falls between pixels. His page carries the lot: the
+portrait, number, position, class, role in the side, star tier, overall against
+ceiling, season and career totals with per-game rates, what he is good and bad
+at against the standard of his level, his development history season by season,
+and where he came from.
+
+**Stars.** A star is a player who stands out *among his own*, which on one
+universal scale cannot be a fixed number — 79 is the best player in a high
+school district and a bench player in the PLL. The two marks are per level,
+calibrated against the actual generated distributions: about 5–7% of players at
+any level are stars and 1–2% are elite. `npm run ratings` samples every level
+and fails if the mark dies out or becomes common. A star is worth having on the
+field, too: the defence marks him tighter and slides to him sooner, and the AI
+looks for him with the ball. `npm run stars` measures exactly what he is worth.
+
 **Practice** — five drills: Shooting Gallery, Faceoff Reps, Clearing & Passing,
 Defensive Stand, and open Free Play.
 
-**Goal replays** — every goal plays a short broadcast-style highlight: letterbox,
-ball trail, slow motion for the finish, a camera that pushes in on the cage, and
-the scorer and assist on screen. Skippable, and switchable off in Settings.
+**Goal replays** — every goal plays a short broadcast highlight of the goal that
+was actually scored, replayed out of a circular buffer that records the real
+positions of the ball and all twenty players at 20 Hz (about 54 KB, and nothing
+allocated after it is built). Seven camera treatments share that footage —
+broadcast wide, sideline, shooter cam, end line, goalie cam, ball cam and a
+close-up — each with its own anchor, push-in and follow rate, and each tightening
+onto the cage for the slow-motion finish. Which one you get is a hash of the
+seed and the goal number, so the same goal always replays the same way, the
+choice never touches the simulation's random stream, and the same framing never
+runs twice in a row. The ball crossing the line brings a jolt through the
+camera, the crowd and a burst of team colour; the scorer, the assist and the
+distance stay on screen throughout. Skippable, and switchable off in Settings.
+
+**Championships** — winning one gets the screen to itself, once: the programme's
+colours, confetti, the trophy, the final it was won in, the players who actually
+scored it, and where it sits in the coach's record. The season summary keeps a
+line about it; the moment is not buried in it.
 
 **How to Play** — an interactive walkthrough that teaches movement, passing,
 dodging, shooting and checking during a live scrimmage.
@@ -517,7 +592,7 @@ about to refill.
 
 `npm run checklist` prints the mode compatibility table and what each level gets.
 
-`npm run careers` is the Challenge Mode stress test. It sweeps **all four
+`npm run careers` is the Challenge Mode stress test. It sweeps **all five
 difficulties** over the same seeds and the same six spending strategies (a coach
 who buys everything, one who buys nothing, one who only recruits, one who
 changes job at every opportunity), so a difference between tiers is the
@@ -569,8 +644,33 @@ that is not the scoreline of the game, fails the run.
 distributions; `npm run levels` does the same through the real match engine.
 
 `npm run test:responsive` walks the Challenge and recruiting screens at four
-widths from an iPhone SE up and fails on horizontal overflow, text under 10.5px
-or a touch target under 30px.
+widths from an iPhone SE up and fails on horizontal overflow, text under 10.5px,
+a touch target under 30px, or a topbar title or subtitle cut off with an
+ellipsis. (That last one found four real truncations the first time it ran.)
+
+`npm run shots` photographs the screens that matter at phone and desktop width
+into a folder, on a real save with real content in it, so a UI pass can be done
+by looking at the screens rather than at the source.
+
+`npm run final` is the last sweep: it proves a superstar is worth having and
+still beatable by playing the same fixtures with and without one, checks a
+season's statistics for internal consistency (nobody scores more than he shot,
+nobody plays more games than were played, no career total behind a season),
+round-trips a save in all four modes through the app's own storage code, and
+holds promotion and relegation to their invariant — every promotion matched by
+a relegation, so no division changes size, and the spots a coach is promised are
+the spots the rule actually uses.
+
+`npm run start-check` measures the first seasons of a Challenge career at every
+tier, twice with the same seeds: once with a coach who does nothing and once
+with a coach who works. It fails if the opening job is a coronation or a dead
+end.
+
+`npm run gameplay` drives the match engine itself — the keeper being reachable
+by Switch after a rebound, a screen being callable, quarter simulation, and the
+goal replay: that every camera angle gets used, that the same goal always
+replays the same way, that no framing runs twice in a row, and that a real
+engine goal arms the clip with the right scorer, keeper and cage.
 
 `npm run test:e2e` drives a real browser through the title screen, a quick game,
 a full season and playoff bracket, a dynasty offseason, a save reload, the

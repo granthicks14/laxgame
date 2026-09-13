@@ -247,7 +247,7 @@ function shotQuality(m: Match, p: MatchPlayer): number {
   // a shot is worth taking from grows with the standard of the game, which is
   // most of why a professional offence generates more looks than a high school
   // one against defenders who are also better.
-  const reach = 19 + (m.par - 66) * 0.14;
+  const reach = 19 + (m.par - SIM.parReference) * 0.14;
   if (d > reach || d < 1.5) return 0;
 
   // Angle: shooting from straight on is far better than from behind the cage.
@@ -381,7 +381,7 @@ function shotQualityAt(m: Match, side: Side, q: MatchPlayer): number {
   if (along < 0.5 || d > 19) return 0;
   const lateral = Math.abs(q.y - goal.y);
   const angleScore = clamp(1 - lateral / (along * 1.5 + 7), 0.08, 1);
-  const distScore = clamp(1 - (d - 3) / (16 + (m.par - 66) * 0.14), 0.05, 1);
+  const distScore = clamp(1 - (d - 3) / (16 + (m.par - SIM.parReference) * 0.14), 0.05, 1);
   return distScore * angleScore * clamp(1 - m.pressureOn(q) * 0.45, 0.25, 1);
 }
 
@@ -394,7 +394,15 @@ function bestPassOption(m: Match, p: MatchPlayer): MatchPlayer | null {
     if (d < 4 || d > 38) continue;
     const risk = m.laneRisk(p.x, p.y, mate.x, mate.y, p.side);
     const q = shotQualityAt(m, p.side, mate);
-    const score = q * 100 - risk * 90 - d * 0.5 - m.pressureOn(mate) * 25;
+    // WHO is open matters, not only WHERE. This used to score position alone,
+    // which meant a 95 and a 40 standing in the same spot were the same pass —
+    // so a squad's best player got no more of the ball than its worst, and a
+    // star was worth almost nothing. Kept deliberately secondary to shape: it
+    // breaks ties toward the man who can finish, it does not force the ball to
+    // him through traffic.
+    const finish = (mate.data.attrs.shooting * 0.6 + mate.data.attrs.shotAccuracy * 0.4);
+    const quality = (finish - m.par) * 0.35;
+    const score = q * 100 + quality - risk * 90 - d * 0.5 - m.pressureOn(mate) * 25;
     if (score > bestScore) { bestScore = score; best = mate; }
   }
   return best;

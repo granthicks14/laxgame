@@ -28,9 +28,19 @@
 
 import type { ClassKey } from '../data/teams';
 
-export const MIN_DIVISION = 6;
-export const MAX_DIVISION = 12;
-export const RELEGATION_SPOTS = 2;
+/**
+ * How many go up out of a division, and how many come down into it. Both are
+ * read from FLOWS rather than written down twice: the exchange is fixed, so a
+ * separate constant could only ever be a second version of the truth. (It was:
+ * a flat "bottom two go down" outlived the rule it described by some time, and
+ * told a Class C coach he was safe in third from bottom when he was not.)
+ */
+export function promotionSpots(key: ClassKey): number {
+  return FLOWS.filter((f) => f.up === key).reduce((n, f) => n + f.count, 0);
+}
+export function relegationSpots(key: ClassKey): number {
+  return FLOWS.filter((f) => f.down === key).reduce((n, f) => n + f.count, 0);
+}
 
 /** The class directly above, or null at the top. */
 export function classAbove(key: ClassKey): ClassKey | null {
@@ -182,8 +192,21 @@ export function ordinal(n: number): string {
 export function movementOutlook(place: number, teams: number, key: ClassKey): string {
   const up = classAbove(key);
   const down = classBelow(key);
-  if (place <= 2 && up) return `Another top-two finish moves you up to ${LADDER_LABEL[up]}.`;
-  if (place > teams - RELEGATION_SPOTS && down) return `Finish in the bottom ${RELEGATION_SPOTS} again and you drop to ${LADDER_LABEL[down]}.`;
-  if (up) return `Win ${LADDER_LABEL[key]} and you are promoted to ${LADDER_LABEL[up]}.`;
-  return `Stay out of the bottom ${RELEGATION_SPOTS} and you hold your place in the top flight.`;
+  const rise = promotionSpots(key);
+  const drop = relegationSpots(key);
+  const places = (n: number) => (n === 1 ? 'the title' : `the top ${n}`);
+  if (up && rise > 0 && place <= rise) {
+    return rise === 1
+      ? `Win ${LADDER_LABEL[key]} again and you move up to ${LADDER_LABEL[up]}.`
+      : `Another top-${rise} finish moves you up to ${LADDER_LABEL[up]}.`;
+  }
+  if (down && drop > 0 && place > teams - drop) {
+    return drop === 1
+      ? `Finish last again and you drop to ${LADDER_LABEL[down]}.`
+      : `Finish in the bottom ${drop} again and you drop to ${LADDER_LABEL[down]}.`;
+  }
+  if (up && rise > 0) return `Take ${places(rise)} in ${LADDER_LABEL[key]} and you are promoted to ${LADDER_LABEL[up]}.`;
+  return drop > 0
+    ? `Stay out of the bottom ${drop} and you hold your place in the top flight.`
+    : 'Hold your place in the top flight.';
 }

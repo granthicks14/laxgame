@@ -32,6 +32,7 @@
     "seed-save": "esbuild src/dev/seed-save.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-seed.mjs --log-level=error && node node_modules/.cache/lsl-seed.mjs",
     "test:ladder": "node scripts/ladder-flow.mjs",
     "shots": "node scripts/shots.mjs",
+    "stars": "esbuild src/dev/stars.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-stars.mjs --log-level=error && node node_modules/.cache/lsl-stars.mjs",
     "final": "esbuild src/dev/final.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-final.mjs --log-level=error && node node_modules/.cache/lsl-final.mjs",
     "start-check": "esbuild src/dev/start.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-start.mjs --log-level=error && node node_modules/.cache/lsl-start.mjs",
     "careers": "esbuild src/dev/careers.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-careers.mjs --log-level=error && node node_modules/.cache/lsl-careers.mjs",
