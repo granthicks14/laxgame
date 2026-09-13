@@ -21,9 +21,10 @@ import { getTeam } from '../data/teams';
 import { Rng } from '../core/rng';
 import { refreshOverall, type PlayerData } from '../data/players';
 import {
-  advancePhase, createCareer, nextUserGame, runOffseason, simulateUserGame,
-  startChallenge, validateRecords,
+  advancePhase, createCareer, effectiveTeam, nextUserGame, ratingsFromRoster,
+  runOffseason, simulateUserGame, startChallenge, validateRecords,
 } from '../league/career';
+import { rosterNeeds, type PositionNeed } from '../league/rosterNeeds';
 import type { Career, CareerMode } from '../league/types';
 import {
   planMovement, promotionSpots, relegationSpots, type DivisionResult,
@@ -296,6 +297,44 @@ function seasonOf(mode: CareerMode): Career {
     check(`${key}: the relegation spots match`, down === relegationSpots(key),
       `${down} moved, ${relegationSpots(key)} advertised`);
   }
+}
+
+/* ------------------------------------------------------- data consistency */
+
+{
+  console.log('\nONE SET OF NUMBERS');
+  const career = seasonOf('dynasty');
+  const team = effectiveTeam(career, career.teamId);
+  const chem = team.chemistry;
+  const derived = ratingsFromRoster(career.roster, chem);
+
+  // The team card is not allowed to disagree with the squad it is a card for.
+  const same = (['overall', 'offense', 'defense', 'goalie', 'attack', 'midfield', 'faceoff'] as const)
+    .filter((k) => team[k] !== derived[k]);
+  check('the team card matches the roster it comes from', same.length === 0,
+    same.map((k) => `${k}: ${team[k]} v ${derived[k]}`).join(', '));
+
+  // And the needs panel counts the same squad the roster screen lists.
+  const needs = rosterNeeds(career);
+  const counted = needs.list.reduce((t: number, p: PositionNeed) => t + p.have, 0);
+  check('the roster-needs panel counts the same squad', counted === career.roster.length,
+    `${counted} v ${career.roster.length}`);
+  const badAvg = needs.list.filter((n: PositionNeed) => {
+    const here = career.roster.filter((p) => p.pos === n.pos);
+    if (!here.length) return n.avgOverall !== 0;
+    return n.avgOverall !== Math.round(here.reduce((t, p) => t + p.overall, 0) / here.length);
+  });
+  check('and reports the same ratings', badAvg.length === 0,
+    badAvg.map((n) => n.label).join(', '));
+
+  // A player's overall is derived from his attributes, everywhere.
+  const drifted = career.roster.filter((p) => {
+    const before = p.overall;
+    refreshOverall(p);
+    return p.overall !== before;
+  });
+  check('every player overall matches his attributes', drifted.length === 0,
+    `${drifted.length} players drifted`);
 }
 
 /* --------------------------------------------------------------- the bill */
