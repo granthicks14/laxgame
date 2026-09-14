@@ -14,6 +14,7 @@ import {
   releasePoint, solveShot, type ShotInput, type ShotKind,
 } from './shot';
 import { starters, type HoopsPlayer } from './data';
+import { NEUTRAL_EFFECTS, type SchemeEffects } from './schemes';
 import { HOOPS } from './tuning';
 import { neutralHoopsInput, type HoopsInput } from './input';
 import {
@@ -212,6 +213,22 @@ export class HoopsGame {
 
   isFinal(): boolean {
     return this.phase === 'final';
+  }
+
+  /**
+   * What a side is running, as knobs. Absent means the plain basketball of an
+   * exhibition — every knob neutral — so nothing about Play Now changes because
+   * schemes exist.
+   */
+  schemeFor(side: Side): SchemeEffects {
+    return this.cfg.schemes?.[side]?.effects ?? NEUTRAL_EFFECTS;
+  }
+
+  /** What a side loses to running a system its players cannot run. */
+  schemePenalty(side: Side, end: 'offense' | 'defense'): number {
+    const s = this.cfg.schemes?.[side];
+    if (!s) return 0;
+    return end === 'offense' ? s.offensePenalty : s.defensePenalty;
   }
 
   /** The five on the floor for a side, for the HUD. */
@@ -969,6 +986,7 @@ export class HoopsGame {
       contestInLine: inLine,
       moving: Math.hypot(p.vx, p.vy),
       fading: defender ? distance < 4 && !inLine : false,
+      edge: p.side === 'home' ? this.cfg.homeEdge ?? 0 : 0,
     };
 
     const from = releasePoint(p.x, p.y, kind);
@@ -1082,7 +1100,11 @@ export class HoopsGame {
   /** Reach in. Takes the ball off a careless handler, and gets called if late. */
   private trySteal(d: CourtPlayer): void {
     if (d.stealCool > 0) return;
-    d.stealCool = HOOPS.stealCooldown;
+    // A gambling defence reaches sooner and harder. The cooldown is the real
+    // throttle on this, so a press that only reached MORE OFTEN and never more
+    // aggressively barely moved the turnover count at all.
+    const gamble = this.schemeFor(d.side).gamble;
+    d.stealCool = HOOPS.stealCooldown / Math.max(0.4, gamble);
     d.pose = 'defend';
     d.poseTimer = 0.2;
 
@@ -1101,8 +1123,8 @@ export class HoopsGame {
     // ended nearly half of all possessions and the game was a scramble rather
     // than basketball.
     const chance = clamp(
-      near * (0.03 + exposure * 0.1) * (0.75 + (skill - guard) / 130),
-      0.002, 0.2,
+      near * (0.03 + exposure * 0.1) * (0.75 + (skill - guard) / 130) * gamble,
+      0.002, 0.28,
     );
 
     if (this.rng.next() < chance) {
@@ -1122,7 +1144,11 @@ export class HoopsGame {
     d.stun = HOOPS.stealWhiffStun;
     if (gap < 3.4) {
       const discipline = (d.data.attrs.iq + d.data.attrs.perimeterD) / 2;
-      const foulChance = clamp(HOOPS.reachFoulBase - (discipline - 55) / 260, 0.08, 0.5);
+      // And it costs what it costs: hands are how fouls happen.
+      const foulChance = clamp(
+        (HOOPS.reachFoulBase - (discipline - 55) / 260) * this.schemeFor(d.side).fouling,
+        0.08, 0.6,
+      );
       if (this.rng.next() < foulChance) this.callFoul(d, handler, false, null);
     }
   }

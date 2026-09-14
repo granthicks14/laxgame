@@ -73,7 +73,11 @@ function arcSpots(side: Side): { x: number; y: number }[] {
   ];
 }
 
-/** The two places a player who is better inside than out wants to be. */
+/**
+ * Where a player who is better inside than out wants to be. Three of them,
+ * because a post offence really does put three men inside and a spot that does
+ * not exist is a player standing on somebody else's toes.
+ */
 function insideSpots(side: Side): { x: number; y: number }[] {
   const rim = attackRim(side);
   const dir = attackDir(side);
@@ -82,6 +86,8 @@ function insideSpots(side: Side): { x: number; y: number }[] {
     { x: rim.x - dir * 3.5, y: COURT.centerY - 8 },
     // The elbow.
     { x: rim.x - dir * 14, y: COURT.centerY + 7.5 },
+    // The short corner, on the other side of the lane from the block.
+    { x: rim.x - dir * 2, y: COURT.centerY + 11 },
   ];
 }
 
@@ -117,10 +123,21 @@ function laneClear(
   return true;
 }
 
-/** How many points this player's shot is worth right now, all in. */
+/**
+ * How many points this player's shot is worth right now, all in.
+ *
+ * The scheme's opinion of the three lives HERE rather than in `wantsShot`,
+ * because this number is what every other decision on the floor is compared
+ * against — including the drive. Putting it only in the shooting bar produced a
+ * five-out offence that emptied the paint, watched its own handler drive into
+ * the vacant lane on every possession, and finished a game with seven per cent
+ * of its shots from three and two assists.
+ */
 export function shotValueNow(game: HoopsGame, p: CourtPlayer): number {
-  const points = isThree(p.x, p.y, p.side) ? 3 : 2;
-  return game.shotQualityFor(p) * points;
+  const three = isThree(p.x, p.y, p.side);
+  const points = three ? 3 : 2;
+  const value = game.shotQualityFor(p) * points;
+  return three ? value - game.schemeFor(p.side).threeBias : value;
 }
 
 /**
@@ -151,7 +168,10 @@ export function wantsShot(game: HoopsGame, p: CourtPlayer): boolean {
   // percentages were recalibrated and this was not — no shot on the floor ever
   // clears it, and the offence passes the ball round the arc until the whistle.
   // An open three here is worth about 1.08, and it should be taken.
-  const possession = 0.93 + patience * 0.13;
+  const scheme = game.schemeFor(p.side);
+  // TEMPO. A team that plays fast is a team that is happy with a shot a slower
+  // team would pass up, so the bar it holds a shot to is lower.
+  const possession = (0.93 + patience * 0.13) / scheme.tempo;
   const urgency = clamp(1 - clock / 20, 0, 1);
   let bar = possession * (1 - urgency * 0.58);
 
@@ -164,6 +184,9 @@ export function wantsShot(game: HoopsGame, p: CourtPlayer): boolean {
   // skill. The bottom of the roster needs a better look than the top does.
   if (isThree(p.x, p.y, p.side)) {
     const shooter = p.data.attrs.three;
+    // What the coach has told them about the three is already in the VALUE, via
+    // `shotValueNow`, so that the drive sees it too. Only the shooter's own
+    // licence is left to apply here.
     if (shooter < 70) bar *= 1 + (70 - shooter) / 85;
   }
 
@@ -179,14 +202,25 @@ export function driveValue(game: HoopsGame, p: CourtPlayer): number {
   const rim = attackRim(p.side);
   const dir = attackDir(p.side);
   const spot = { x: rim.x - dir * 2.2, y: rim.y };
-  // Who would meet him there.
+  const gapToRim = floorDist(p.x, p.y, rim.x, rim.y);
+  /* WHO WOULD MEET HIM THERE — when he gets there, not now.
+   *
+   * Measuring only who is standing in the lane at the moment of the decision
+   * values a drive as though the defence were a photograph. It is not: a man
+   * fifteen feet away covers most of that in the second and a half the drive
+   * takes. Judged on the photograph, a five-out offence that had just emptied its
+   * own paint valued every drive as an uncontested layup, drove on every
+   * possession from twenty-five feet, and took two three-point shots in a game. */
+  const travel = gapToRim / 15 + 0.5;
   let nearest = Infinity;
   let helper = 0;
   for (const o of game.teams[otherSide(p.side)]) {
     if (o.fouledOut) continue;
     const d = floorDist(o.x, o.y, spot.x, spot.y);
-    if (d < nearest) {
-      nearest = d;
+    // How much of that gap he closes while the drive is happening.
+    const meeting = Math.max(0, d - travel * 13);
+    if (meeting < nearest) {
+      nearest = meeting;
       helper = (o.data.attrs.interiorD + o.data.attrs.block) / 2;
     }
   }
@@ -204,7 +238,7 @@ export function driveValue(game: HoopsGame, p: CourtPlayer): number {
     fading: false,
   });
   // Getting there at all: a handler with speed against a set defence.
-  const gap = floorDist(p.x, p.y, rim.x, rim.y);
+  const gap = gapToRim;
   const { defender, distance } = game.contestOn(p);
   const beat = clamp(
     0.42 + (p.data.attrs.speed + p.data.attrs.handle) / 400
@@ -227,7 +261,8 @@ export function driveValue(game: HoopsGame, p: CourtPlayer): number {
   const foul = clamp(0.3 + (p.data.attrs.strength - helper) / 300, 0.08, 0.5);
   const arrive = finish * 2 + foul * 1.45;
   const reset = 0.95;
-  return beat * arrive + (1 - beat) * reset;
+  // A pick-and-roll team drives more than a post team, at the same ratings.
+  return (beat * arrive + (1 - beat) * reset) * game.schemeFor(p.side).driveBias;
 }
 
 /** The best man to pass to: open, in a better spot, and reachable. */
@@ -406,7 +441,11 @@ export function driveAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
   // and an AI that always drives is an AI that never runs offence. Looked at
   // about three times a second, which is roughly how often a handler re-reads
   // the floor.
-  if (game.rng.next() < perSecond(3, dt)) {
+  // BALL MOVEMENT. How often he re-reads the floor for a pass IS the difference
+  // between a motion offence and an isolation one: the same five players, the
+  // same ratings, and one of them touches the ball four times a possession and
+  // the other holds it.
+  if (game.rng.next() < perSecond(3 * game.schemeFor(p.side).ballMovement, dt)) {
     const target = pickPassTarget(game, p);
     if (target) {
       game.pass(p, target);
@@ -429,7 +468,7 @@ export function driveAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
   // A screen: asked for when he cannot get anywhere himself and there is time to
   // use one.
   if (!game.hasScreen(p.side) && game.shotClock > 9 && distance < 6
-      && game.rng.next() < perSecond(0.8, dt)) {
+      && game.rng.next() < perSecond(0.8 * game.schemeFor(p.side).screens, dt)) {
     game.aiCallScreen(p);
   }
 
@@ -524,30 +563,49 @@ export function offBallAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
   const offBall = game.teams[p.side].filter((m) => m !== handler && !m.fouledOut);
   const insideRank = [...offBall].sort((a, b) =>
     (b.data.attrs.finishing - b.data.attrs.three) - (a.data.attrs.finishing - a.data.attrs.three));
-  const insideIdx = insideRank.slice(0, 2).indexOf(p);
+  // HOW MANY MEN STAND OUTSIDE. This is the shape of the offence on the floor and
+  // the one thing a spectator can see a scheme doing: five-out empties the paint,
+  // a post offence puts three men in it. The ball-handler is one of the five, so
+  // the number who work inside is what is left after the arc takes its share.
+  const arcPlayers = clamp(Math.round(game.schemeFor(p.side).arcPlayers), 1, 5);
+  const insideCount = clamp(5 - arcPlayers, 0, offBall.length);
+  const insideIdx = insideRank.slice(0, insideCount).indexOf(p);
   let target: { x: number; y: number };
   if (insideIdx >= 0) {
-    target = insideSpots(p.side)[insideIdx];
+    const inside = insideSpots(p.side);
+    target = inside[Math.min(insideIdx, inside.length - 1)];
   } else {
-    // Claim the nearest spot nobody nearer is already using.
-    const claimed = new Set<number>();
-    for (const m of game.teams[p.side]) {
-      if (m === p || m === handler) continue;
-      let bi = 0;
+    /* WHO STANDS WHERE, decided for the whole side at once and in a FIXED ORDER.
+     *
+     * Each player claiming his own nearest free spot independently looks like the
+     * same thing and is not: two men a foot apart both want the same spot, both
+     * see the other as not having claimed it yet, both go, both re-decide next
+     * frame, and the offence spends the possession swapping places eight feet
+     * behind the line instead of standing on it. With two men spacing the floor
+     * that was survivable. With four — which is what a five-out offence is — it
+     * meant an entire team drifting to thirty-four feet and taking two threes in
+     * a game.
+     *
+     * So the ranking that decided who plays inside also decides who picks first,
+     * and it is the same ranking every frame. */
+    // Reversed: the men who play INSIDE picked first for the inside spots, so the
+    // best shooters pick first for the outside ones. A centre who has been pushed
+    // out to the arc takes what is left, which is how it works in a gym.
+    const outside = insideRank.slice(insideCount).reverse();
+    const taken = new Set<number>();
+    let pick = spots[0];
+    for (const m of outside) {
+      let bi = -1;
       let bd = Infinity;
       spots.forEach((s, i) => {
+        if (taken.has(i)) return;
         const d = floorDist(m.x, m.y, s.x, s.y);
         if (d < bd) { bd = d; bi = i; }
       });
-      if (bd < 9) claimed.add(bi);
+      if (bi < 0) bi = 0;
+      taken.add(bi);
+      if (m === p) { pick = spots[bi]; break; }
     }
-    let pick = spots[0];
-    let bd = Infinity;
-    spots.forEach((s, i) => {
-      if (claimed.has(i)) return;
-      const d = floorDist(p.x, p.y, s.x, s.y);
-      if (d < bd) { bd = d; pick = s; }
-    });
     target = pick;
   }
 
@@ -559,6 +617,7 @@ export function offBallAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
 
 export function defendAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
   const diff = game.cfg.difficulty;
+  const scheme = game.schemeFor(p.side);
   const ownRim = attackRim(otherSide(p.side));
   const handler = game.carrier;
   const man = game.byUid(p.assignment);
@@ -589,12 +648,36 @@ export function defendAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
 
   const onBall = handler && man && handler.uid === man.uid;
 
+  /* WHERE THE DEFENCE MEETS THE BALL.
+   *
+   * A press picks it up as it comes in; a half-court defence lets it cross and
+   * then jumps it; a sagging defence waits at the arc. Measured from the
+   * defence's OWN basket, so it means the same thing at both ends of the floor.
+   */
+  const ballDepth = handler
+    ? floorDist(handler.x, handler.y, ownRim.x, ownRim.y)
+    : 0;
+  const engaged = !handler || ballDepth <= scheme.pickUp;
+
+  if (onBall && handler && !engaged) {
+    // Not yet. Hold a position between him and the basket, at the pick-up line,
+    // rather than running out to meet him seventy feet from the rim.
+    const toBall = { x: handler.x - ownRim.x, y: handler.y - ownRim.y };
+    const bl = Math.max(0.1, Math.hypot(toBall.x, toBall.y));
+    const hold = Math.min(scheme.pickUp, bl);
+    steer(game, p, ownRim.x + (toBall.x / bl) * hold, ownRim.y + (toBall.y / bl) * hold,
+      false, dt);
+    return;
+  }
+
   if (onBall && handler) {
     // ON THE BALL. How close to play him is a real basketball decision: tight on
     // a shooter, off a driver, and always between him and the basket.
     const shooterThreat = handler.data.attrs.three / 99;
     const driveThreat = (handler.data.attrs.speed + handler.data.attrs.handle) / 198;
-    const gap = clamp(2.0 + driveThreat * 2.4 - shooterThreat * 1.6, 1.4, 4.2);
+    const gap = clamp(
+      (2.0 + driveThreat * 2.4 - shooterThreat * 1.6) / scheme.manTight, 1.2, 5.2,
+    );
     const toRim = { x: ownRim.x - handler.x, y: ownRim.y - handler.y };
     const len = Math.max(0.1, Math.hypot(toRim.x, toRim.y));
     const tx = handler.x + (toRim.x / len) * gap;
@@ -610,7 +693,8 @@ export function defendAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
     if (p.stealCool <= 0 && floorDist(p.x, p.y, handler.x, handler.y) < HOOPS.stealRange) {
       // About one reach every four seconds from an average defender, and a
       // thief reaches more often. Any more and the whistle never stops.
-      const appetite = 0.2 + (p.data.attrs.steal - 55) / 150 + diff.decision * 0.12;
+      const appetite = (0.2 + (p.data.attrs.steal - 55) / 150 + diff.decision * 0.12)
+        * scheme.gamble;
       if (game.rng.next() < perSecond(Math.max(0.05, appetite), dt)) game.aiSteal(p);
     }
     return;
@@ -620,9 +704,21 @@ export function defendAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
   // the moment the ball beats its man, leave and meet it.
   const ballX = handler ? handler.x : game.ball.x;
   const ballY = handler ? handler.y : game.ball.y;
+  /* WHEN HELP GOES.
+   *
+   * Two triggers, and the second one had to be added. The first is a handler who
+   * is simply unguarded near the basket. The second is a man ATTACKING THE RIM AT
+   * SPEED, even with his own defender chasing him — because a defender who is
+   * behind the play is not guarding anybody, and without this nobody in the
+   * building steps over. A five-out offence found that out immediately: it emptied
+   * the paint, drove into it on every single possession, and shot nine per cent of
+   * its attempts from three while scoring forty points in an unguarded lane. */
+  const rimRun = !!handler
+    && floorDist(handler.x, handler.y, ownRim.x, ownRim.y) < 13
+    && Math.hypot(handler.vx, handler.vy) > 9;
   const helpNeeded = handler
     && floorDist(handler.x, handler.y, ownRim.x, ownRim.y) < 17
-    && game.contestOn(handler).distance > 3.4;
+    && (game.contestOn(handler).distance > 3.4 || rimRun);
 
   if (helpNeeded && man) {
     const myDistToBall = floorDist(p.x, p.y, ballX, ballY);
@@ -660,16 +756,48 @@ export function defendAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
   const toRim = { x: ownRim.x - man.x, y: ownRim.y - man.y };
   const rl = Math.max(0.1, Math.hypot(toRim.x, toRim.y));
   const sag = clamp(floorDist(man.x, man.y, ballX, ballY) / 26, 0, 1);
+
+  /* THE ZONE. A man defence follows a man; a zone holds an AREA and passes him
+   * on. So a zoned defender's target is blended toward a fixed station in front
+   * of his own basket, shaped by what the zone is for: a 2-3 sits down and
+   * protects the rim, a 3-2 comes out and takes the arc away. What the offence
+   * sees is exactly what it sees against a real zone — nobody chasing him to the
+   * corner, and a paint with three men standing in it. */
+  if (scheme.zone > 0.02) {
+    const slot = game.teams[p.side].filter((d) => !d.fouledOut).indexOf(p);
+    const across = ((slot % 3) - 1) * 9.5;
+    const deep = slot < 2 ? 19 : 7.5;
+    const depth = deep - scheme.zoneShape * 6.5;
+    const zx = ownRim.x + attackDir(otherSide(p.side)) * -depth;
+    const zy = COURT.centerY + across;
+    // The zone still leans at the ball: a zone that ignores where the ball is
+    // is not a zone, it is five men standing still.
+    const lean = 0.3;
+    const zoneX = zx + (ballX - zx) * lean;
+    const zoneY = zy + (ballY - zy) * lean;
+    const manX = man.x + (toRim.x / rl) * clamp(3.6 + sag * 6.4, 1.9, 9.5);
+    const manY = man.y + (toRim.y / rl) * clamp(3.6 + sag * 6.4, 1.9, 9.5);
+    const z = scheme.zone;
+    const bx = manX + (zoneX - manX) * z;
+    const by = manY + (zoneY - manY) * z;
+    steer(game, p, bx, by, floorDist(p.x, p.y, bx, by) > 6, dt);
+    return;
+  }
   // A shooter is guarded a great deal closer than a man who cannot shoot. Taking
   // the three away is the single biggest decision a modern defence makes, and
   // without it the offence simply shoots over the top all night.
   const threat = man.data.attrs.three / 99;
-  const stand = clamp(3.6 + sag * 6.4 - threat * 3.8, 1.9, 9.5);
+  // A gambling defence plays the PASSING LANE rather than the man: closer to him,
+  // and further round toward the ball. That is where a press gets its turnovers
+  // from — the reach-in on the ball is the smaller half of it — and it is also
+  // why a press that does not work gives up a layup a minute.
+  const stand = clamp((3.6 + sag * 6.4 - threat * 3.8) / scheme.gamble, 1.4, 9.5);
   let tx = man.x + (toRim.x / rl) * stand;
   let ty = man.y + (toRim.y / rl) * stand;
   // Pull a step toward the ball, which is what help position means.
-  tx += (ballX - tx) * sag * 0.24 * diff.helpSpeed;
-  ty += (ballY - ty) * sag * 0.24 * diff.helpSpeed;
+  const lean = sag * 0.24 * diff.helpSpeed * scheme.gamble;
+  tx += (ballX - tx) * lean;
+  ty += (ballY - ty) * lean;
 
   // Closeout: if his man has the ball coming and is open, get there — but not
   // before the pass has actually been thrown and seen. A defender who breaks the
@@ -702,8 +830,13 @@ function reboundAi(game: HoopsGame, p: CourtPlayer, dt: number, offense: boolean
   // break. A five-man crash of the offensive glass loses more games than it wins,
   // and a no-man crash hands the defence every miss — real teams get about a
   // quarter of their own misses back.
-  const crasher = p.data.attrs.rebounding > 52 || p.pos === 'C' || p.pos === 'PF'
-    || p.pos === 'SF';
+  // The scheme decides how many of them go: a post offence sends everybody, a
+  // five-out offence sends nobody and gets back instead.
+  const crash = offense ? game.schemeFor(p.side).crash : 1;
+  const bar = 52 / Math.max(0.2, crash);
+  const crasher = p.data.attrs.rebounding > bar
+    || ((p.pos === 'C' || p.pos === 'PF') && crash > 0.75)
+    || (p.pos === 'SF' && crash > 0.95);
   if (offense && !crasher) {
     const dir = attackDir(p.side);
     steer(game, p, rim.x - dir * 30, p.y, true, dt);

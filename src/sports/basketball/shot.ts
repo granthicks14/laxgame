@@ -64,6 +64,13 @@ export interface ShotInput {
   moving: number;
   /** True when the shooter has a hand in his face from the side or behind. */
   fading: boolean;
+  /**
+   * A flat edge on the shot, in percentage points of make chance. The home floor
+   * is the only thing that sets it, and only in a career — an exhibition is
+   * played on neutral ground. It is small on purpose: about two and a half points
+   * of final score, which is what home advantage is actually worth.
+   */
+  edge?: number;
 }
 
 /** How wide this shooter's release window is. */
@@ -136,6 +143,8 @@ export function makeChance(s: ShotInput): number {
    * the AI offence correctly passed the ball around the arc for twenty-four
    * seconds and then heaved it, every possession, and the league scored eleven
    * points a game. */
+  p += s.edge ?? 0;
+
   if (s.kind !== 'freeThrow') {
     const pressure = clamp(1 - s.contestDistance / 7.5, 0, 1);
     const quality = 0.6 + (clamp(s.contestRating, 0, 99) / 99) * 0.8;

@@ -1,5 +1,6 @@
 import type { HoopsPlayer, HoopsPosition, HoopsTeam } from './data';
 import type { Side } from './court';
+import type { ResolvedScheme } from './schemes';
 
 /* ---------------------------------------------------------------------------
  * WHAT A GAME IS MADE OF
@@ -187,6 +188,15 @@ export interface HoopsConfig {
   seed: number;
   /** Shown on the HUD: "Game 14", "Conference final". */
   label?: string;
+  /**
+   * What the home floor is worth, as a flat edge on the home side's shots. Set
+   * by a career fixture; left alone by an exhibition, which is neutral ground.
+   * The fast simulator reads the same number, so a home game is worth the same
+   * whether you watched it or not.
+   */
+  homeEdge?: number;
+  /** What each side runs. Absent means the plain basketball of an exhibition. */
+  schemes?: { home: ResolvedScheme; away: ResolvedScheme };
 }
 
 /** Things the engine announces, for sound, the HUD and the commentary line. */
