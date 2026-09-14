@@ -197,6 +197,15 @@ export class HoopsCareerHub implements Screen {
       this.refresh(app);
     };
 
+    /* And the whole thing at once. A coach who wants to skip a rebuilding year —
+     * or who has just taken over a squad he knows cannot win — should not have to
+     * press Simulate thirty times to find out how it went. */
+    const rest = (): void => {
+      simulateRestOfSeason(c);
+      this.refresh(app);
+    };
+    const left = c.schedule.filter((g) => g.featured && !g.played).length;
+
     return panel(null,
       h('div', { class: 'club-line' },
         badge(other),
@@ -210,6 +219,8 @@ export class HoopsCareerHub implements Screen {
       bigButton('Simulate', before.length > 1
         ? `Straight to the result (${before.length - 1} other games go first)`
         : 'Straight to the result', sim, 'btn--ghost'),
+      postseason ? null : bigButton('Simulate the season',
+        `All ${left} remaining games and the postseason`, rest, 'btn--ghost'),
     );
   }
 

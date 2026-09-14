@@ -40,6 +40,7 @@ export class DynastyStartScreen implements Screen {
   el: HTMLElement;
   private level: HoopsLevel = 'd2';
   private teamId: string;
+  private tier: HoopsTier = 'standard';
   private body!: HTMLElement;
 
   constructor(private app: App) {
@@ -103,14 +104,27 @@ export class DynastyStartScreen implements Screen {
             + 'Everything about the rest of the world is generated from your save’s '
             + 'own seed, so the league you start is the league you finish.' })),
 
-      panel(null, bigButton('Take the job', `${team.city} · ${LEVELS[this.level].short}`,
+      panel('Difficulty',
+        segmented<HoopsTier>(
+          TIER_ORDER.map((t) => ({ value: t, label: TIERS[t].mark })),
+          this.tier, (v) => { this.tier = v; this.paint(); }, true),
+        h('div', { class: 'small', text: TIERS[this.tier].tagline }),
+        h('div', { class: 'tiny', text: TIERS[this.tier].blurb }),
+        h('div', { class: 'tiny',
+          text: 'It changes what you can afford and who you can sign. It never gives a '
+            + 'rival programme a rating it did not earn.' })),
+
+      panel(null, bigButton('Take the job',
+        `${team.city} · ${LEVELS[this.level].short} · ${TIERS[this.tier].name}`,
         () => this.begin())),
     );
   }
 
   private begin(): void {
     deleteHoopsCareer('dynasty');
-    const career = createCareer({ mode: 'dynasty', teamId: this.teamId });
+    const career = createCareer({
+      mode: 'dynasty', teamId: this.teamId, tier: this.tier,
+    });
     saveHoopsCareer(career);
     this.app.replace((a) => new HoopsCareerHub(a, career));
   }

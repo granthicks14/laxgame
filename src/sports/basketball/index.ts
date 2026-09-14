@@ -3,6 +3,7 @@ import { HoopsMenuScreen } from '../../ui/screens/hoops/HoopsMenu';
 import { BASKETBALL_CONTROLS } from './input';
 import { BASKETBALL_SOUNDS } from './sounds';
 import { loadSeason } from './season';
+import { loadHoopsCareer } from './career/save';
 
 /**
  * HARDWOOD — basketball's entry point into the hub.
@@ -15,12 +16,17 @@ export const BASKETBALL: SportModule = {
   controls: BASKETBALL_CONTROLS,
   sounds: BASKETBALL_SOUNDS,
   init: () => {
-    // Touch the season save once on the way in: a save this build cannot read is
-    // discarded here, with a warning, rather than half-applied to a screen.
+    /* Touch every save once on the way in: a save this build cannot read is
+     * discarded here, with a warning, rather than half-applied to a screen three
+     * taps later. Basketball has three of them now — a season and two careers —
+     * and all of them are basketball's own keys. Nothing here can see, let alone
+     * write, anything of lacrosse's. */
     try {
       loadSeason();
+      loadHoopsCareer('dynasty');
+      loadHoopsCareer('challenge');
     } catch (err) {
-      console.warn('[hoops] season save could not be read', err);
+      console.warn('[hoops] a save could not be read', err);
     }
   },
 };

@@ -182,6 +182,7 @@ export class PlayerScreen implements Screen {
         season.games ? panel('This season',
           kvRow(
             ['Games', String(season.games)],
+            ['Starts', String(career.season[p.id]?.starts ?? 0)],
             ['Points', season.ppg.toFixed(1)],
             ['Rebounds', season.rpg.toFixed(1)],
             ['Assists', season.apg.toFixed(1)],
@@ -194,6 +195,7 @@ export class PlayerScreen implements Screen {
         total.games > season.games ? panel('In this programme',
           kvRow(
             ['Games', String(total.games)],
+            ['Starts', String(career.careerStats[p.id]?.starts ?? 0)],
             ['Points', total.ppg.toFixed(1)],
             ['Rebounds', total.rpg.toFixed(1)],
             ['Assists', total.apg.toFixed(1)],

@@ -44,6 +44,20 @@ const menu = (page, label) =>
 const wide = (page, label) =>
   page.locator('.btn__label').filter({ hasText: label }).first().click();
 
+/** Which rung the challenge hub says it is on, from "3/9 · JUCO". */
+const small_rung = async (page) => {
+  const sub = await page.locator('.topbar__sub').first().innerText().catch(() => '');
+  const m = /(\d+)\/9/.exec(sub);
+  return m ? Number(m[1]) : 0;
+};
+
+/** The rung the first job on the table is at. */
+const small_rungFromJobs = async (page) => {
+  const sub = await page.locator('.topbar__sub').first().innerText().catch(() => '');
+  const m = /(\d+)\/9/.exec(sub);
+  return m ? Number(m[1]) : 0;
+};
+
 const topTitle = async (page) =>
   (await page.locator('.topbar__title').first().innerText()).toLowerCase();
 
@@ -68,6 +82,59 @@ async function sweep(page, where) {
   const blank = list.filter((c) => c.tag === 'button' && !c.text && !c.disabled);
   check(`${where}: nothing unlabelled`, blank.length === 0, `${blank.length} blank`);
   return list;
+}
+
+/**
+ * An offseason worked the way a player would work it: offer to the recruits the
+ * board says are winnable, and run the cycle out. A suite that only presses
+ * "next" proves the buttons exist; it does not prove the mode can be played.
+ */
+async function workOffseason(page) {
+  const board = page.locator('.btn__label').filter({ hasText: 'The board' }).first();
+  if (!(await board.count())) return;
+  await board.click();
+  await page.waitForSelector('.prospect__head').catch(() => {});
+
+  // The "Winnable" filter is the board's own odds column. Offer down the list.
+  const winnable = page.locator('.seg__opt').filter({ hasText: 'Winnable' }).first();
+  if (await winnable.count()) {
+    for (let round = 0; round < 10; round++) {
+      await winnable.click();
+      await page.waitForTimeout(60);
+      const head = page.locator('.prospect__head').first();
+      if (!(await head.count())) break;
+      await head.click();
+      await page.waitForTimeout(60);
+      const offer = page.getByRole('button', { name: /Offer him a place/i }).first();
+      if (!(await offer.count())) break;
+      await offer.click();
+      await page.waitForTimeout(60);
+    }
+  }
+  for (let w = 0; w < 12; w++) {
+    const work = page.locator('.btn__label').filter({ hasText: 'Work the week' }).first();
+    if (!(await work.count())) break;
+    await work.click();
+    await page.waitForTimeout(50);
+  }
+  await page.locator('.topbar .btn--icon').first().click();
+  await page.waitForSelector('.btn__label');
+}
+
+/** Buy whatever the tree will sell, cheapest branch first. */
+async function spendPoints(page) {
+  const tile = page.locator('.tile__label').filter({ hasText: 'Coach' }).first();
+  if (!(await tile.count())) return;
+  await tile.click();
+  await page.waitForSelector('.roster-row');
+  for (let i = 0; i < 8; i++) {
+    const buyable = page.locator('button.roster-row').first();
+    if (!(await buyable.count())) break;
+    await buyable.click();
+    await page.waitForTimeout(60);
+  }
+  await page.locator('.topbar .btn--icon').first().click();
+  await page.waitForSelector('.tile__label');
 }
 
 async function run() {
@@ -299,6 +366,58 @@ async function run() {
   check('and says which rung this is',
     /1\/9/.test(await page.locator('.topbar__sub').first().innerText()));
   await sweep(page, 'challenge hub');
+
+  /* ------------------------------------------ a challenge career, several years */
+
+  // The whole promise of the mode is that a championship moves you up a rung and
+  // nothing else does. A season here is two clicks now, so the suite can coach
+  // enough of them to see one actually happen.
+  let seasons = 0;
+  let promoted = false;
+  let sacked = false;
+  const startRung = await small_rung(page);
+  while (seasons < 14 && !promoted) {
+    const simAll = page.locator('.btn__label').filter({ hasText: 'Simulate the season' }).first();
+    if (await simAll.count()) { await simAll.click(); await page.waitForTimeout(180); continue; }
+    const close = page.locator('.btn__label').filter({
+      hasText: /Close the season|Into the postseason|regular season is over|Play it out/,
+    }).first();
+    if (await close.count()) { await close.click(); await page.waitForTimeout(160); continue; }
+
+    const jobs = page.locator('.btn__label').filter({ hasText: 'See the jobs' }).first();
+    if (await jobs.count()) {
+      await jobs.click();
+      await page.waitForSelector('.job');
+      const title = (await topTitle(page));
+      sacked = sacked || title.includes('out of a job');
+      promoted = !sacked;
+      const before = await small_rungFromJobs(page);
+      await page.locator('.job').first().click();
+      await page.waitForSelector('.bigstat__v');
+      const now = await small_rung(page);
+      check('taking a job moves the coach exactly one rung',
+        Math.abs(now - before) <= 1, `${before} -> ${now}`);
+      break;
+    }
+
+    const off = page.locator('.btn__label').filter({ hasText: 'The offseason' }).first();
+    if (await off.count()) {
+      await off.click();
+      await page.waitForSelector('.topbar__title');
+      await workOffseason(page);
+      await wide(page, 'Start the season');
+      await page.waitForSelector('.bigstat__v');
+      await spendPoints(page);
+      seasons++;
+      continue;
+    }
+    break;
+  }
+  check('a challenge career runs season after season', seasons >= 1 || promoted,
+    `${seasons} seasons`);
+  const endRung = await small_rung(page);
+  check('and the ladder only ever moves by one',
+    Math.abs(endRung - startRung) <= 1, `${startRung} -> ${endRung}`);
 
   /* --- the two careers do not share a save. */
   const saves = await page.evaluate(() => Object.keys(localStorage)

@@ -114,6 +114,7 @@ export function createCareer(opts: NewCareerOptions): HoopsCareer {
     market: [],
     pitchesLeft: 0,
     lastDevelopment: [],
+    lastAwards: [],
     lastDepartures: [],
     portalOut: [],
     history: [],
@@ -462,6 +463,7 @@ export function runOffseason(career: HoopsCareer): OffseasonReport {
     scale: mods.coachPoints,
   });
   applyAwards(career.coach, awards);
+  career.lastAwards = awards;
 
   /* 7. THE WORLD MOVES. */
   driftStanding(career, career.teamId, row.wins, row.losses, champion);

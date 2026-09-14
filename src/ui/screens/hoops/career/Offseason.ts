@@ -63,6 +63,14 @@ export class OffseasonScreen implements Screen {
         h('div', { class: 'small', text: last.finish }),
         last.star ? h('div', { class: 'tiny', text: `Best of them: ${last.star}` }) : null)] : []),
 
+      ...(c.lastAwards?.length ? [panelFlush('What the season paid',
+        ...c.lastAwards.map((a) => h('div', { class: 'kv' },
+          h('div', { class: 'kv__k tiny', text: a.reason }),
+          h('div', { class: 'kv__v num', text: a.points > 0 ? `+${a.points}` : '—' }))),
+        h('div', { class: 'prospect__open tiny',
+          text: `${c.coach.points} points to spend, and a tree longer than a career `
+            + 'to spend them on.' }))] : []),
+
       ...(c.lastDepartures.length ? [panelFlush('Leaving the programme',
         ...c.lastDepartures.map((d) => h('div', { class: 'roster-row' },
           h('span', { class: 'roster-row__pos', text: d.pos }),

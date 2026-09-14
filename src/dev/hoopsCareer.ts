@@ -271,6 +271,43 @@ check('and nobody left their own level', Object.entries(career.standingDrift)
   .every(([id, d]) => Math.abs(d) <= 15 && standingOf(career, id) >= 1
     && standingOf(career, id) <= 99));
 
+/* --------------------------------------------------------------- the schedule */
+
+console.log('\nTHE FIXTURE LIST\n');
+
+{
+  /* A season that is the same fixture list every year with different numbers on
+   * it is a season nobody plays twice. */
+  const c = createCareer({ mode: 'dynasty', teamId: teamsAtLevel('d2')[5].id, seed: 61 });
+  const years: string[][] = [];
+  for (let y = 0; y < 4; y++) {
+    years.push(c.schedule.filter((f) => f.featured)
+      .map((f) => `${f.homeId}>${f.awayId}`));
+    playSeason(c);
+  }
+  const info = LEVELS[c.level];
+  const same = years.slice(1).filter((list, i) =>
+    list.join('|') === years[i].join('|')).length;
+  const orders = new Set(years.map((y) => y.join('|')));
+  console.log(`  ${years[0].length} games a year, ${orders.size} different `
+    + `fixture lists in ${years.length} seasons`);
+
+  check('every season is a full card',
+    years.every((y) => y.length === info.games), `${years.map((y) => y.length).join('/')}`);
+  check('and no two seasons are the same fixture list', same === 0 && orders.size === years.length,
+    `${orders.size} of ${years.length} distinct`);
+
+  const home = years[0].filter((g) => g.startsWith(c.teamId)).length;
+  check('home and away are close to even', Math.abs(home - years[0].length / 2) <= 3,
+    `${home} home of ${years[0].length}`);
+
+  const conf = c.schedule.filter((f) => f.featured && f.conference).length;
+  check('there is conference play and non-conference play',
+    conf > 0 && conf < info.games, `${conf} conference of ${info.games}`);
+  check('and a rivalry game every year',
+    c.schedule.some((f) => f.featured && f.rivalry));
+}
+
 /* ------------------------------------------------------------ statistics */
 
 console.log('\nWHAT THE STATISTICS SAY\n');

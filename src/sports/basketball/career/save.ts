@@ -51,7 +51,20 @@ export function loadHoopsCareer(mode: HoopsCareerMode): HoopsCareer | null {
   } catch {
     return null;
   }
-  return raw;
+  /* Fields added after a save was written. There is exactly one save version so
+   * far and no migration to speak of, but a career that has been sitting in a
+   * browser since before a field existed must not arrive with it undefined —
+   * that is the kind of hole that shows up as a blank screen three taps later. */
+  const c = raw as HoopsCareer & Record<string, unknown>;
+  if (!Array.isArray(c.lastAwards)) c.lastAwards = [];
+  if (!Array.isArray(c.lastDevelopment)) c.lastDevelopment = [];
+  if (!Array.isArray(c.lastDepartures)) c.lastDepartures = [];
+  if (!Array.isArray(c.portalOut)) c.portalOut = [];
+  if (!Array.isArray(c.market)) c.market = [];
+  if (!Array.isArray(c.history)) c.history = [];
+  if (!c.careerStats) c.careerStats = {};
+  if (!c.season) c.season = {};
+  return c;
 }
 
 export const hasHoopsCareer = (mode: HoopsCareerMode): boolean =>

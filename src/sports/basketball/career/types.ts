@@ -6,6 +6,7 @@ import type { HoopsCoach } from './coach';
 import type { RecruitingState } from './recruit';
 import type { TransferTarget, PortalDeparture } from './portal';
 import type { ChallengeState } from './challenge';
+import type { PointAward } from './coach';
 import type { HoopsTier } from './difficulty';
 
 /* ---------------------------------------------------------------------------
@@ -178,6 +179,8 @@ export interface HoopsCareer {
   market: TransferTarget[];
   pitchesLeft: number;
   lastDevelopment: HoopsDevelopment[];
+  /** What the last season paid, itemised, for the offseason report. */
+  lastAwards: PointAward[];
   lastDepartures: HoopsDeparture[];
   portalOut: PortalDeparture[];
 
