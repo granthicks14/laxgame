@@ -378,26 +378,33 @@ export function fitLabel(fit: number): string {
 }
 
 /**
- * The scheme a squad would be best running. Used to give an AI programme a plan
- * that suits its own players, and to suggest one to a coach who has just taken
- * over a roster somebody else built.
+ * Every scheme this squad could run, best fit first. The ranking, not just the
+ * winner, because an AI programme should not automatically find the perfect plan
+ * for its own players — see `rankedSchemesFor`'s callers.
+ */
+export function rankedSchemesFor(roster: HoopsPlayer[], par: number): {
+  offense: { key: OffenseScheme; fit: number }[];
+  defense: { key: DefenseScheme; fit: number }[];
+} {
+  return {
+    offense: OFFENSE_ORDER
+      .map((key) => ({ key, fit: schemeFit(OFFENSES[key].needs, roster, par) }))
+      .sort((a, b) => b.fit - a.fit),
+    defense: DEFENSE_ORDER
+      .map((key) => ({ key, fit: schemeFit(DEFENSES[key].needs, roster, par) }))
+      .sort((a, b) => b.fit - a.fit),
+  };
+}
+
+/**
+ * The scheme a squad would be best running. Used to suggest one to a coach who
+ * has just taken over a roster somebody else built.
  */
 export function bestSchemeFor(roster: HoopsPlayer[], par: number): {
   offense: OffenseScheme; defense: DefenseScheme;
 } {
-  let offense: OffenseScheme = 'motion';
-  let bestOff = -1;
-  for (const key of OFFENSE_ORDER) {
-    const fit = schemeFit(OFFENSES[key].needs, roster, par);
-    if (fit > bestOff) { bestOff = fit; offense = key; }
-  }
-  let defense: DefenseScheme = 'man';
-  let bestDef = -1;
-  for (const key of DEFENSE_ORDER) {
-    const fit = schemeFit(DEFENSES[key].needs, roster, par);
-    if (fit > bestDef) { bestDef = fit; defense = key; }
-  }
-  return { offense, defense };
+  const ranked = rankedSchemesFor(roster, par);
+  return { offense: ranked.offense[0].key, defense: ranked.defense[0].key };
 }
 
 /** Positional shorthand for the roster screen: who this scheme leans on. */

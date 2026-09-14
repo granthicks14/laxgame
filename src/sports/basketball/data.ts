@@ -268,7 +268,7 @@ const ARCHETYPES: Record<HoopsPosition, Archetype[]> = {
 /** Base attribute means, before position and archetype shape them. */
 function baseAttrs(rng: Rng, pool: number, pos: HoopsPosition): HoopsAttrs {
   const n = (offset = 0, sd = 6.5): number =>
-    clamp(Math.round(rng.gauss(pool + offset, sd)), 25, 99);
+    clamp(Math.round(rng.gauss(pool + offset, sd)), ATTR_MIN, 99);
   const big = pos === 'C' || pos === 'PF';
   const guard = pos === 'PG' || pos === 'SG';
   return {
@@ -297,6 +297,20 @@ export interface GeneratedTeam {
 }
 
 /** What a roster is being built for. Defaults reproduce the original league. */
+/**
+ * The bottom of the attribute scale.
+ *
+ * It used to be 25, and that quietly broke the bottom of the pyramid. A small
+ * high school plays at a pool of 27 and its recruits are drawn nine points below
+ * that, so almost every attribute in the class clamped to the floor: every player
+ * at the level was the same player, a starting hole of fourteen rating points had
+ * nowhere to go, and thirty-four seasons of a Challenge career on the hard tiers
+ * could not win a state tournament because there was nothing to build out of.
+ * Fifteen is an honest number for a fifteen-year-old who is not very good at
+ * basketball, and it leaves the bottom two levels room to have a top and a bottom.
+ */
+export const ATTR_MIN = 15;
+
 export interface RosterOptions {
   /** The attribute pool the squad is drawn from. */
   par: number;
@@ -393,7 +407,7 @@ export function buildRoster(
 
     const arch = rng.pick(ARCHETYPES[pos]);
     for (const [key, delta] of Object.entries(arch.bias) as [AttrKey, number][]) {
-      attrs[key] = clamp(attrs[key] + delta, 25, 99);
+      attrs[key] = clamp(attrs[key] + delta, ATTR_MIN, 99);
     }
 
     const [hm, hsd] = HEIGHT[pos];
@@ -401,10 +415,10 @@ export function buildRoster(
     // Height is not an attribute the player sets, but it feeds the ones it
     // should: a taller man rebounds, blocks and defends the paint better.
     const tall = (heightIn - hm) / 4;
-    attrs.rebounding = clamp(Math.round(attrs.rebounding + tall * 3), 25, 99);
-    attrs.block = clamp(Math.round(attrs.block + tall * 3), 25, 99);
-    attrs.interiorD = clamp(Math.round(attrs.interiorD + tall * 2), 25, 99);
-    attrs.speed = clamp(Math.round(attrs.speed - tall * 1.5), 25, 99);
+    attrs.rebounding = clamp(Math.round(attrs.rebounding + tall * 3), ATTR_MIN, 99);
+    attrs.block = clamp(Math.round(attrs.block + tall * 3), ATTR_MIN, 99);
+    attrs.interiorD = clamp(Math.round(attrs.interiorD + tall * 2), ATTR_MIN, 99);
+    attrs.speed = clamp(Math.round(attrs.speed - tall * 1.5), ATTR_MIN, 99);
 
     let num = rng.int(0, 55);
     while (used.has(num)) num = rng.int(0, 55);

@@ -110,7 +110,7 @@ export const UPGRADES: UpgradeInfo[] = [
     blurb: 'Finishing, rebounding and interior defence grow twice as fast.' },
   { key: 'breakouts', branch: 'development', label: 'Player development staff', level: 6, cost: 40, requires: ['shooting', 'bigs'],
     blurb: 'Breakout seasons stop being luck. Nobody on your roster stagnates.' },
-  { key: 'ceiling', branch: 'development', label: 'Raising ceilings', level: 10, cost: 64, requires: ['breakouts'],
+  { key: 'ceiling', branch: 'development', label: 'Raising ceilings', level: 8, cost: 78, requires: ['breakouts'],
     blurb: 'Players in your programme grow past what anybody projected for them.' },
 
   /* --- recruiting ------------------------------------------------------- */
@@ -122,7 +122,7 @@ export const UPGRADES: UpgradeInfo[] = [
     blurb: 'One more scholarship offer open at a time, and bigger classes.' },
   { key: 'closer', branch: 'recruiting', label: 'Closer', level: 7, cost: 46, requires: ['pitch'],
     blurb: 'When a recruit decides, he decides in your favour more often.' },
-  { key: 'gems', branch: 'recruiting', label: 'Finding the overlooked', level: 9, cost: 58, requires: ['eye', 'reach'],
+  { key: 'gems', branch: 'recruiting', label: 'Finding the overlooked', level: 8, cost: 66, requires: ['eye', 'reach'],
     blurb: 'You see the ceiling nobody else sees, on players nobody else wants.' },
 
   /* --- the portal ------------------------------------------------------- */
@@ -132,7 +132,7 @@ export const UPGRADES: UpgradeInfo[] = [
     blurb: 'Your approach to a transfer is worth a great deal more.' },
   { key: 'retention', branch: 'portal', label: 'Keeping your own', level: 6, cost: 38, requires: ['contacts'],
     blurb: 'Your players stop listening to other programmes.' },
-  { key: 'window', branch: 'portal', label: 'Working the window', level: 9, cost: 56, requires: ['sell', 'retention'],
+  { key: 'window', branch: 'portal', label: 'Working the window', level: 8, cost: 64, requires: ['sell', 'retention'],
     blurb: 'One more approach every window, and the best names return your calls.' },
 
   /* --- the programme ---------------------------------------------------- */
@@ -142,7 +142,7 @@ export const UPGRADES: UpgradeInfo[] = [
     blurb: 'Your rotation is nine deep and the ninth man is worth playing.' },
   { key: 'culture', branch: 'program', label: 'Culture', level: 6, cost: 38, requires: ['depth'],
     blurb: 'Players stay, transfers listen, and recruits have heard of you.' },
-  { key: 'legend', branch: 'program', label: 'A name in the sport', level: 12, cost: 80, requires: ['culture', 'lategame'],
+  { key: 'legend', branch: 'program', label: 'A name in the sport', level: 10, cost: 98, requires: ['culture', 'lategame'],
     blurb: 'Doors open that a record cannot open. Every part of the job gets easier.' },
 ];
 
@@ -386,8 +386,19 @@ export function seasonAward(input: {
   const tierPay = 1 + LEVEL_PAY[input.level];
   const out: PointAward[] = [];
 
+  /* Points are the CURRENCY and the difficulty tier scales them. Experience is
+   * not: a coach who has worked forty seasons has worked forty seasons whether he
+   * won them or not, so a flat share of the experience comes from the season
+   * itself. Without it the top of the tree — the ceiling-raising upgrade that is
+   * the one way a squad ever exceeds the standard of its level — sat behind an
+   * experience level a coach on the hard tiers could not reach in a lifetime, and
+   * the hardest tiers were mathematically unwinnable rather than hard. */
   const base = Math.round(input.wins * 0.55 * tierPay * input.scale);
-  out.push({ reason: `${input.wins} wins`, points: base, xp: Math.round(input.wins * 1.2) });
+  out.push({
+    reason: `${input.wins} wins`,
+    points: base,
+    xp: Math.round(14 + input.wins * 1.35),
+  });
 
   if (gap > 0.02) {
     const over = Math.round(gap * 62 * tierPay * input.scale);

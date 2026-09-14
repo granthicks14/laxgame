@@ -1,7 +1,8 @@
 import { Rng } from '../../../core/rng';
 import { clamp } from '../../../core/math';
 import {
-  POSITIONS, buildRoster, computeOverall, type HoopsPlayer, type HoopsPosition,
+  ATTR_MIN, POSITIONS, buildRoster, computeOverall,
+  type HoopsPlayer, type HoopsPosition,
 } from '../data';
 import { LEVELS, type HoopsLevel } from '../levels';
 import { playingTimeOutlook, type RosterNeeds } from './needs';
@@ -120,6 +121,12 @@ export interface ClassOptions {
   perks: CoachPerks;
   mods: TierMods;
   /**
+   * Places actually open on the roster. A coach chases a few more players than he
+   * has room for, so this sets both how big a board he works and how many offers
+   * he may have out at once.
+   */
+  places: number;
+  /**
    * Every other club at the level, WITH how the sport rates it. A rival's pull
    * on a recruit is its own standing, not a dice roll: a blue blood chasing a
    * five-star is close to unbeatable and a bottom-half programme chasing the
@@ -142,10 +149,19 @@ export function buildClass(opts: ClassOptions): Prospect[] {
 
   for (let i = 0; i < opts.size; i++) {
     const pos = POSITIONS[rng.int(0, POSITIONS.length - 1)];
-    // Where he sits against the level. Most are below it — they are freshmen —
-    // and a few are ready to play now.
+    /* Where he sits against the level. Most are below it — they are freshmen —
+     * and a few are ready to play now.
+     *
+     * HOW FAR BELOW DEPENDS ON HOW LONG HE HAS. A four-year programme signs
+     * projects and grows them. A junior college gives its players two years of
+     * eligibility, so half its roster leaves every summer and it has to sign men
+     * who can play in October — recruiting eighteen-year-old projects into a
+     * two-year programme is how a coach ends up permanently nine points below a
+     * level he can never catch, which is exactly what made JUCO an impassable
+     * wall in a sixty-season test career. */
     const band = rng.gauss(0, 1);
-    const par = info.par - 9 + band * 5.5;
+    const behind = 9 * clamp(info.eligibility / 4, 0.5, 1);
+    const par = info.par - behind + band * 5.5;
     const made = buildRoster(`recruit:${opts.seed}:${opts.year}:${i}`, i, {
       par,
       size: 1,
@@ -187,33 +203,72 @@ export function buildClass(opts: ClassOptions): Prospect[] {
       committedTo: null,
       contact: 0,
       scouted: false,
-      seenOverall: clamp(Math.round(player.overall + bias), 25, 99),
+      seenOverall: clamp(Math.round(player.overall + bias), ATTR_MIN, 99),
       seenCeiling: clamp(
-        Math.round(player.potential + bias * 0.8 + (1 - eye) * rng.range(-6, 6)), 25, 99,
+        Math.round(player.potential + bias * 0.8 + (1 - eye) * rng.range(-6, 6)),
+        ATTR_MIN, 99,
       ),
       margin,
     });
   }
 
-  // Rival interest: the better the player, the more programmes are on him, and
-  // how hard they push is a difficulty setting rather than a rating bonus.
+  /* RIVAL INTEREST, and the one place difficulty is allowed to touch it.
+   *
+   * Two knobs, both bounded. How MANY programmes are chasing him — more of them
+   * on a harder tier, but never so many that the best of a dozen rolls beats
+   * everything by arithmetic — and how HARD the ones chasing him push, which is
+   * a shift up the same 0-100 scale the coach's own pitch is scored on rather
+   * than a multiplier.
+   *
+   * The multiplier is what this used to be, and it made the top three tiers
+   * unplayable: a baseline of forty times 2.2 is eighty-eight, which is above
+   * anything a coach at a bottom-half programme can reach, so a ten-season test
+   * career on Hard and above signed exactly zero recruits, every year, forever.
+   * That is not a difficulty setting, it is a wall. */
+  const push = opts.mods.rivalPush;
+
+  /* NOT EVERY BOY IS WANTED, and how many programmes are on him follows where he
+   * sits IN HIS OWN CLASS rather than how many stars he carries.
+   *
+   * Stars are a level-relative label: almost every prospect at a small high
+   * school is a two-star, so counting suitors off stars gave every single player
+   * at the level two or three programmes chasing him and left the bottom third of
+   * the class — the players a programme at the bottom is actually built out of —
+   * as contested as the top. A coach on the hard tiers then had nobody in the
+   * whole class he could sign, and thirty-four seasons produced no championship
+   * because there was nothing to build with.
+   *
+   * So: the top of a class has everybody on him. The bottom third has nobody. */
+  const byDemand = [...out].sort(
+    (a, b) => (b.seenOverall + b.stars * 4) - (a.seenOverall + a.stars * 4),
+  );
+  const rankOf = new Map(byDemand.map((p, i) => [p.id, i / Math.max(1, byDemand.length - 1)]));
+
   for (const p of out) {
+    const demand = clamp(1 - (rankOf.get(p.id) ?? 0) * 1.4, 0, 1);
     const count = clamp(
-      Math.round((p.stars - 1) * 1.4 * opts.mods.rivalPush + rng.range(0, 2)),
-      0, 6,
-    ) + opts.mods.portalRivals;
+      Math.round(demand * 4.5 * push + (p.stars - 3) * 0.5 + rng.range(-0.5, 1.2)),
+      0, 8,
+    );
     const pool = rng.shuffle([...opts.rivals]);
     for (let i = 0; i < Math.min(count, pool.length); i++) {
-      /* What that programme is worth to HIM, on the same 0-100 scale the coach's
-       * own pitch is scored on (see `interestTarget`). The middle of the scale is
-       * a programme of average standing making an ordinary approach — which a
-       * coach who has actually offered, visited and fits what the boy wants
-       * should beat. What he should NOT beat, without a real pitch, is a strong
-       * programme chasing a player everybody wants. */
+      /* What that programme is worth to HIM. The middle of the scale is a
+       * programme of average standing making an ordinary approach — which a coach
+       * who has offered, visited and fits what the boy wants should beat. What he
+       * should not beat, without a real pitch, is a strong programme chasing a
+       * player everybody wants. */
       const rival = pool[i];
+      /* AND HE WOULD NOT PLAY THERE. The rivals chasing a recruit are mostly
+       * better programmes than the one he would start at, and a player who wants
+       * minutes knows exactly what that means — so the same thing that makes a
+       * blue blood attractive makes it a place he might not get off the bench.
+       * Without this the coach's side of the pitch was weighed on five things and
+       * the rivals' on one, and "you will play here immediately" — the only card a
+       * programme at the bottom ever holds — was worth nothing at all. */
+      const bench = -0.25 - (rival.standing - 50) / 180;
       const ceiling = clamp(
-        (40 + (rival.standing - 50) * 0.5 + (p.stars - 3) * 3.5) * opts.mods.rivalPush
-        + rng.range(-5, 5),
+        40 + (rival.standing - 50) * 0.5 + (p.stars - 3) * 3.5
+        + (push - 1) * 16 + p.wants.minutes * bench * 30 + rng.range(-5, 5),
         0, 96,
       );
       p.suitors.push({
@@ -231,12 +286,17 @@ export function newRecruitingClass(opts: ClassOptions): RecruitingState {
     year: opts.year,
     prospects: buildClass(opts),
     /* How many offers may be open at once — the coach's ATTENTION, which is the
-     * real currency of recruiting. Eight of a board of twenty-two, because a
-     * fourteen-man roster with four years of eligibility turns over three or four
-     * places a year and a coach who can only chase four players can never restock
-     * one: he loses two of them to bigger programmes and fills the gap with
-     * walk-ons until the squad is unrecognisable. */
-    offerLimit: Math.max(1, 8 + opts.mods.offers + opts.perks.extraOffers),
+     * real currency of recruiting.
+     *
+     * It is FOUR MORE THAN HE HAS PLACES FOR, because a flat limit is a wall at
+     * exactly the programmes that need recruiting most. A junior college gives its
+     * players two years of eligibility, so half the squad leaves every summer; a
+     * coach there restocks seven places or he does not have a team. Held to four
+     * offers he cannot, ever, and the level becomes a ceiling nobody climbs past
+     * — which is precisely what a sixty-season test career kept running into. */
+    offerLimit: Math.max(
+      4, Math.min(16, opts.places + 4) + opts.mods.offers + opts.perks.extraOffers,
+    ),
     week: 0,
     weeks: 8,
     news: [],
@@ -268,6 +328,13 @@ export interface ProgramPitch {
   /** Which region the programme is in. */
   region: string;
   level: HoopsLevel;
+  /**
+   * What the SPORT thinks of the coach, 0..100, independent of the programme he
+   * happens to be at. This is how a career compounds: the man who has won four
+   * championships recruits above the job he took, which is the only way a climb
+   * through nine levels ever accelerates.
+   */
+  reputation: number;
 }
 
 /**
@@ -305,7 +372,11 @@ export function interestFactors(p: Prospect, prog: ProgramPitch): InterestFactor
   out.push({
     label: PRIORITY_LABEL.prestige,
     weight: p.wants.prestige,
-    score: clamp((prog.standing - 45) / 45, -1, 1),
+    // Divided by 65 rather than 45: standing is a WITHIN-LEVEL measure and the
+    // rival side of the same duel reads it at half a point per point, so scoring
+    // the coach's own programme on a steeper curve than his rivals' punished him
+    // twice for the same fact.
+    score: clamp((prog.standing - 45) / 65, -0.8, 0.85),
     note: prog.standing >= 75 ? 'One of the best programmes at this level'
       : prog.standing >= 45 ? 'A solid name'
         : 'Nobody has heard of you',
@@ -318,6 +389,11 @@ export function interestFactors(p: Prospect, prog: ProgramPitch): InterestFactor
     note: `He is from ${p.region}`,
   });
   return out;
+}
+
+/** What the coach himself is worth to a recruit, over and above the programme. */
+function stature(prog: ProgramPitch): number {
+  return clamp((prog.reputation - 34) / 66, -0.5, 1) * 13;
 }
 
 /** What the programme is worth to this player, 0..100. */
@@ -338,7 +414,65 @@ export function interestTarget(p: Prospect, prog: ProgramPitch, mods: TierMods):
   const reach = clamp(-Math.max(0, gap - 4) * 1.4, -30, 0);
 
   const appeal = prog.perks.appeal * 22;
-  return clamp(48 + fit * 40 + reach + appeal - mods.pitchResistance * 0.5, 0, 100);
+  return clamp(
+    48 + fit * 40 + reach + appeal + stature(prog) - mods.pitchResistance * 0.5,
+    0, 100,
+  );
+}
+
+/* ---------------------------------------------------------------- the odds */
+
+export type Odds = 'favourite' | 'contest' | 'longshot' | 'hopeless';
+
+export interface ProspectOdds {
+  /** Where you stand with him, 0..100. */
+  mine: number;
+  /** Where the programme chasing him hardest stands. */
+  rival: number;
+  rivalCount: number;
+  odds: Odds;
+  label: string;
+  /** One line of advice a coach can act on. */
+  note: string;
+}
+
+const ODDS_LABEL: Record<Odds, string> = {
+  favourite: 'Favourite',
+  contest: 'A real fight',
+  longshot: 'Long shot',
+  hopeless: 'Not realistic',
+};
+
+/**
+ * WHETHER YOU CAN ACTUALLY GET HIM, which is the single most important thing on
+ * a recruiting board and the one a coach cannot work out for himself.
+ *
+ * A programme at the bottom of its level does not sign the best player in the
+ * class; it signs the players nobody else has called, and turns them into the
+ * best players in the class. Nothing teaches that unless the board says it out
+ * loud — a test career that chased the top of the board every year signed one
+ * player in eleven offers, and the same career chasing the unwanted signed eight.
+ */
+export function prospectOdds(
+  p: Prospect, prog: ProgramPitch, mods: TierMods,
+): ProspectOdds {
+  const target = interestTarget(p, prog, mods);
+  const mine = p.offered ? Math.max(p.interest, target) : target;
+  const rival = p.suitors.reduce(
+    (n, s) => Math.max(n, s.interest, s.ceiling), 0,
+  );
+  const lead = mine - rival;
+  const odds: Odds = lead > 10 ? 'favourite'
+    : lead > -4 ? 'contest'
+      : lead > -18 ? 'longshot' : 'hopeless';
+  const note = p.suitors.length === 0
+    ? 'Nobody else has called him'
+    : odds === 'favourite' ? `Ahead of ${p.suitors.length} other programme`
+      + `${p.suitors.length === 1 ? '' : 's'}`
+      : odds === 'contest' ? 'This one comes down to the pitch'
+        : odds === 'longshot' ? 'Somebody bigger is ahead of you'
+          : 'He is not coming here';
+  return { mine: Math.round(mine), rival: Math.round(rival), rivalCount: p.suitors.length, odds, label: ODDS_LABEL[odds], note };
 }
 
 /* ------------------------------------------------------------- the cycle */
@@ -403,8 +537,14 @@ export function advanceWeek(input: CycleInput): string[] {
     }
   }
 
-  // Decisions. A player commits when somebody is clearly ahead and he has had
-  // long enough to be sure.
+  /* Decisions. A player commits when somebody is clearly ahead and he has had
+   * long enough to be sure.
+   *
+   * `room` counts DOWN as players commit. It used to be read once per week, which
+   * meant the last week of a cycle handed the coach every prospect still leading
+   * for him at once — thirteen signatures for five places, with the surplus
+   * silently thrown away at the roster cap. */
+  let room = input.openSpots;
   const late = state.week >= state.weeks - 2;
   for (const p of state.prospects) {
     if (p.committedTo) continue;
@@ -417,9 +557,10 @@ export function advanceWeek(input: CycleInput): string[] {
     const lead = Math.abs(mine - best.interest);
     const ready = late ? lead > 4 : lead > 22 && Math.max(mine, best.interest) > 66;
     if (!ready || !leader) continue;
-    if (leader === input.teamId && input.openSpots <= 0) continue;
+    if (leader === input.teamId && room <= 0) continue;
     p.committedTo = leader;
     if (leader === input.teamId) {
+      room--;
       news.push(`${p.player.first} ${p.player.last} (${p.player.pos}) has committed to you`);
     } else if (p.offered) {
       news.push(`${p.player.first} ${p.player.last} has gone elsewhere`);
@@ -435,8 +576,9 @@ export function advanceWeek(input: CycleInput): string[] {
         (b, s) => (s.interest > b.interest ? s : b),
         { teamId: '', interest: -1 } as Suitor,
       );
-      if (mine > best.interest && input.openSpots > 0) {
+      if (mine > best.interest && room > 0) {
         p.committedTo = input.teamId;
+        room--;
         news.push(`${p.player.first} ${p.player.last} (${p.player.pos}) signs with you`);
       } else if (best.teamId) {
         p.committedTo = best.teamId;

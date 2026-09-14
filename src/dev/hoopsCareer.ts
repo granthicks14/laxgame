@@ -17,15 +17,23 @@ import { LEVELS } from '../sports/basketball/levels';
 import { teamsAtLevel, worldTeam } from '../sports/basketball/world';
 import { starters, teamRatings } from '../sports/basketball/data';
 import {
-  averages, createCareer, needsFor, recruitWeek, recruitingDone, runOffseason,
-  simulateRestOfSeason, startNextSeason, teamLeaders,
+  averages, awaitingDecision, createCareer, needsFor, recruitWeek, recruitingDone,
+  coachStature, runOffseason, schemeAdvice, simulateRestOfSeason, startNextSeason,
+  takeJob,
+  teamLeaders,
 } from '../sports/basketball/career/season';
-import { levelTable } from '../sports/basketball/career/schedule';
-import { makeOffer, classGrade, committedTo } from '../sports/basketball/career/recruit';
+import { levelTable, rowFor } from '../sports/basketball/career/schedule';
+import {
+  classGrade, committedTo, makeOffer, prospectOdds,
+} from '../sports/basketball/career/recruit';
 import { openTargets, pitchTo } from '../sports/basketball/career/portal';
 import { perksOf, buyUpgrade, coachLevel, UPGRADES } from '../sports/basketball/career/coach';
-import { modsFor, TIER_ORDER, TIERS } from '../sports/basketball/career/difficulty';
+import {
+  modsFor, TIER_ORDER, TIERS, type HoopsTier,
+} from '../sports/basketball/career/difficulty';
 import { standingOf, squadGap } from '../sports/basketball/career/league';
+import { RUNGS, rungAt } from '../sports/basketball/career/ladder';
+import { SITUATIONS } from '../sports/basketball/career/challenge';
 import type { HoopsCareer } from '../sports/basketball/career/types';
 
 const env = (globalThis as {
@@ -65,6 +73,23 @@ let lastSeason: SeasonSnapshot | null = null;
 function playSeason(career: HoopsCareer): void {
   simulateRestOfSeason(career);
   runOffseason(career);
+  lastSeason = {
+    standings: JSON.parse(JSON.stringify(career.standings)),
+    season: JSON.parse(JSON.stringify(career.season)),
+    level: career.level,
+  };
+  // A career waiting on a job decision does not have an offseason to run: there
+  // is no squad to develop and no class to recruit until somebody hires him.
+  if (awaitingDecision(career)) return;
+
+  /* A coach who looks at his squad. Four graduations on, the system that suited
+   * last year's five can be the wrong one entirely, and the scheme screen is
+   * where a real player would notice. */
+  const advice = schemeAdvice(career);
+  if (advice.shouldChange) {
+    career.offense = advice.bestOffense;
+    career.defense = advice.bestDefense;
+  }
 
   // Spend. Development first, then whatever is affordable.
   const order = ['skills', 'eye', 'pitch', 'conditioning', 'spacing1', 'rotations',
@@ -97,26 +122,38 @@ function playSeason(career: HoopsCareer): void {
     );
   }
 
-  // Recruiting: offer to whoever fills the biggest need and can play.
+  /* RECRUITING LIKE A COACH WHO KNOWS WHERE HE WORKS. Offers go to the best
+   * player at a position of need THAT HE CAN ACTUALLY GET — the board's own odds
+   * column, which is exactly what a player reads it for. Chasing the top of the
+   * board instead, as an earlier version of this did, signed one player in eleven
+   * offers at a bottom-half programme and made the whole mode look unwinnable. */
   if (career.recruiting) {
     for (let w = 0; w < 12 && !recruitingDone(career); w++) {
       const needs = needsFor(career);
+      const row = rowFor(career.standings, career.teamId);
+      const pitch = {
+        teamId: career.teamId,
+        standing: standingOf(career, career.teamId),
+        form: row.wins / Math.max(1, row.wins + row.losses),
+        perks: perksOf(career.coach),
+        needs,
+        region: 'in state',
+        level: career.level,
+        reputation: coachStature(career),
+      };
       const wanted = [...needs.list].sort((a, b) => b.need - a.need);
       for (const pos of wanted) {
         if (needs.openSpots <= 0) break;
         const best = career.recruiting.prospects
           .filter((p) => !p.committedTo && !p.offered && p.player.pos === pos.pos)
-          .sort((a, b) => b.seenCeiling - a.seenCeiling)[0];
-        if (best) makeOffer(career.recruiting, best.id);
+          .map((p) => ({ p, odds: prospectOdds(p, pitch, modsFor(career.tier)) }))
+          .filter((x) => x.odds.odds === 'favourite' || x.odds.odds === 'contest')
+          .sort((a, b) => b.p.seenCeiling - a.p.seenCeiling)[0];
+        if (best) makeOffer(career.recruiting, best.p.id);
       }
       recruitWeek(career);
     }
   }
-  lastSeason = {
-    standings: JSON.parse(JSON.stringify(career.standings)),
-    season: JSON.parse(JSON.stringify(career.season)),
-    level: career.level,
-  };
   startNextSeason(career);
 }
 
@@ -377,6 +414,124 @@ console.log('\nRECRUITING\n');
     c.roster.length <= LEVELS[c.level].rosterSize);
 }
 
+/* --------------------------------------------------------- a whole climb */
+
+/**
+ * THE CLIMB, PLAYED OUT.
+ *
+ * Challenge Mode is nine rungs and one coach, and the only way to know whether
+ * it is a career or a treadmill is to coach the whole thing: take the worst job
+ * in the sport, win what you can, take whatever the phone offers, and see where
+ * the coach is forty seasons later.
+ *
+ * What is asserted is the SHAPE of it — that a title is what moves you, that it
+ * moves you exactly one rung, that the coach who arrives at the new programme is
+ * the same person who left the old one, and that being sacked is survivable.
+ */
+function climb(tier: HoopsTier, seed: number, cap: number): {
+  years: number; rung: number; titles: number; jobs: number; sackings: number;
+  complete: boolean; skipped: boolean; identity: boolean; log: string[];
+} {
+  const bottom = RUNGS[0];
+  const pool = teamsAtLevel(bottom.level);
+  const career = createCareer({
+    mode: 'challenge',
+    teamId: pool[seed % pool.length].id,
+    tier,
+    seed,
+    situation: 'rebuild',
+  });
+  const log: string[] = [];
+  let jobs = 1;
+  let sackings = 0;
+  let skipped = false;
+  let identity = true;
+  const coach = career.coach;
+
+  for (let i = 0; i < cap && !career.challenge!.complete; i++) {
+    const before = career.challenge!.rungIndex;
+    playSeason(career);
+    if (career.challenge!.complete) break;
+
+    if (awaitingDecision(career)) {
+      const state = career.challenge!;
+      const kind = state.offerKind;
+      if (kind === 'demotion') sackings++;
+      // A plausible coach: the best programme that will have him.
+      const pick = [...state.offers!].sort((a, b) => b.standing - a.standing)[0];
+      if (pick.rungIndex > before + 1) skipped = true;
+      log.push(`  y${String(state.totalYears).padStart(2)} `
+        + `${kind === 'promotion' ? 'won it at' : kind === 'demotion' ? 'sacked at' : 'rehired at'}`
+        + ` ${rungAt(before).short} -> ${pick.teamShort}`
+        + ` (${rungAt(pick.rungIndex).short}, ${SITUATIONS[pick.situation].label.toLowerCase()})`);
+      takeJob(career, pick);
+      jobs++;
+      if (career.coach !== coach) identity = false;
+    }
+  }
+
+  const state = career.challenge!;
+  return {
+    years: state.totalYears,
+    rung: state.rungIndex,
+    titles: Object.values(state.titles).reduce((a, b) => a + b, 0),
+    jobs,
+    sackings,
+    complete: state.complete,
+    skipped,
+    identity: identity && career.coach === coach,
+    log,
+  };
+}
+
+console.log('\nA CHALLENGE CAREER\n');
+
+{
+  const run = climb('standard', 31, 60);
+  for (const line of run.log.slice(0, 12)) console.log(line);
+  console.log(`  ${run.years} seasons, ${run.jobs} jobs, ${run.titles} championships,`
+    + ` ${run.sackings} sackings, reached ${rungAt(run.rung).short}`
+    + `${run.complete ? ' — CLIMB COMPLETE' : ''}`);
+
+  check('a challenge career runs for decades without breaking', run.years >= 20,
+    `${run.years} seasons`);
+  check('the coach climbs by winning', run.titles > 0 && run.rung > 0,
+    `${run.titles} titles, rung ${run.rung + 1}/${RUNGS.length}`);
+  check('and never skips a rung', !run.skipped);
+  check('the coach is the same person at every programme', run.identity);
+  check('a career is more than one job', run.jobs > 1, `${run.jobs} jobs`);
+  check('the climb is long', run.years > 12, `${run.years} seasons so far`);
+  check('and it finishes', run.complete && run.rung === RUNGS.length - 1,
+    `${run.complete ? 'complete' : `stuck at ${rungAt(run.rung).short}`}`);
+  check('a sacking is survivable', run.sackings === 0 || run.complete,
+    `${run.sackings} sackings and still ${run.complete ? 'finished' : 'climbing'}`);
+
+  /* THE FIVE TIERS, ON THE SAME CLIMB. Difficulty in this game never touches an
+   * opponent's rating, so the only honest way to check that a tier is harder is
+   * to coach it: fewer rungs in the same number of seasons, and more sackings. */
+  console.log('');
+  const paces: { tier: HoopsTier; rung: number; titles: number; sacked: number }[] = [];
+  const LIFETIME = 44;
+  for (const tier of TIER_ORDER) {
+    const r = climb(tier, 31, LIFETIME);
+    paces.push({ tier, rung: r.rung, titles: r.titles, sacked: r.sackings });
+    console.log(`  ${TIERS[tier].name.padEnd(12)} ${LIFETIME} seasons ->`
+      + ` ${rungAt(r.rung).short.padEnd(5)} ${r.titles} titles, ${r.sackings} sackings`);
+  }
+  check('an easier tier climbs further in the same lifetime',
+    paces[0].rung > paces[paces.length - 1].rung,
+    `${rungAt(paces[0].rung).short} vs ${rungAt(paces[paces.length - 1].rung).short}`);
+  /* The hardest tier is allowed to be brutal. It is not allowed to be a wall: a
+   * coach who works a whole lifetime at it must be able to win SOMETHING, or the
+   * setting is not a difficulty, it is a locked door. */
+  check('every tier is coachable — none is a brick wall',
+    paces.every((p) => p.titles > 0),
+    paces.map((p) => `${p.titles}`).join('/'));
+  check('and the ladder does not invert',
+    paces[0].rung >= paces[2].rung && paces[2].rung >= paces[4].rung,
+    paces.map((p) => rungAt(p.rung).short).join(' >= '));
+}
+
 /* ----------------------------------------------------------- the portal */
 
 console.log('\nTHE PORTAL\n');
@@ -445,9 +600,14 @@ console.log('\nTHE DIFFICULTY LADDER\n');
   check('and starts further behind',
     results[0].squad >= results[results.length - 1].squad,
     `${results[0].squad} vs ${results[results.length - 1].squad}`);
-  check('the ladder is ordered on points', results.every((r, i) =>
-    i === 0 || results[i - 1].cp >= r.cp),
-  results.map((r) => r.cp).join(' > '));
+  /* The ordering that is a PROPERTY of the table rather than of one four-year
+ * sample: the multipliers themselves. What a coach actually earns depends on how
+ * many games he won, so a lucky run on a hard tier can out-earn an unlucky one on
+ * an easy tier without anything being wrong. */
+check('the point economy tightens at every step',
+  TIER_ORDER.every((t, i) => i === 0
+    || modsFor(TIER_ORDER[i - 1]).coachPoints > modsFor(t).coachPoints),
+  TIER_ORDER.map((t) => modsFor(t).coachPoints).join(' > '))
 }
 
 function spent(c: HoopsCareer): number {

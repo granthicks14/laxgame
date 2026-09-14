@@ -1,6 +1,6 @@
 import { Rng } from '../../../core/rng';
 import { clamp } from '../../../core/math';
-import { computeOverall, type AttrKey, type HoopsPlayer } from '../data';
+import { ATTR_MIN, computeOverall, type AttrKey, type HoopsPlayer } from '../data';
 import { LEVELS, graduates, type HoopsLevel } from '../levels';
 import type { CoachPerks } from './coach';
 import type { TierMods } from './difficulty';
@@ -174,7 +174,7 @@ function applyGrowth(p: HoopsPlayer, delta: number, perks: CoachPerks, rng: Rng)
   const total = weights.reduce((n, w) => n + w[1], 0);
 
   const sign = Math.sign(delta);
-  const target = clamp(computeOverall(p.pos, p.attrs) + delta, 25, 99);
+  const target = clamp(computeOverall(p.pos, p.attrs) + delta, ATTR_MIN, 99);
   let stuck = 0;
   for (let i = 0; i < 600; i++) {
     const now = computeOverall(p.pos, p.attrs);
@@ -187,7 +187,7 @@ function applyGrowth(p: HoopsPlayer, delta: number, perks: CoachPerks, rng: Rng)
     }
     const key = family[rng.int(0, family.length - 1)];
     const before = p.attrs[key];
-    p.attrs[key] = clamp(before + sign, 25, 99);
+    p.attrs[key] = clamp(before + sign, ATTR_MIN, 99);
     // Every attribute in every family pinned: nothing left to move.
     if (p.attrs[key] === before && ++stuck > 120) break;
   }

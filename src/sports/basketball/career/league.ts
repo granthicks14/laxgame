@@ -2,7 +2,7 @@ import { clamp } from '../../../core/math';
 import { Rng } from '../../../core/rng';
 import { buildRoster, starters, teamRatings, type HoopsPlayer } from '../data';
 import { LEVELS, rosterOptionsFor, teamPar } from '../levels';
-import { bestSchemeFor, resolveScheme, type ResolvedScheme } from '../schemes';
+import { rankedSchemesFor, resolveScheme, type ResolvedScheme } from '../schemes';
 import { simulateGame, type SimResult, type SimTeam } from '../sim';
 import { teamsAtLevel, worldTeam, type HoopsWorldTeam } from '../world';
 import { perksOf } from './coach';
@@ -55,15 +55,37 @@ export function rosterFor(career: HoopsCareer, teamId: string): HoopsPlayer[] {
   );
 }
 
-/** What a club runs. The coach picks his own; everybody else plays to its squad. */
+/**
+ * What each side is actually running.
+ *
+ * The coach's own club runs whatever he chose, fit or no fit — a system that has
+ * stopped suiting the players is a real cost and the scheme screen says so.
+ *
+ * A RIVAL DOES NOT AUTOMATICALLY FIND ITS PERFECT PLAN. It used to, and that
+ * quietly removed the point of the scheme screen: if all fifteen other
+ * programmes are always optimally organised, the very best a coach can do with
+ * his own is draw level. So a rival picks from its RANKED options, and how far
+ * down the list it reaches is its own coaching rating — a blue blood with a
+ * proper staff runs the right system, a bottom-half programme runs the third or
+ * fourth best thing for its players, every year, deterministically.
+ */
 export function schemeFor(career: HoopsCareer, teamId: string): ResolvedScheme {
   const roster = rosterFor(career, teamId);
   const par = parOf(career, teamId);
   if (teamId === career.teamId) {
     return resolveScheme(career.offense, career.defense, roster, par);
   }
-  const best = bestSchemeFor(roster, par);
-  return resolveScheme(best.offense, best.defense, roster, par);
+  const ranked = rankedSchemesFor(roster, par);
+  const staff = worldTeam(teamId).coaching / 99;
+  const rng = new Rng(`hoops:aischeme:${career.seed}:${career.year}:${teamId}`);
+  const reach = (len: number): number => {
+    // 0 for a strong staff, up to a third of the way down the list for a poor one.
+    const depth = Math.max(0, Math.round((1 - staff) * (len - 1) * 0.55));
+    return depth === 0 ? 0 : rng.int(0, depth);
+  };
+  const offense = ranked.offense[reach(ranked.offense.length)].key;
+  const defense = ranked.defense[reach(ranked.defense.length)].key;
+  return resolveScheme(offense, defense, roster, par);
 }
 
 /**

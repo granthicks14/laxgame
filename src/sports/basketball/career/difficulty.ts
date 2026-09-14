@@ -14,6 +14,13 @@
  * well as they are managed, the programme that hires you after a title is the
  * one nobody else would take, and the board wants more.
  *
+ * WHAT BARELY CHANGES IS COACHING ITSELF. Development is nearly flat across the
+ * five tiers on purpose: your work with a player works. What a harder tier takes
+ * away is what you can AFFORD and who you can SIGN — and when development was the
+ * lever instead, the top tiers stopped being hard and became arithmetic, because a
+ * squad that develops at seven-tenths the rate can never reach the standard of a
+ * league whose rivals reload at it every summer.
+ *
  * The other rule: a harder tier must never break the world. A Legendary-tier
  * high school is not better than a professional club — see levels.ts, where the
  * hierarchy lives, and `npm run hoops-world`, which fails the build if anything
@@ -147,8 +154,8 @@ export const TIERS: Record<HoopsTier, TierInfo> = {
       portalRivals: 1,
       outgoingRisk: 1.15,
       startingHole: 8,
-      development: 0.92,
-      breakouts: 0.85,
+      development: 0.94,
+      breakouts: 0.9,
       jobQuality: -0.06,
       expectation: 0.03,
       situationSeverity: 0.25,
@@ -176,8 +183,8 @@ export const TIERS: Record<HoopsTier, TierInfo> = {
       portalRivals: 2,
       outgoingRisk: 1.3,
       startingHole: 11,
-      development: 0.85,
-      breakouts: 0.72,
+      development: 0.92,
+      breakouts: 0.8,
       jobQuality: -0.12,
       expectation: 0.05,
       situationSeverity: 0.5,
@@ -202,12 +209,12 @@ export const TIERS: Record<HoopsTier, TierInfo> = {
       interestGain: 0.68,
       offers: -1,
       rivalEye: 0.82,
-      pitchResistance: 13,
+      pitchResistance: 11,
       portalRivals: 3,
       outgoingRisk: 1.5,
       startingHole: 14,
-      development: 0.78,
-      breakouts: 0.6,
+      development: 0.9,
+      breakouts: 0.7,
       jobQuality: -0.18,
       expectation: 0.07,
       situationSeverity: 0.75,
@@ -232,12 +239,12 @@ export const TIERS: Record<HoopsTier, TierInfo> = {
       interestGain: 0.58,
       offers: -2,
       rivalEye: 1,
-      pitchResistance: 18,
+      pitchResistance: 14,
       portalRivals: 4,
-      outgoingRisk: 1.75,
+      outgoingRisk: 1.6,
       startingHole: 18,
-      development: 0.7,
-      breakouts: 0.48,
+      development: 0.88,
+      breakouts: 0.62,
       jobQuality: -0.24,
       expectation: 0.09,
       situationSeverity: 1,

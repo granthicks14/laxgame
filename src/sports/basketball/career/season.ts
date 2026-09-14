@@ -2,13 +2,16 @@ import { clamp } from '../../../core/math';
 import { Rng } from '../../../core/rng';
 import { buildRoster, starters, teamRatings, type HoopsPlayer } from '../data';
 import { LEVELS } from '../levels';
-import { bestSchemeFor, resolveScheme } from '../schemes';
+import {
+  bestSchemeFor, rankedSchemesFor, resolveScheme,
+  type DefenseScheme, type OffenseScheme,
+} from '../schemes';
 import { simulateGame, type SimResult } from '../sim';
 import { teamsAtLevel, worldTeam } from '../world';
 import type { HoopsGame } from '../Game';
 import type { HoopsConfig } from '../types';
 import {
-  applyAwards, newCoach, perksOf, seasonAward, type HoopsCoach,
+  applyAwards, coachLevel, newCoach, perksOf, seasonAward, type HoopsCoach,
 } from './coach';
 import { DEFAULT_TIER, modsFor, type HoopsTier } from './difficulty';
 import { developSquad, rosterTurnover } from './develop';
@@ -32,7 +35,12 @@ import {
   HOOPS_CAREER_VERSION, emptyStatLine,
   type HoopsCareer, type HoopsCareerMode, type HoopsFixture, type StatLine,
 } from './types';
-import { SITUATIONS, type SituationKey } from './challenge';
+import {
+  SITUATIONS, acceptOffer, declineAll, evaluateSeason, expectationFor, generateOffers,
+  newChallengeState, type JobOffer, type OfferKind, type SeasonVerdict,
+  type SituationKey,
+} from './challenge';
+import { FINAL_RUNG, programmesAt, rungOf } from './ladder';
 
 /* ---------------------------------------------------------------------------
  * A SEASON, AND THE ONE AFTER THAT
@@ -72,6 +80,12 @@ export function createCareer(opts: NewCareerOptions): HoopsCareer {
   const par = team.par;
   const best = bestSchemeFor(roster, par);
 
+  /* CHALLENGE MODE STARTS A PERSON, not a save slot. The coach, his reputation
+   * and his record follow him from programme to programme for the rest of the
+   * career; only the club around him is replaced. */
+  const rungIndex = rungOf(team.level);
+  const situation: SituationKey = opts.situation ?? 'rebuild';
+
   const career: HoopsCareer = {
     version: HOOPS_CAREER_VERSION,
     mode: opts.mode,
@@ -106,7 +120,13 @@ export function createCareer(opts: NewCareerOptions): HoopsCareer {
     championships: 0,
     careerWins: 0,
     careerLosses: 0,
-    challenge: null,
+    challenge: opts.mode === 'challenge'
+      ? newChallengeState(
+        rungIndex, situation,
+        expectationFor(rungIndex, team.standing, situation, 20, tier),
+        tier,
+      )
+      : null,
   };
   beginSeason(career);
   return career;
@@ -320,6 +340,8 @@ export const coachStillAlive = stillAlive;
 /* ----------------------------------------------------------- the offseason */
 
 export interface OffseasonReport {
+  /** Challenge only: the board's view of the season, and what follows from it. */
+  verdict: SeasonVerdict | null;
   finish: string;
   wins: number;
   losses: number;
@@ -445,13 +467,22 @@ export function runOffseason(career: HoopsCareer): OffseasonReport {
   driftStanding(career, career.teamId, row.wins, row.losses, champion);
   driftLeague(career);
 
-  /* 8. THE MARKETS OPEN. */
-  openOffseasonMarkets(career);
+  /* 8. THE VERDICT. Challenge Mode only: what the programme made of the season,
+   *    and whether the coach is still its coach. */
+  const verdict = career.mode === 'challenge' && career.challenge
+    ? judgeSeason(career, row.wins, row.losses, champion, finish)
+    : null;
+
+  /* 9. THE MARKETS OPEN — unless he is on his way out of the building. There is
+   *    no point recruiting a class for a programme that has just sacked you, and
+   *    no point recruiting one for a programme you are about to leave. */
+  if (!career.challenge?.offers) openOffseasonMarkets(career);
 
   career.year++;
   career.stage = 'offseason';
 
   return {
+    verdict,
     finish,
     wins: row.wins,
     losses: row.losses,
@@ -465,6 +496,189 @@ export function runOffseason(career: HoopsCareer): OffseasonReport {
     awards,
     pointsEarned: awards.reduce((n, a) => n + a.points, 0),
   };
+}
+
+/* --------------------------------------------------------------- schemes */
+
+export interface SchemeAdvice {
+  /** What he is running, and how well the current squad runs it. */
+  offense: OffenseScheme;
+  defense: DefenseScheme;
+  offenseFit: number;
+  defenseFit: number;
+  /** What this squad would run best. */
+  bestOffense: OffenseScheme;
+  bestDefense: DefenseScheme;
+  bestOffenseFit: number;
+  bestDefenseFit: number;
+  /** True when there is a visibly better plan for these players. */
+  shouldChange: boolean;
+}
+
+/**
+ * How well the system fits the men running it — the number behind the scheme
+ * screen's verdict.
+ *
+ * This matters more than it looks. A coach keeps his scheme when he changes jobs
+ * and when his squad turns over, and four graduations later the plan that won him
+ * a championship can be the wrong plan entirely. Nothing tells him that unless
+ * this does.
+ */
+export function schemeAdvice(career: HoopsCareer): SchemeAdvice {
+  const par = parOf(career, career.teamId);
+  const ranked = rankedSchemesFor(career.roster, par);
+  const fitOf = <T extends string>(list: { key: T; fit: number }[], key: T): number =>
+    list.find((x) => x.key === key)?.fit ?? 0;
+  const offenseFit = fitOf(ranked.offense, career.offense);
+  const defenseFit = fitOf(ranked.defense, career.defense);
+  return {
+    offense: career.offense,
+    defense: career.defense,
+    offenseFit,
+    defenseFit,
+    bestOffense: ranked.offense[0].key,
+    bestDefense: ranked.defense[0].key,
+    bestOffenseFit: ranked.offense[0].fit,
+    bestDefenseFit: ranked.defense[0].fit,
+    shouldChange: ranked.offense[0].fit - offenseFit > 0.12
+      || ranked.defense[0].fit - defenseFit > 0.12,
+  };
+}
+
+/* ------------------------------------------------------------- the career */
+
+/* ---------------------------------------------------------------------------
+ * ONE COACH, MANY PROGRAMMES
+ * ---------------------------------------------------------------------------
+ * In Challenge Mode a season ends with a verdict rather than a fixture list. The
+ * board decides whether you are still its coach; winning a championship makes the
+ * phone ring somewhere better; losing three arguments with expectation makes it
+ * ring from somewhere worse.
+ *
+ * What survives a move is the COACH: his upgrade tree, his points, his record,
+ * his reputation, every player line he has ever accumulated. What does not is the
+ * club — a new roster, a new level, a new conference, a new set of people who
+ * have never heard of you. That division is the whole mode.
+ * ------------------------------------------------------------------------- */
+
+/** Which rung a set of offers is drawn from. */
+function offerRung(career: HoopsCareer, kind: OfferKind): number {
+  const state = career.challenge!;
+  if (kind === 'promotion') return Math.min(FINAL_RUNG, state.rungIndex + 1);
+  // Sacked, or turning down a rehire: you drop a level and start again.
+  return Math.max(0, state.rungIndex - 1);
+}
+
+function drawOffers(career: HoopsCareer, kind: OfferKind): JobOffer[] {
+  const state = career.challenge!;
+  const rung = offerRung(career, kind);
+  const pool = programmesAt(rung).filter((p) => p.id !== career.teamId);
+  const rng = new Rng(`hoops:jobs:${career.seed}:${career.year}:${state.totalYears}:${kind}`);
+  state.offerKind = kind;
+  state.offers = generateOffers(state, kind, pool, rng, 3, rung);
+  return state.offers;
+}
+
+/** Grade the season and put the jobs, if there are any, on the table. */
+function judgeSeason(
+  career: HoopsCareer, wins: number, losses: number, champion: boolean, finish: string,
+): SeasonVerdict {
+  const state = career.challenge!;
+  const team = worldTeam(career.teamId);
+  const verdict = evaluateSeason(state, {
+    wins,
+    losses,
+    champion,
+    finish,
+    teamShort: team.abbr,
+    standing: standingOf(career, career.teamId),
+  });
+  if (verdict.outcome === 'complete') career.stage = 'complete';
+  else if (verdict.outcome === 'promoted') drawOffers(career, 'promotion');
+  else if (verdict.outcome === 'fired') drawOffers(career, 'demotion');
+  return verdict;
+}
+
+/** True while the career is waiting for the coach to choose a job. */
+export const awaitingDecision = (career: HoopsCareer): boolean =>
+  !!career.challenge?.offers?.length;
+
+/**
+ * Take one of the jobs on the table.
+ *
+ * The coach walks in with everything he has earned and nothing else: the squad,
+ * the level, the conference and the schemes are all whoever was here before him,
+ * and the state of the programme is exactly what the offer said it was.
+ */
+export function takeJob(career: HoopsCareer, offer: JobOffer): void {
+  const state = career.challenge;
+  if (!state || !state.offers) return;
+  acceptOffer(state, offer);
+
+  const team = worldTeam(offer.teamId);
+  const mods = modsFor(career.tier);
+
+  /* WHAT YOUR NAME IS WORTH.
+   *
+   * The first job in a career is somebody else's mess, and that is the premise of
+   * the mode. The tenth is not. A coach with three championships behind him is
+   * hired by a programme that has kept something together for him, so the hole he
+   * inherits shrinks with his reputation — while the SITUATION penalty, which is
+   * the risk he chose off the job screen with his eyes open, does not.
+   *
+   * Without this every single promotion cost four years of rebuilding, nothing a
+   * coach achieved ever compounded, and sixty seasons of a nine-rung climb bought
+   * four rungs. */
+  const hole = mods.startingHole * clamp(1 - state.reputation / 130, 0.2, 1);
+  const roster = inheritedRoster(
+    offer.teamId,
+    new Rng(`hoops:hire:${career.seed}:${state.totalYears}`).int(1, 0x7fff_ffff),
+    hole,
+    SITUATIONS[offer.situation].squadPenalty,
+  );
+
+  career.teamId = offer.teamId;
+  career.level = team.level;
+  career.conferenceId = team.conferenceId;
+  career.roster = roster;
+  const best = bestSchemeFor(roster, team.par);
+  career.offense = best.offense;
+  career.defense = best.defense;
+  career.recruiting = null;
+  career.market = [];
+  career.pitchesLeft = 0;
+  career.lastDevelopment = [];
+  career.lastDepartures = [];
+  career.portalOut = [];
+  beginSeason(career);
+}
+
+/**
+ * Turn every offer down.
+ *
+ * After a championship that means staying where you are, which is a real choice:
+ * the programme you built is still yours and the recruiting cycle opens as normal.
+ * After a sacking it means a year out of the game, and the second one of those
+ * ends the career.
+ */
+export function refuseJobs(career: HoopsCareer): string {
+  const state = career.challenge;
+  if (!state || !state.offers) return '';
+  const sacked = state.fired;
+  declineAll(state);
+
+  if (state.complete) {
+    career.stage = 'complete';
+    return state.endedReason ?? 'The career is over.';
+  }
+  if (!sacked) {
+    openOffseasonMarkets(career);
+    return `You are staying at ${worldTeam(career.teamId).name}.`;
+  }
+  // A year on the sofa, and then whoever will still take the call.
+  career.year++;
+  drawOffers(career, 'rehire');
+  return 'A year out of the game. The phone rings again in the spring.';
 }
 
 function mergeCareer(career: HoopsCareer, id: string, line: StatLine): void {
@@ -489,14 +703,22 @@ export function openOffseasonMarkets(career: HoopsCareer): void {
     size: 6,
     par,
   });
-  career.pitchesLeft = 3 + perks.extraPitches;
+  /* How many approaches he can make in the window. It scales with how much of the
+   * squad he has to replace: a junior college gives its players two years, so half
+   * the roster leaves every summer and three phone calls does not rebuild it. */
+  const holes = Math.max(0, info.rosterSize - career.roster.length);
+  career.pitchesLeft = 3 + perks.extraPitches + Math.floor(holes / 3);
 
   if (info.market === 'recruiting') {
+    // The board is sized to the job: a programme with nine places to fill needs
+    // more names in front of it than one with two.
+    const places = Math.max(0, info.rosterSize - career.roster.length);
     career.recruiting = newRecruitingClass({
       level: career.level,
       year: career.year + 1,
       seed: career.seed,
-      size: 22,
+      size: clamp(18 + places * 2, 18, 40),
+      places,
       perks,
       mods,
       rivals: teamsAtLevel(career.level)
@@ -528,6 +750,22 @@ export function needsFor(career: HoopsCareer): ReturnType<typeof computeNeeds> {
   );
 }
 
+/**
+ * What the sport thinks of the coach, 0..100.
+ *
+ * In Challenge Mode it is the reputation the career tracks. In Dynasty there is
+ * no job market and so no reputation, but a coach with four championships and a
+ * developed tree is still a name — so it is read off what he has actually done.
+ */
+export function coachStature(career: HoopsCareer): number {
+  if (career.challenge) return career.challenge.reputation;
+  return clamp(
+    30 + career.coach.championships * 9 + coachLevel(career.coach) * 3
+    + (career.coach.careerWins - career.coach.careerLosses) * 0.25,
+    0, 100,
+  );
+}
+
 /** One week of the recruiting cycle. */
 export function recruitWeek(career: HoopsCareer): string[] {
   if (!career.recruiting) return [];
@@ -546,6 +784,7 @@ export function recruitWeek(career: HoopsCareer): string[] {
       needs: needsFor(career),
       region: 'in state',
       level: career.level,
+      reputation: coachStature(career),
     },
     perks,
     mods,
