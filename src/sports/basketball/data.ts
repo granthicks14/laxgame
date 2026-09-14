@@ -420,13 +420,19 @@ export function buildRoster(
     names.add(`${first} ${last}`);
 
     const overall = computeOverall(pos, attrs);
-    // Room to grow: a lot for a young player, none at all for a veteran. The
-    // gap is drawn skewed, so most players are roughly what they look like and
-    // a few are worth the wait.
+    /* ROOM TO GROW, and it is the reason to keep a player rather than replace
+     * him. A young player always has some — that is what being young is — and
+     * how much is drawn skewed, so most freshmen are worth a season or two of
+     * patience and a few are worth four. A veteran has none.
+     *
+     * The floor matters more than it looks: an earlier version drew the whole
+     * gap from a skewed roll, so a fifth of every recruiting class arrived
+     * already finished. Those players cannot be developed, cannot be coached
+     * and make the entire development system invisible to the coach. */
     const youth = opts.ageSystem === 'class'
       ? clamp((opts.eligibility + 1 - years) / opts.eligibility, 0, 1)
       : clamp((27 - age) / 8, 0, 1);
-    const gap = Math.round(rng.range(0, 1) ** 1.8 * (4 + youth * 26));
+    const gap = Math.round(youth * (5 + rng.range(0, 1) ** 1.5 * 22));
 
     roster.push({
       id: `h${rng.int(0, 0x7fff_ffff).toString(36)}${rng.int(0, 0x7fff_ffff).toString(36)}`,
