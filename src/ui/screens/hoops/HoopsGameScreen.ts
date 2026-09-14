@@ -110,7 +110,12 @@ export class HoopsGameScreen implements Screen {
     // The same debug handle lacrosse exposes, so the browser suites can look at
     // a real game rather than guessing from pixels.
     (window as unknown as { hardwood?: unknown }).hardwood = {
-      game: this.game, renderer: this.renderer, input: this.input,
+      game: this.game,
+      renderer: this.renderer,
+      input: this.input,
+      // A do-nothing input, so a test suite can run a game out at speed without
+      // pretending to be a player holding no buttons for forty minutes.
+      neutral: neutralHoopsInput,
     };
   }
 

@@ -337,6 +337,46 @@ if (await hoopsMenu('Clubs')) {
   }
   await sweep('Basketball clubs');
 }
+/* The career modes: the largest surface in the sport, and every screen in it is
+ * reachable only from inside a running career. So one is started here and every
+ * room in it is walked, which is the only way a dead control on the recruiting
+ * board or the coaching tree is ever found. */
+if (await hoopsMenu('Dynasty')) {
+  await sweep('Basketball dynasty setup', /Take the job/i);
+}
+// Fresh in, because the sweep above left the screen somewhere else entirely —
+// that is what a sweep does. No career has been created yet, so this is the same
+// setup screen again, and this time it is used rather than poked.
+if (await hoopsMenu('Dynasty')) {
+  const take = page.locator('.btn__label').filter({ hasText: 'Take the job' }).first();
+  if (await take.count()) {
+    await take.click();
+    await settle(500);
+    await sweep('Basketball career hub', /Play it|Simulate|offseason/i);
+  }
+}
+// Every room in the mode, each entered from a fresh hub for the same reason.
+for (const tile of ['Squad', 'The plan', 'Coach', 'The table', 'Statistics']) {
+  if (!(await hoopsMenu('Dynasty'))) break;
+  const t = page.locator('.tile__label').filter({ hasText: tile }).first();
+  if (!(await t.count())) { errors.push(`the career hub is missing ${tile}`); continue; }
+  await t.click();
+  await settle(420);
+  await sweep(`Basketball ${tile.toLowerCase()}`);
+}
+if (await hoopsMenu('Challenge')) {
+  await sweep('Basketball challenge start', /See who will have you/i);
+}
+if (await hoopsMenu('Challenge')) {
+  const see = page.locator('.btn__label').filter({ hasText: 'See who will have you' }).first();
+  if (await see.count()) {
+    await see.click();
+    await settle(420);
+    // Excluding the job cards themselves: taking one is a correct outcome, not a
+    // dead control, and it would leave the audit inside a second career.
+    await sweep('Basketball first jobs', /Different difficulty/i);
+  }
+}
 if (await hoopsMenu('How to Play')) await sweep('Basketball how to play');
 if (await hoopsMenu('Settings')) await sweep('Basketball settings', /Delete|Clear|Wipe/i);
 if (await hoopsMenu('Season')) await sweep('Basketball season', /Delete|Play game|Abandon/i);

@@ -12,14 +12,23 @@ import { HoopsSeasonScreen } from './HoopsSeason';
 import { HoopsTeamsScreen } from './HoopsTeams';
 import { HoopsHowToScreen } from './HoopsHowTo';
 import { getPref } from '../../../state/sportPrefs';
+import {
+  careerHeadline, loadHoopsCareer,
+} from '../../../sports/basketball/career/save';
+import { ChallengeStartScreen, DynastyStartScreen } from './career/CareerStart';
+import { HoopsCareerHub } from './career/CareerHub';
 
 /* ---------------------------------------------------------------------------
  * HARDWOOD — the front screen
  * ---------------------------------------------------------------------------
- * Basketball's own menu, reached from the hub. It offers what basketball has and
- * nothing it does not: there is no Dynasty here and no Challenge ladder, because
- * those are lacrosse's and inventing empty copies of them would be a worse answer
- * than leaving them out.
+ * Basketball's own menu, reached from the hub. Four ways in, in the order a
+ * player meets them: a game tonight, a season, a programme you build for twenty
+ * years, and a coaching life that starts in a school gym and finishes — if you
+ * are good enough and last long enough — in the professional league.
+ *
+ * DYNASTY AND CHALLENGE SAVE SEPARATELY FROM EACH OTHER AND FROM LACROSSE.
+ * Basketball's careers live under `lsl.hoops.career.*`; lacrosse's have always
+ * lived under `lsl.career.*`. Nothing either sport does can reach the other's.
  * ------------------------------------------------------------------------- */
 
 interface Item {
@@ -39,6 +48,8 @@ export class HoopsMenuScreen implements Screen {
     const rec = season ? seasonRecord(season) : null;
 
     const firstTime = !getPref(app, 'basketball', 'seenHowTo', false);
+    const dynasty = loadHoopsCareer('dynasty');
+    const challenge = loadHoopsCareer('challenge');
 
     const items: Item[] = [
       {
@@ -62,6 +73,27 @@ export class HoopsMenuScreen implements Screen {
           : 'Twenty-two games, a table, and a bracket at the end of it.',
         note: season ? 'CONTINUE' : 'NEW',
         go: (a) => a.push((b) => new HoopsSeasonScreen(b)),
+      },
+      {
+        label: 'Dynasty',
+        desc: dynasty
+          ? careerHeadline(dynasty)
+          : 'Take a programme anywhere in the sport and build it for as long as you like.',
+        note: dynasty ? 'CONTINUE' : 'NEW',
+        go: (a) => (dynasty
+          ? a.push((b) => new HoopsCareerHub(b, dynasty))
+          : a.push((b) => new DynastyStartScreen(b))),
+      },
+      {
+        label: 'Challenge',
+        desc: challenge
+          ? careerHeadline(challenge)
+          : 'Start in a school gym with nothing. Nine levels above you, and only a '
+            + 'championship moves you up one.',
+        note: challenge ? 'CONTINUE' : 'THE CLIMB',
+        go: (a) => (challenge
+          ? a.push((b) => new HoopsCareerHub(b, challenge))
+          : a.push((b) => new ChallengeStartScreen(b))),
       },
       {
         label: 'Clubs',

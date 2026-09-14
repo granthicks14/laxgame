@@ -1976,3 +1976,207 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
 /* A refused action is not a confirmation: it says so in colour as well as in
    words, because the two toasts otherwise look identical. */
 .toast--bad { border-color: var(--red); color: #ffc4b9; }
+
+/* ===========================================================================
+   A BASKETBALL CAREER
+   ---------------------------------------------------------------------------
+   The management side of the sport: a hub with the next game at the top, a
+   squad list, a recruiting board, a coaching tree. Everything here is shared by
+   Dynasty and Challenge — they are the same screens with a different frame
+   around them, which is what makes the second mode cost a header rather than a
+   rewrite.
+   ======================================================================== */
+
+.club-line__badge--sm {
+  min-width: 30px;
+  font-size: 11px;
+  padding: 3px 5px;
+}
+
+/* --- the squad list ------------------------------------------------------ */
+
+.roster-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font: inherit;
+}
+
+.roster-row--on { background: rgba(255, 197, 61, 0.06); }
+
+.roster-row__pos {
+  font-family: var(--display);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  min-width: 26px;
+}
+
+.roster-row__body { flex: 1; min-width: 0; }
+
+.roster-row__note {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roster-row__delta {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 30px;
+  text-align: right;
+}
+
+.roster-row__delta.is-up { color: var(--green); }
+.roster-row__delta.is-down { color: var(--red); }
+
+/* --- numbers ------------------------------------------------------------- */
+
+.kv-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+  gap: 8px;
+}
+
+.kv-row .kv {
+  display: block;
+  border-bottom: none;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  text-align: center;
+}
+
+.kv-row .kv__v { font-family: var(--mono); font-size: 15px; color: var(--text); }
+
+.bigstat { text-align: center; flex: 1; min-width: 70px; }
+.bigstat__v { font-family: var(--mono); font-size: 26px; font-weight: 700; line-height: 1.1; }
+.bigstat__c { color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+.bigstat--good .bigstat__v { color: var(--green); }
+.bigstat--bad .bigstat__v { color: var(--red); }
+.bigstat-row { display: flex; gap: 6px; align-items: flex-start; }
+
+/* --- the primary action -------------------------------------------------- */
+
+.btn--wide {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 13px 16px;
+  text-align: left;
+}
+
+.btn__label { font-family: var(--display); font-size: 16px; letter-spacing: 0.04em; }
+.btn__sub { font-size: 12px; opacity: 0.78; font-family: var(--body); letter-spacing: 0; }
+
+/* --- the rest of the mode, as tiles -------------------------------------- */
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.tile {
+  position: relative;
+  display: block;
+  text-align: left;
+  padding: 11px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tile:hover { border-color: var(--accent); }
+.tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tile__label { font-family: var(--display); font-size: 14px; letter-spacing: 0.04em; }
+.tile__note { color: var(--muted); margin-top: 2px; }
+
+.tile__badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-family: var(--display);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* --- a job on the table -------------------------------------------------- */
+
+.job {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.job:hover { border-color: var(--accent); }
+.job + .job { margin-top: 8px; }
+.job__head { display: flex; align-items: center; gap: 8px; }
+.job__name { font-family: var(--display); font-size: 15px; flex: 1; }
+.job__note { color: var(--text-2); margin-top: 6px; font-size: 13px; }
+.job__ask { color: var(--muted); margin-top: 4px; }
+
+/* --- a prospect on the board --------------------------------------------- */
+
+.prospect { border-bottom: 1px solid var(--line); }
+.prospect:last-child { border-bottom: none; }
+
+.prospect__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.prospect__stars { font-family: var(--mono); font-size: 12px; color: var(--accent); min-width: 40px; }
+.prospect__body { flex: 1; min-width: 0; }
+.prospect__name { font-size: 14px; }
+.prospect__note { color: var(--muted); }
+.prospect__ovr { font-family: var(--mono); font-size: 15px; font-weight: 700; min-width: 28px; text-align: right; }
+.prospect__open { padding: 0 12px 10px; }
+
+.factor { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.factor__label { min-width: 108px; font-size: 12px; color: var(--text-2); }
+.factor__bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.07); position: relative; overflow: hidden; }
+.factor__fill { position: absolute; top: 0; bottom: 0; left: 50%; background: var(--green); }
+.factor__fill.is-neg { background: var(--red); }
+.factor__note { font-size: 11px; color: var(--muted); min-width: 0; flex: 1.2; }
+
+@media (max-width: 560px) {
+  .factor { flex-wrap: wrap; }
+  .factor__label { min-width: 88px; }
+  .factor__note { flex-basis: 100%; }
+}

@@ -371,3 +371,21 @@ export function wantsSummary(t: TransferTarget): string {
     .map(([k]) => PRIORITY_LABEL[k].toLowerCase());
   return `Wants ${top.join(' and ')}`;
 }
+
+export type WantLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+
+/**
+ * What he wants, stated flatly, every priority of the five.
+ *
+ * A summary sentence is not enough on the portal screen: a coach deciding which
+ * of six players to spend his three approaches on needs to compare them line by
+ * line, and "Playing time: HIGH, Winning: LOW" is a thing you can compare.
+ */
+export function wantsLines(t: TransferTarget): { label: string; level: WantLevel }[] {
+  return (Object.entries(t.wants) as [Priority, number][])
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => ({
+      label: PRIORITY_LABEL[k],
+      level: (v > 0.66 ? 'HIGH' : v > 0.38 ? 'MEDIUM' : 'LOW') as WantLevel,
+    }));
+}

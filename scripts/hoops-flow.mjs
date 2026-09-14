@@ -82,8 +82,19 @@ async function desktop(browser) {
   await enterSport(page, 'basketball', { title: 'Hardwood' });
   const labels = await page.locator('.menu-btn__label').allTextContents();
   check('basketball opens on its own menu', labels.includes('Play Now'), labels.join(', '));
-  check('with its own modes, not lacrosse’s',
-    !labels.includes('Dynasty') && !labels.includes('Challenge'), labels.join(', '));
+  /* Basketball has a Dynasty and a Challenge of its own now. What this checks is
+   * that they are BASKETBALL'S — reached from basketball's menu, written in
+   * basketball's language, and saved under basketball's own keys. When the sport
+   * had neither, this check asserted their absence; asserting the absence of a
+   * feature that now exists is how a test quietly becomes a lie. */
+  check('with its own modes', labels.includes('Season')
+    && labels.includes('Dynasty') && labels.includes('Challenge'), labels.join(', '));
+  await menu(page, 'Challenge');
+  const climb = await page.locator('.wrapper').first().innerText();
+  check('and they are the basketball ones',
+    /rung|championship/i.test(climb) && !/faceoff|goalie/i.test(climb));
+  await page.locator('.topbar .btn--icon').first().click();
+  await page.waitForSelector('.menu-btn__label');
 
   // --- setup, then a game.
   await menu(page, 'Play Now');
