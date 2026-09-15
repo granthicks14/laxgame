@@ -77,6 +77,16 @@ export interface ShotInput {
   moving: number;
   /** True when the shooter has a hand in his face from the side or behind. */
   fading: boolean;
+  /**
+   * HOW MANY OTHER DEFENDERS ARE THERE, graded, beyond the nearest one.
+   *
+   * A shot at the rim with three men standing in the lane is not the same shot as
+   * one with a single defender, and reading only the closest man meant the game
+   * could not tell them apart. That is not a cosmetic omission: it is exactly why
+   * the CPU would fire the ball into a packed paint and call it a good look, and
+   * why a help defence that arrived on time was worth nothing.
+   */
+  helpers?: number;
   /** The shooter's stamina, 0..100. Tired legs are short legs. */
   fatigue?: number;
   /** Multiplies what a contest takes off. From the difficulty tier. */
@@ -149,8 +159,13 @@ function baseByDistance(distance: number, kind: ShotKind): number {
   // Low enough that a perfect release lands near the three-in-four a real
   // free-throw shooter makes, rather than on top of it.
   if (kind === 'freeThrow') return 0.62;
-  if (kind === 'dunk') return 0.88;
-  if (kind === 'layup') return clamp(0.58 - Math.max(0, distance - 3) * 0.028, 0.36, 0.64);
+  /* A shot at the rim is the best shot in basketball WHEN IT IS OPEN, and the
+   * contest term now takes far more off it than it used to — a body in the way is
+   * worth nearly half again what a hand in the face is. So the open number goes up
+   * to compensate: an uncontested layup should be the near-certainty it is in real
+   * basketball, and a contested one genuinely hard. */
+  if (kind === 'dunk') return 0.92;
+  if (kind === 'layup') return clamp(0.655 - Math.max(0, distance - 3) * 0.028, 0.4, 0.7);
   if (distance <= 8) return clamp(0.47 - (distance - 4) * 0.012, 0.4, 0.5);
   if (distance <= 16) return clamp(0.42 - (distance - 8) * 0.0075, 0.35, 0.42);
   if (distance <= COURT.threeRadius) return clamp(0.365 - (distance - 16) * 0.006, 0.31, 0.365);
@@ -197,6 +212,14 @@ export function makeChance(s: ShotInput): number {
    * points a game. */
   p += s.edge ?? 0;
 
+  /* THE OPEN LOOK IS CAPPED BEFORE THE DEFENCE IS APPLIED, and this is not a
+   * detail. A dunk starts at 0.92, and a good finisher with a clean release
+   * pushed the raw number past 1.0 — so every point the defence took off was
+   * absorbed by a value that was going to be clamped to 0.97 anyway, and a dunk
+   * into three defenders came out at ninety-three per cent. The defence has to
+   * subtract from a number it can actually move. */
+  p = Math.min(p, 0.95);
+
   if (s.kind !== 'freeThrow') {
     /* FOUR THINGS MAKE A CONTEST, and only one of them is distance.
      *
@@ -214,8 +237,22 @@ export function makeChance(s: ShotInput): number {
     const arriving = clamp(1 - (s.contestClosing ?? 0) / 26, 0.62, 1);
     const line = s.contestInLine ? 1.3 : 0.85;
     const scale = clamp(s.contestScale ?? 1, 0.3, 2.4);
-    p -= near * near * (0.35 + hand * 0.65) * 0.105 * quality * line * arriving * scale;
+
+    /* A BODY MATTERS MORE AT THE RIM THAN ON THE ARC.
+     *
+     * A jump shot is contested by a hand; a layup is contested by a person. A
+     * dunk into a packed lane was coming out at ninety-two per cent — the same
+     * as an uncontested one — which made rim protection worthless, made the
+     * paint the correct answer to every possession, and is the other half of why
+     * the CPU would fire the ball inside against three defenders. */
+    const atRim = s.kind === 'layup' || s.kind === 'dunk' ? 1.38 : 1;
+
+    p -= near * near * (0.35 + hand * 0.65) * 0.105 * quality * line * arriving
+      * scale * atRim;
     if (s.fading) p -= 0.02;
+
+    // And the rest of the defence. Rim protection is a team act.
+    p -= clamp(s.helpers ?? 0, 0, 3) * 0.052 * scale * atRim;
   }
 
   // FOOTING. Set feet are worth real percentage, which is why a good offence

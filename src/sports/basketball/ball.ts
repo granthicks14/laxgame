@@ -90,6 +90,15 @@ export interface Ball {
   dribblePhase: number;
   /** Who a pass is meant for — a receiver leads toward it. */
   target: string | null;
+  /**
+   * Where the last pass was actually AIMED, which is not the same as where the
+   * receiver was standing: a passer's accuracy and how well his team executes
+   * decide the gap. Kept so the balance harness can measure pass accuracy
+   * directly rather than inferring it from turnover counts, which cannot separate
+   * a sloppy pass from a good defence taking it.
+   */
+  aimX: number;
+  aimY: number;
   /** True once a shot has hit the ring or the board: it can no longer be a swish. */
   touchedIron: boolean;
 }
@@ -98,6 +107,7 @@ export function createBall(): Ball {
   return {
     x: COURT.centerX, y: COURT.centerY, z: BALL_RADIUS,
     vx: 0, vy: 0, vz: 0,
+    aimX: COURT.centerX, aimY: COURT.centerY,
     state: 'dead',
     carrier: null, lastTouch: null, lastSide: null,
     shot: null, age: 0, dribblePhase: 0, target: null, touchedIron: false,
@@ -163,6 +173,8 @@ export function launchPass(
   ball.vz = (target.z - from.z) / time + 0.5 * GRAVITY * time * 0.55;
   ball.state = 'pass';
   ball.target = targetId;
+  ball.aimX = target.x;
+  ball.aimY = target.y;
   ball.carrier = null;
   ball.shot = null;
   ball.age = 0;

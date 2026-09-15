@@ -124,6 +124,37 @@ function laneClear(
 }
 
 /**
+ * HOW LIKELY SOMEBODY IS TO GET A HAND ON THIS PASS, 0..1.
+ *
+ * `laneClear` answers yes or no, which is the wrong shape for a decision: a
+ * defender a foot outside the corridor is nearly as dangerous as one inside it,
+ * and treating him as free is how a CPU offence threads passes no real defence
+ * would allow. This is the graded version, and the offence weighs it.
+ */
+function laneRisk(
+  game: HoopsGame, from: { x: number; y: number }, to: { x: number; y: number },
+  side: Side,
+): number {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.max(0.001, Math.hypot(dx, dy));
+  let worst = 0;
+  for (const o of game.teams[otherSide(side)]) {
+    if (o.fouledOut) continue;
+    const t = ((o.x - from.x) * dx + (o.y - from.y) * dy) / (len * len);
+    if (t <= 0.04 || t >= 0.99) continue;
+    const px = from.x + dx * t;
+    const py = from.y + dy * t;
+    const off = floorDist(o.x, o.y, px, py);
+    // Six feet of the line is the width of a man's reach plus a step.
+    const near = clamp(1 - off / 6, 0, 1);
+    // And a defender with quick hands in a lane is worse than a slow one.
+    worst = Math.max(worst, near * (0.55 + o.data.attrs.steal / 160));
+  }
+  return clamp(worst, 0, 1);
+}
+
+/**
  * How many points this player's shot is worth right now, all in.
  *
  * The scheme's opinion of the three lives HERE rather than in `wantsShot`,
@@ -189,6 +220,29 @@ export function wantsShot(game: HoopsGame, p: CourtPlayer): boolean {
     // licence is left to apply here.
     if (shooter < 70) bar *= 1 + (70 - shooter) / 85;
   }
+
+  /* AND HOW WELL THIS TEAM IS COACHED, which is what the tier changes.
+   *
+   * A poorly run offence pulls the trigger on a shot a good one passes up, and it
+   * does so IRREGULARLY — the mistake is that it does not hold its own standard,
+   * not that its standard is lower. `mistake` is the size of that wobble, so a
+   * Rookie defence gives up bad shots it did not have to and a Legend team works
+   * the ball until the look is one it wants.
+   *
+   * Without this the four tiers worked the ball into shots of 52.6%, 52.3%,
+   * 53.2% and 51.8% — which is to say, no tier at all. */
+  const sloppy = clamp(game.cfg.difficulty.mistake, 0.2, 2.5);
+  if (sloppy > 1 && game.rng.next() < (sloppy - 1) * 0.22) {
+    // A possession thrown away on a shot nobody asked for.
+    bar *= 0.58;
+  }
+  /* The standard a well-coached team holds itself to is only slightly higher —
+   * MOST of the difference between tiers is that a bad team does not hold its own
+   * standard, not that its standard is lower. Push this far and the top tier
+   * becomes so patient it shoots at the buzzer every possession and its field
+   * goal percentage falls below the tier beneath it, which is the opposite of
+   * playing better. */
+  bar *= 0.98 + game.cfg.difficulty.decision * 0.05;
 
   return value > bar;
 }
@@ -289,13 +343,59 @@ export function pickPassTarget(game: HoopsGame, p: CourtPlayer): CourtPlayer | n
     // inside never touched the ball, and two thirds of every shot came from
     // outside because that was the only place the ball ever went.
     const { distance: mateGap } = game.contestOn(m);
-    const sealed = distanceToRim(m.x, m.y, m.side) < 9 && mateGap > 4.5;
-    if (!laneClear(game, p, m, p.side, sealed ? 1.9 : HOOPS.laneClearance)) continue;
-    // What HE could do with it, plus credit for being genuinely open, minus the
-    // risk of a long pass.
+    /* THE ENTRY PASS, and where the paint exploit lived.
+     *
+     * Any big man within nine feet of the basket whose defender was four and a
+     * half feet away used to get a RELAXED passing lane — so the moment you
+     * pressured the ball and your own man's defender stepped up, the CPU threw
+     * it straight through the lane for a layup, every possession down.
+     *
+     * The relaxation is for exactly one real thing: A LOB OVER A MAN WHO IS
+     * FRONTING. A defender playing BEHIND the post is not in the corridor at all
+     * and needs no special case — the ordinary lane check already lets that pass
+     * through, which is what makes a genuine seal worth working for. A defender
+     * in FRONT is in the way, and throwing it over him is a real pass that a
+     * real team makes, so it is allowed — for a big man with the size to go up
+     * and get it, and priced by the risk term below rather than given away. */
+    const rimGap = distanceToRim(m.x, m.y, m.side);
+    const guard = game.contestOn(m).defender;
+    const fronting = !!guard && floorDist(guard.x, guard.y, p.x, p.y) < gap - 0.5;
+    const canLob = rimGap < 9 && mateGap > 3.5 && !!guard
+      && m.data.heightIn >= guard.data.heightIn - 1;
+    const clearance = fronting && canLob ? 2.2 : HOOPS.laneClearance;
+    if (!laneClear(game, p, m, p.side, clearance)) continue;
+
+    /* HOW MANY OTHER PEOPLE ARE STANDING THERE.
+     *
+     * A clear passing line is not an open man. The HELP is what kills a pass into
+     * the lane: three defenders sunk into the paint will all be on him the moment
+     * the ball arrives, however clean the corridor looked on the way in. This was
+     * the whole of the reported exploit — pressure the ball, watch the CPU fire it
+     * into a packed paint, concede a layup, repeat.
+     *
+     * His own man is deliberately NOT counted: that defender is already priced
+     * into the receiver's shot value through the contest. What is being measured
+     * here is everybody ELSE, graded by how close they are, so a lane with one
+     * help defender drifting at the edge is not treated like a lane with three
+     * men standing in it. */
+    const guardUid = guard ? guard.uid : null;
+    let traffic = 0;
+    for (const o of game.teams[otherSide(p.side)]) {
+      if (o.fouledOut || o.uid === guardUid) continue;
+      traffic += clamp(1 - floorDist(o.x, o.y, m.x, m.y) / 8, 0, 1);
+    }
+
+    /* AND WHO ELSE CAN GET A HAND TO IT. A binary clear-or-blocked lane means a
+     * defender a hair outside the corridor costs nothing, so the CPU threads
+     * passes that a real defence picks off. Risk scales with how near the closest
+     * man is to the line, and with how far the ball has to travel to get there. */
+    const risk = laneRisk(game, p, m, p.side) * clamp(gap / 24, 0.35, 1.6);
+
     const score = shotValueNow(game, m)
       + clamp(mateGap - 4, 0, 6) * 0.045
       - gap * 0.004
+      - traffic * 0.3
+      - risk * 0.55
       + (m.data.attrs.iq - 55) * 0.0015;
     if (score > bestScore) { bestScore = score; best = m; }
   }
@@ -686,7 +786,8 @@ export function defendAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
 
     // Contest: go up when he goes up, and only then.
     if (handler.gathering && floorDist(p.x, p.y, handler.x, handler.y) < HOOPS.blockRange
-        && p.z < 0.05 && game.rng.next() < perSecond(4.5 * diff.closeout, dt)) {
+        && p.z < 0.05 && p.react <= 0
+        && game.rng.next() < perSecond(5.5 * diff.closeout, dt)) {
       game.aiJump(p);
     }
     // Reach in — rarely, and more often when the ball is low and loose-looking.
@@ -698,6 +799,37 @@ export function defendAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
       if (game.rng.next() < perSecond(Math.max(0.05, appetite), dt)) game.aiSteal(p);
     }
     return;
+  }
+
+  /* CONTEST THE SHOT, wherever it comes from.
+   *
+   * This was missing entirely, and it was the largest hole in the defence. Only
+   * the man ON the ball ever went up, so the moment an offence swung the ball the
+   * catch-and-shoot man was firing at a defender standing flat-footed beside him.
+   * With the contest model now asking whether a hand actually reached the release
+   * — and it does — a defence that never raises one is a defence that does not
+   * exist, and the AI correctly started shooting forty-two per cent of its shots
+   * from three because every one of them was open.
+   *
+   * So: any defender near a man who is gathering goes up with him. He has to see
+   * it first, he has to be close enough to matter, and he is late if he was
+   * caught helping — all of which is what makes a shot fake work. */
+  const shooter = game.gatheringNear(p, 7);
+  if (shooter && p.react <= 0 && p.z < 0.05) {
+    const gap = floorDist(p.x, p.y, shooter.x, shooter.y);
+    // Close enough to bother him: get a hand up rather than keep sliding.
+    if (gap < HOOPS.blockRange + 1.2) {
+      const eager = 4.2 * diff.closeout * (0.7 + p.data.attrs.perimeterD / 160);
+      if (game.rng.next() < perSecond(eager, dt)) {
+        game.aiJump(p);
+        return;
+      }
+    }
+    // Not close enough to jump, but close enough to run at: fly at the shooter.
+    if (gap < 12) {
+      steer(game, p, shooter.x, shooter.y, true, dt);
+      return;
+    }
   }
 
   // OFF THE BALL. Between your man and the rim, sagging toward the ball — and
@@ -727,7 +859,12 @@ export function defendAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
       .every((d) => floorDist(d.x, d.y, ballX, ballY) >= myDistToBall);
     // Help is a standing decision, not a dice roll: the nearest man goes, and
     // how quickly he commits is what the difficulty changes.
-    if (closest && game.rng.next() < perSecond(6 * diff.helpSpeed, dt)) {
+    /* WHO GOES. The nearest man is the right answer, and a good defence finds it;
+     * a poor one sends the wrong man, or two men, or nobody. `rotation` is what
+     * the tier changes, and it is the difference between help that closes a
+     * driving lane and help that opens a corner three. */
+    const rightMan = closest || game.rng.next() > diff.rotation;
+    if (rightMan && p.react <= 0 && game.rng.next() < perSecond(6 * diff.helpSpeed, dt)) {
       // Meet him at the rim, not where he is: help that arrives behind the ball
       // is not help.
       const tx = ballX + (ownRim.x - ballX) * 0.42;
@@ -791,7 +928,16 @@ export function defendAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
   // and further round toward the ball. That is where a press gets its turnovers
   // from — the reach-in on the ball is the smaller half of it — and it is also
   // why a press that does not work gives up a layup a minute.
-  const stand = clamp((3.6 + sag * 6.4 - threat * 3.8) / scheme.gamble, 1.4, 9.5);
+  /* HOW FAR YOU SAG OFF A MAN IS ABOUT WHETHER HE CAN SHOOT, and it has to
+   * SCALE the sag rather than subtract from it. Subtracting a constant meant a
+   * marksman standing on the far wing was still left six and a half feet of room
+   * — which against a shot model that now asks whether a hand reached the release
+   * is simply an open three, every time down. A modern defence stays attached to
+   * a shooter and sags a long way off a man who cannot shoot, and that choice is
+   * the single biggest one it makes. */
+  const stand = clamp(
+    ((3.6 + sag * 6.4) * (1 - threat * 0.62)) / scheme.gamble, 1.4, 9.5,
+  );
   let tx = man.x + (toRim.x / rl) * stand;
   let ty = man.y + (toRim.y / rl) * stand;
   // Pull a step toward the ball, which is what help position means.
@@ -804,7 +950,7 @@ export function defendAi(game: HoopsGame, p: CourtPlayer, dt: number): void {
   // instant the ball leaves the passer's hands closes out faster than the pass
   // travels, and then nobody on the floor is ever open.
   const closing = game.ball.state === 'pass' && game.ball.target === man.uid
-    && game.ball.age > 0.2;
+    && game.ball.age > 0.2 && p.react <= 0;
   steer(game, p, tx, ty, closing || floorDist(p.x, p.y, tx, ty) > 6, dt);
 }
 
@@ -832,8 +978,13 @@ function reboundAi(game: HoopsGame, p: CourtPlayer, dt: number, offense: boolean
   // quarter of their own misses back.
   // The scheme decides how many of them go: a post offence sends everybody, a
   // five-out offence sends nobody and gets back instead.
+  /* WHO GOES TO THE GLASS. The scheme decides how many — a post offence sends
+   * everybody, a five-out offence sends nobody and gets back instead — and the
+   * TIER decides how hard they work at it, which is what `glass` is for: a
+   * poorly drilled team gives up second chances it did not have to. */
   const crash = offense ? game.schemeFor(p.side).crash : 1;
-  const bar = 52 / Math.max(0.2, crash);
+  const effort = clamp(game.cfg.difficulty.glass, 0.5, 1.6);
+  const bar = 40 / Math.max(0.2, crash * (offense ? effort : 1));
   const crasher = p.data.attrs.rebounding > bar
     || ((p.pos === 'C' || p.pos === 'PF') && crash > 0.75)
     || (p.pos === 'SF' && crash > 0.95);
@@ -843,11 +994,24 @@ function reboundAi(game: HoopsGame, p: CourtPlayer, dt: number, offense: boolean
     return;
   }
 
-  steer(game, p, spot.x, spot.y, dist > 3, dt);
+  /* WHERE A REBOUNDER GOES.
+   *
+   * The defence goes to where the ball is coming down, because it starts between
+   * its man and the basket and can simply stand there. The OFFENCE cannot: it
+   * starts twenty feet out, and a man who runs at the landing spot arrives after
+   * the man who was already near it. So an offensive crasher attacks the RIM side
+   * of the spot — which is what crashing the glass actually means, and it is the
+   * only way a team gets any of its own misses back. */
+  const aim = offense
+    ? { x: spot.x + (rim.x - spot.x) * 0.3, y: spot.y + (rim.y - spot.y) * 0.3 }
+    : spot;
+  steer(game, p, aim.x, aim.y, dist > 3, dt);
 
-  // Go up for it when it is in reach and coming down.
+  /* Go up for it when it is in reach and coming down. A better-drilled team times
+   * this better, which is the other half of what `glass` buys. */
   const gap = floorDist(p.x, p.y, b.x, b.y);
-  if (gap < 3.4 && b.z > 3 && b.z < game.reach(p) + 2.2 && b.vz < 2 && p.z < 0.05) {
+  const window = 2.2 * clamp(game.cfg.difficulty.glass, 0.6, 1.5);
+  if (gap < 3.6 && b.z > 3 && b.z < game.reach(p) + window && b.vz < 2 && p.z < 0.05) {
     game.aiJump(p);
   }
 }

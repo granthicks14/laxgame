@@ -145,6 +145,17 @@ export interface CourtPlayer {
   assignment: string | null;
 
   /**
+   * Seconds before this player can respond to something new.
+   *
+   * REAL DEFENDERS ARE LATE. Without this a defender rotates on the frame the
+   * ball leaves the passer's hand, which is faster than the pass travels — so
+   * nobody is ever open, no closeout can be beaten, and the defence reads as five
+   * magnets rather than five people. Reset whenever the ball changes hands; how
+   * long it lasts is the man's basketball IQ and the difficulty tier.
+   */
+  react: number;
+
+  /**
    * Seconds left of the "you are now holding this man" highlight.
    *
    * Control moves by itself — a pass hands you the receiver — so the game has to

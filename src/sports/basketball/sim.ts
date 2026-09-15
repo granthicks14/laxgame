@@ -78,7 +78,7 @@ export interface SimResult {
  */
 const CAL = {
   /** Seconds of game clock one possession eats at neutral tempo. */
-  possessionSeconds: 11.8,
+  possessionSeconds: 11.6,
   /** Share of possessions that end in a turnover before a shot goes up. */
   turnoverRate: 0.121,
   /**
@@ -92,19 +92,19 @@ const CAL = {
    * player's own skills move him around this, but a team of players who are
    * equally good at everything shoots exactly this.
    */
-  mix: [0.445, 0.255, 0.40] as [number, number, number],
+  mix: [0.50, 0.245, 0.40] as [number, number, number],
   /**
    * Make chances for a shooter and a defence both rated at `REFERENCE`. Read
    * off the played engine: 36.5% from three, and a two-point game that comes out
    * at 43% across a floor that is half rim and half jump shot.
    */
-  makeThree: 0.316,
-  makeMid: 0.252,
-  makeRim: 0.483,
+  makeThree: 0.315,
+  makeMid: 0.242,
+  makeRim: 0.452,
   /** The rating both sides are measured against. */
   reference: 62,
   /** Share of missed shots the offence rebounds. */
-  offRebRate: 0.111,
+  offRebRate: 0.205,
   /**
    * Misses nobody rebounds: off a hand, out of bounds, off the back iron and
    * into the third row. The played engine loses about a third of them, which is
@@ -112,22 +112,22 @@ const CAL = {
    */
   reboundLost: 0.368,
   /** Share of made field goals that came off a pass. */
-  assistRate: 0.455,
+  assistRate: 0.465,
   /* Shooting fouls, as a share of attempts at each range.
    *
    * Read off the played engine after its fouls were rebuilt around what the
    * defender actually did rather than how close he was standing. The two engines
    * must agree: a game you watched and a game you simulated cannot send different
    * numbers of players to the line. */
-  foulRim: 0.112,
-  foulMid: 0.029,
-  foulThree: 0.017,
+  foulRim: 0.148,
+  foulMid: 0.037,
+  foulThree: 0.022,
   /** Non-shooting fouls per possession. */
-  looseFoulRate: 0.128,
+  looseFoulRate: 0.15,
   /** Share of missed shots that were blocked. */
-  blockRate: 0.075,
+  blockRate: 0.088,
   /** Baseline free-throw rate before the shooter's own rating. */
-  freeThrow: 0.778,
+  freeThrow: 0.722,
   /** How much a rating point of difference is worth, per shot. */
   ratingScale: 0.0042,
   /**
@@ -136,7 +136,7 @@ const CAL = {
    * played engine reads the identical number off `HoopsConfig.homeEdge`, so a
    * home game is the same game whether it was watched or simulated.
    */
-  homeEdge: 0.011,
+  homeEdge: 0.0085,
 };
 
 /* --------------------------------------------------------------- the squad */

@@ -159,6 +159,7 @@ export class HoopsGame {
       stat: emptyLine(),
       assignment: null,
       flash: 0,
+      react: 0,
     };
   }
 
@@ -481,6 +482,24 @@ export class HoopsGame {
     const d = this.defenderOn(p);
     if (d) this.controlled[otherSide(p.side)] = d;
     this.controlHold = 0;
+
+    /* EVERY DEFENDER HAS TO SEE IT FIRST. The ball has moved, so the defence
+     * needs a moment to read it — which is the whole reason a pass to an open man
+     * is worth throwing, and why a closeout is a race somebody can lose. */
+    this.resetReactions(otherSide(p.side));
+  }
+
+  /**
+   * How long this side needs to react to the ball moving. A smart defender reads
+   * it sooner; a harder tier reads it sooner still. Never zero: a defence that
+   * reacts on the frame is not a defence, it is a set of magnets.
+   */
+  private resetReactions(side: Side): void {
+    const scale = clamp(this.cfg.difficulty.reaction, 0.4, 2.2);
+    for (const d of this.teams[side]) {
+      const iq = clamp((d.data.attrs.iq - 30) / 60, 0, 1);
+      d.react = (0.14 + (1 - iq) * 0.26) * scale;
+    }
   }
 
   private defenderOn(p: CourtPlayer): CourtPlayer | null {
@@ -934,6 +953,7 @@ export class HoopsGame {
     p.crossCool = Math.max(0, p.crossCool - dt);
     p.screenTimer = Math.max(0, p.screenTimer - dt);
     p.flash = Math.max(0, p.flash - dt);
+    p.react = Math.max(0, p.react - dt);
 
     p.x += p.vx * dt;
     p.y += p.vy * dt;
@@ -1157,6 +1177,7 @@ export class HoopsGame {
       contestInLine: inLine,
       contestHand: this.contestHand(defender, p, kind),
       contestClosing: defender ? Math.hypot(defender.vx, defender.vy) : 0,
+      helpers: this.helpAround(p, defender),
       moving: Math.hypot(p.vx, p.vy),
       fading: defender ? distance < 4 && !inLine : false,
       fatigue: p.stamina,
@@ -1839,9 +1860,29 @@ export class HoopsGame {
       + (from.data.attrs.passing / 99) * (HOOPS.passSpeedMax - HOOPS.passSpeedMin);
     // Lead the receiver: a pass to where he is standing arrives behind him.
     const lead = 0.22;
+
+    /* HOW ACCURATE THE PASS IS.
+     *
+     * A passer's rating decides how close it lands to where he meant it, and the
+     * difficulty tier decides how well the AI executes what it chose. A ball that
+     * arrives a foot and a half behind a cutter is a ball a defender can get to —
+     * which is where turnovers come from in real basketball, far more often than
+     * from anybody stripping the dribble. It is also the lever that separates a
+     * well-drilled team from a sloppy one, which nothing else was doing: the top
+     * two tiers made the same decisions and executed them identically.
+     */
+    const human = from.side === this.humanSide;
+    const hands = clamp(1 - (from.data.attrs.passing - 30) / 90, 0.1, 1);
+    const sloppiness = human ? 1 : clamp(this.cfg.difficulty.passError, 0.3, 2);
+    const off = hands * sloppiness * 1.7;
+    const wobble = {
+      x: this.rng.gauss(0, off),
+      y: this.rng.gauss(0, off),
+    };
+
     const target: Vec3 = {
-      x: to.x + to.vx * lead,
-      y: to.y + to.vy * lead,
+      x: to.x + to.vx * lead + wobble.x,
+      y: to.y + to.vy * lead + wobble.y,
       z: 5.2,
     };
     const origin = { x: from.x, y: from.y, z: 5.6 };
@@ -2154,6 +2195,38 @@ export class HoopsGame {
     };
   }
 
+  /**
+   * An opponent within `range` who is in the act of shooting.
+   *
+   * The defence needs this to contest anybody, not just the man it is guarding:
+   * a catch-and-shoot three is taken by a man his defender has just left, and
+   * somebody has to run at him.
+   */
+  /**
+   * How much OTHER defence is standing around this man, graded, not counting the
+   * one already contesting him. Rim protection is a team act, and a lane with
+   * three men in it is not a lane with one.
+   */
+  helpAround(p: CourtPlayer, primary: CourtPlayer | null): number {
+    let n = 0;
+    for (const o of this.teams[otherSide(p.side)]) {
+      if (o.fouledOut || o === primary) continue;
+      n += clamp(1 - floorDist(o.x, o.y, p.x, p.y) / 8, 0, 1);
+    }
+    return n;
+  }
+
+  gatheringNear(d: CourtPlayer, range: number): CourtPlayer | null {
+    let best: CourtPlayer | null = null;
+    let bd = range;
+    for (const o of this.teams[otherSide(d.side)]) {
+      if (!o.gathering || o.fouledOut) continue;
+      const gap = floorDist(d.x, d.y, o.x, o.y);
+      if (gap < bd) { bd = gap; best = o; }
+    }
+    return best;
+  }
+
   /** For the AI and the HUD: how good this shot would be right now. */
   shotQualityFor(p: CourtPlayer): number {
     const kind = this.shotKindFor(p);
@@ -2179,6 +2252,7 @@ export class HoopsGame {
       // pass up open ones because it thought a flat-footed man was a contest.
       contestHand: this.contestHand(defender, p, kind),
       contestClosing: defender ? Math.hypot(defender.vx, defender.vy) : 0,
+      helpers: this.helpAround(p, defender),
       moving: Math.hypot(p.vx, p.vy),
       fading: false,
       fatigue: p.stamina,
@@ -2189,6 +2263,41 @@ export class HoopsGame {
   /** Whether the AI would shoot from here, exposed for the harnesses. */
   aiWantsShot(p: CourtPlayer): boolean {
     return wantsShot(this, p);
+  }
+
+  /* ---------------------------------------------------- hooks for the harness
+   *
+   * `npm run hoops-ai` builds exact situations — a packed lane, a sealed post, an
+   * open shooter beside a covered one — and asks the AI what it would do. Testing
+   * a DECISION needs the floor set by hand; testing an average does not, and an
+   * average is what hid the paint-pass exploit for as long as it hid.
+   */
+
+  /** Who the AI would throw it to from here, without throwing it. */
+  aiPassChoice(p: CourtPlayer): CourtPlayer | null {
+    return pickPassTarget(this, p);
+  }
+
+  /** Hand a specific man the ball, for a scenario. */
+  giveBallForTest(p: CourtPlayer): void {
+    this.ball.state = 'dribble';
+    this.ball.carrier = p.uid;
+    this.ball.lastTouch = p.uid;
+    this.ball.lastSide = p.side;
+    this.ball.shot = null;
+    this.ball.target = null;
+    this.ball.x = p.x;
+    this.ball.y = p.y;
+    this.ball.z = 3;
+    this.possession = p.side;
+    this.phase = 'live';
+    this.assignDefenders();
+    for (const d of this.teams[otherSide(p.side)]) d.react = 0;
+  }
+
+  /** Put the shot clock somewhere specific, for a scenario. */
+  setShotClockForTest(seconds: number): void {
+    this.shotClock = seconds;
   }
 
   /** True when this side is defending and outnumbered: a live break. */
