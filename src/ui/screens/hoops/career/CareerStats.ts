@@ -4,6 +4,10 @@ import { screenEl, topbar, panelFlush, panel, segmented } from '../../../compone
 import { LEVELS } from '../../../../sports/basketball/levels';
 import { worldTeam } from '../../../../sports/basketball/world';
 import { averages } from '../../../../sports/basketball/career/season';
+import {
+  LEADER_LABEL, LEADER_ORDER, bestAlumni, leaderValue, leaders, leagueStatLines,
+  programmeRecords, type LeaderCategory, type LeagueLine,
+} from '../../../../sports/basketball/career/records';
 import type { HoopsCareer } from '../../../../sports/basketball/career/types';
 import { badge, kvRow, pill } from './bits';
 
@@ -15,7 +19,11 @@ import { badge, kvRow, pill } from './bits';
  * clubs, because the record belongs to the man and not the building.
  * ------------------------------------------------------------------------- */
 
-type View = 'season' | 'records' | 'seasons';
+type View = 'season' | 'records' | 'league' | 'wall' | 'seasons';
+
+/** Percentage categories read as percentages; everything else is a rate. */
+const fmt = (cat: LeaderCategory, v: number): string =>
+  (cat.endsWith('Pct') ? `${(v * 100).toFixed(1)}%` : v.toFixed(1));
 
 export class CareerStatsScreen implements Screen {
   el: HTMLElement;
@@ -30,6 +38,8 @@ export class CareerStatsScreen implements Screen {
         segmented<View>([
           { value: 'season', label: 'This season' },
           { value: 'records', label: 'Programme' },
+          { value: 'league', label: 'The league' },
+          { value: 'wall', label: 'The wall' },
           { value: 'seasons', label: 'Seasons' },
         ], this.view, (v) => { this.view = v; this.paint(); }, true),
         this.body = h('div', { class: 'stack' }))),
@@ -41,7 +51,88 @@ export class CareerStatsScreen implements Screen {
     this.body.replaceChildren(
       this.view === 'season' ? this.lines(this.career.season, 'No games played yet.')
         : this.view === 'records' ? this.lines(this.career.careerStats, 'Nothing recorded yet.')
-          : this.seasons(),
+          : this.view === 'league' ? this.league()
+            : this.view === 'wall' ? this.wall()
+              : this.seasons(),
+    );
+  }
+
+  /* -------------------------------------------------------- league leaders */
+
+  /**
+   * Every category, and where the coach's own men sit in it.
+   *
+   * The lines are recovered by RE-SIMULATING the level's fixtures rather than
+   * stored, which is why a forty-club league costs nothing in the save — and why
+   * this is computed once, here, and shared across eight boards rather than eight
+   * times.
+   */
+  private league(): HTMLElement {
+    const c = this.career;
+    const lines = leagueStatLines(c);
+    if (!lines.length) {
+      return panel(null, h('div', { class: 'small',
+        text: 'Nobody at this level has played a game yet.' }));
+    }
+    const mine = new Set(lines.filter((l) => l.mine).map((l) => l.playerId));
+    return h('div', { class: 'stack' },
+      panel(null,
+        h('div', { class: 'small',
+          text: `${LEVELS[c.level].name}, this season.` }),
+        h('div', { class: 'tiny',
+          text: `${lines.length} players who have played. Your own are highlighted. `
+            + 'Percentage boards require a real rate of attempts.' })),
+      ...LEADER_ORDER.map((cat) => this.board(cat, leaders(lines, cat, 5), mine)),
+    );
+  }
+
+  private board(
+    cat: LeaderCategory, rows: LeagueLine[], mine: Set<string>,
+  ): HTMLElement {
+    return panelFlush(LEADER_LABEL[cat],
+      ...rows.map((l, i) => h('div', {
+        class: `roster-row${mine.has(l.playerId) ? ' roster-row--on' : ''}`,
+      },
+      h('span', { class: 'roster-row__pos', text: String(i + 1) }),
+      h('div', { class: 'roster-row__body' },
+        h('div', { class: 'roster-row__name', text: l.name }),
+        h('div', { class: 'roster-row__note tiny',
+          text: `${l.teamAbbr} · ${l.pos} · ${l.line.games} games` })),
+      h('span', { class: 'roster-row__ovr num', text: fmt(cat, leaderValue(l, cat)) }))));
+  }
+
+  /* ------------------------------------------------- the wall and the book */
+
+  /** Who used to play here, and what this programme has never done better than. */
+  private wall(): HTMLElement {
+    const c = this.career;
+    const book = programmeRecords(c);
+    const best = bestAlumni(c, 'points', 20);
+
+    return h('div', { class: 'stack' },
+      book.length
+        ? panelFlush('The record book', ...book.map((r) => h('div', { class: 'kv' },
+          h('div', { class: 'kv__k tiny', text: r.label }),
+          h('div', { class: 'kv__v',
+            text: `${r.value}${r.who ? ` — ${r.who}` : ''}` }))))
+        : panel(null, h('div', { class: 'small',
+          text: 'Finish a season and the record book starts.' })),
+      best.length
+        ? panelFlush('Everybody who has played here',
+          ...best.map((a) => {
+            const g = Math.max(1, a.line.games);
+            return h('div', { class: 'roster-row' },
+              h('span', { class: 'roster-row__pos', text: a.pos }),
+              h('div', { class: 'roster-row__body' },
+                h('div', { class: 'roster-row__name', text: a.name }),
+                h('div', { class: 'roster-row__note tiny',
+                  text: `${a.seasons} season${a.seasons === 1 ? '' : 's'} to ${a.year} · `
+                    + `${(a.line.points / g).toFixed(1)}p ${((a.line.offReb + a.line.defReb) / g).toFixed(1)}r `
+                    + `${(a.line.assists / g).toFixed(1)}a · ${a.reason}` })),
+              h('span', { class: 'roster-row__ovr num', text: String(a.line.points) }));
+          }))
+        : panel(null, h('div', { class: 'small',
+          text: 'Nobody has left the programme yet. When they do, they stay on this wall.' })),
     );
   }
 

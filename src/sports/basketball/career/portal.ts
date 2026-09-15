@@ -41,6 +41,8 @@ export const REASON_TEXT: Record<TransferReason, string> = {
 };
 
 export interface PortalDeparture {
+  /** Who he was, so the record book can find the line he left behind. */
+  id: string;
   name: string;
   pos: string;
   overall: number;
@@ -134,6 +136,7 @@ export function runOutgoing(input: OutgoingInput): OutgoingResult {
 
     left.push(p);
     departures.push({
+      id: p.id,
       name: `${p.first} ${p.last}`,
       pos: p.pos,
       overall: p.overall,

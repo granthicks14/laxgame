@@ -174,6 +174,38 @@ export interface HoopsCoach {
   jobs: CoachJob[];
 }
 
+/* -------------------------------------------------------------- the résumé
+ *
+ * WHERE HE HAS BEEN, and what he did there. One entry per club, opened when he
+ * walks in and updated at the end of every season he coaches, so a coach who has
+ * held five jobs across twenty years has five readable lines rather than one
+ * aggregate that says nothing about which of them he was actually good at.
+ */
+
+/** Open a new line on the résumé. Closes the one before it. */
+export function startJob(
+  coach: HoopsCoach, teamId: string, level: HoopsLevel, year: number,
+): void {
+  const open = coach.jobs[coach.jobs.length - 1];
+  if (open && open.teamId === teamId && open.level === level) return;
+  if (open) open.toYear = Math.max(open.toYear, year - 1);
+  coach.jobs.push({
+    teamId, level, fromYear: year, toYear: year, wins: 0, losses: 0, titles: 0,
+  });
+}
+
+/** Fold a finished season into the job he coached it at. */
+export function logSeasonToJob(
+  coach: HoopsCoach, year: number, wins: number, losses: number, champion: boolean,
+): void {
+  const job = coach.jobs[coach.jobs.length - 1];
+  if (!job) return;
+  job.wins += wins;
+  job.losses += losses;
+  job.toYear = Math.max(job.toYear, year);
+  if (champion) job.titles++;
+}
+
 export function newCoach(startingPoints = 10): HoopsCoach {
   return {
     points: startingPoints,

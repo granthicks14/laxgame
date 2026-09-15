@@ -105,6 +105,10 @@ export class TablesScreen implements Screen {
         const score = f.played
           ? `${home ? f.homeScore : f.awayScore}-${home ? f.awayScore : f.homeScore}`
           : '';
+        /* THE RECAP AS IT WAS RECORDED, not one made up now. It was written from
+         * the box score the night the game happened, which is the only box score
+         * that describes it. */
+        const recap = f.story ?? null;
         return h('div', { class: 'roster-row' },
           h('span', { class: 'roster-row__pos', text: String(i + 1) }),
           badge(other, 'sm'),
@@ -112,8 +116,9 @@ export class TablesScreen implements Screen {
             h('div', { class: 'roster-row__name',
               text: `${home ? 'vs' : 'at'} ${other.city} ${other.name}` }),
             h('div', { class: 'roster-row__note tiny',
-              text: `${f.conference ? 'Conference' : 'Non-conference'}`
-                + `${f.rivalry ? ' · rivalry' : ''} · they rate ${standingOf(c, other.id)}` })),
+              text: recap ? `${recap.headline} — ${recap.line}`
+                : `${f.conference ? 'Conference' : 'Non-conference'}`
+                  + `${f.rivalry ? ' · rivalry' : ''} · they rate ${standingOf(c, other.id)}` })),
           f.played ? pill(won ? 'W' : 'L', won ? 'good' : 'bad') : null,
           h('span', { class: 'roster-row__ovr num', text: score }));
       }));

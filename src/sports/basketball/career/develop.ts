@@ -4,6 +4,7 @@ import { ATTR_MIN, computeOverall, type AttrKey, type HoopsPlayer } from '../dat
 import { LEVELS, graduates, type HoopsLevel } from '../levels';
 import type { CoachPerks } from './coach';
 import type { TierMods } from './difficulty';
+import { PRACTICE_INFO, type PracticeArea } from './practice';
 import type { HoopsDevelopment, StatLine } from './types';
 
 /* ---------------------------------------------------------------------------
@@ -51,6 +52,13 @@ export interface DevelopInput {
   season: Record<string, StatLine>;
   /** Games the team played, to turn minutes into a share. */
   games: number;
+  /**
+   * What the squad spent the season working on, if anything. A season of shooting
+   * practice does not make a player better overall — the step is the step — but it
+   * decides WHERE the step lands, which over four years is the difference between
+   * a shooter and a finisher.
+   */
+  practice?: PracticeArea | null;
 }
 
 /**
@@ -123,7 +131,7 @@ export function developSquad(input: DevelopInput): HoopsDevelopment[] {
      * seasons of work left him exactly where he began. A fractional step is a
      * chance of a point instead. */
     const delta = stochasticRound(step, rng);
-    if (delta !== 0) applyGrowth(p, delta, input.perks, rng);
+    if (delta !== 0) applyGrowth(p, delta, input.perks, rng, input.practice ?? null);
 
     p.overall = computeOverall(p.pos, p.attrs);
     if (delta > 0) p.overall = Math.min(p.overall, ceiling);
@@ -158,13 +166,23 @@ export function developSquad(input: DevelopInput): HoopsDevelopment[] {
  * So this is closed-loop: keep nudging until the rating the rest of the game
  * reads has moved by what was decided, or until it plainly cannot.
  */
-function applyGrowth(p: HoopsPlayer, delta: number, perks: CoachPerks, rng: Rng): void {
+function applyGrowth(
+  p: HoopsPlayer, delta: number, perks: CoachPerks, rng: Rng,
+  practice: PracticeArea | null,
+): void {
   const weights: [AttrKey[], number][] = [
     [SHOOTING_FAMILY, 1 + perks.shootingGrowth],
     [INSIDE_FAMILY, 1 + perks.insideGrowth],
     [ATHLETIC_FAMILY, 1 + perks.athleticGrowth],
     [SKILL_FAMILY, 1],
   ];
+  /* A YEAR OF PRACTICE PULLS THE GROWTH TOWARDS ITSELF. The emphasis is a fifth
+   * family with a heavy weight, which is why it aims a player rather than
+   * improving him: the total step was decided above and does not change. Growth
+   * is only ever LOST here if a man declines, and then the emphasis is ignored —
+   * a thirty-four-year-old does not lose his jump shot because the team worked
+   * on jump shots. */
+  if (practice && delta > 0) weights.push([PRACTICE_INFO[practice].attrs, 2.6]);
   // A big man does not suddenly become a shooter, and a guard does not become a
   // rebounder: growth follows the position's own emphasis.
   const guard = p.pos === 'PG' || p.pos === 'SG';

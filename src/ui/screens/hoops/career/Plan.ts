@@ -7,6 +7,9 @@ import {
   schemeLeansOn, type DefenseScheme, type OffenseScheme,
 } from '../../../../sports/basketball/schemes';
 import { parOf } from '../../../../sports/basketball/career/league';
+import {
+  PRACTICE_INFO, PRACTICE_ORDER, type PracticeArea,
+} from '../../../../sports/basketball/career/practice';
 import { saveHoopsCareer } from '../../../../sports/basketball/career/save';
 import type { HoopsCareer } from '../../../../sports/basketball/career/types';
 import { pill } from './bits';
@@ -41,6 +44,13 @@ export class PlanScreen implements Screen {
   private choose(offense?: OffenseScheme, defense?: DefenseScheme): void {
     if (offense) this.career.offense = offense;
     if (defense) this.career.defense = defense;
+    saveHoopsCareer(this.career);
+    this.paint();
+  }
+
+  /** Tapping the current emphasis again clears it, which is a real choice. */
+  private emphasise(area: PracticeArea): void {
+    this.career.practice = this.career.practice === area ? null : area;
     saveHoopsCareer(this.career);
     this.paint();
   }
@@ -97,6 +107,27 @@ export class PlanScreen implements Screen {
       h('div', { class: 'tiny',
         text: 'A poor fit is not forbidden — it is expensive. The system does less of '
           + 'what it is supposed to do, and the team gives a little away at both ends.' }),
+
+      panelFlush('In practice this week',
+        ...PRACTICE_ORDER.map((area) => {
+          const info = PRACTICE_INFO[area];
+          const on = c.practice === area;
+          return h('button', {
+            class: `roster-row${on ? ' roster-row--on' : ''}`,
+            on: { click: () => this.emphasise(area) },
+          },
+          h('div', { class: 'roster-row__body' },
+            h('div', { class: 'roster-row__name', text: info.label }),
+            h('div', { class: 'roster-row__note tiny', text: info.blurb })),
+          on ? pill('WORKING ON IT', 'good') : null);
+        })),
+
+      h('div', { class: 'tiny',
+        text: c.practice
+          ? 'Everybody is a little better at this in the next game, and the offseason '
+            + 'grows them this way. A week spent here is a week not spent elsewhere.'
+          : 'Nothing is being emphasised. Pick an area and the whole squad works on it '
+            + '— small in one game, and it aims four years of development.' }),
     );
   }
 }

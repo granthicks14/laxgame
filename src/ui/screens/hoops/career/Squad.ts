@@ -6,6 +6,10 @@ import { POSITIONS, starters, type HoopsPlayer } from '../../../../sports/basket
 import { ATTR_LABEL, type AttrKey } from '../../../../sports/basketball/data';
 import { averages, needsFor } from '../../../../sports/basketball/career/season';
 import { needSummary } from '../../../../sports/basketball/career/needs';
+import {
+  TRAIN_COST, trainBlockedReason, trainPlayer,
+} from '../../../../sports/basketball/career/practice';
+import { saveHoopsCareer } from '../../../../sports/basketball/career/save';
 import type { HoopsCareer } from '../../../../sports/basketball/career/types';
 import { classOf, kvRow, pill, rosterRow } from './bits';
 
@@ -152,58 +156,109 @@ const ATTR_GROUPS: [string, AttrKey[]][] = [
   ['Athlete', ['speed', 'vertical', 'strength', 'stamina']],
 ];
 
+/**
+ * ONE PLAYER, AND THE ONE THING A COACH CAN DO ABOUT HIM.
+ *
+ * The attributes are not a read-only table: each one is a button, and pressing it
+ * spends coach points to work on it. That is deliberately the ONLY place training
+ * lives — a coach thinking about a specific player's specific weakness is already
+ * looking at this screen, and a separate training screen would mean picking the
+ * same man twice.
+ *
+ * REFUSALS ARE SHOWN BEFORE THEY HAPPEN. A button that cannot be pressed says why
+ * on its own face rather than doing nothing when tapped.
+ */
 export class PlayerScreen implements Screen {
   el: HTMLElement;
+  private body!: HTMLElement;
 
-  constructor(app: App, career: HoopsCareer, p: HoopsPlayer) {
+  constructor(app: App, private career: HoopsCareer, private p: HoopsPlayer) {
     const info = LEVELS[career.level];
-    const season = averages(career.season[p.id]);
-    const total = averages(career.careerStats[p.id]);
     const feet = `${Math.floor(p.heightIn / 12)}'${p.heightIn % 12}"`;
-
     this.el = screenEl(
       topbar(app, `${p.first} ${p.last}`,
         `${p.pos} · ${classOf(p, info.ageSystem)} · ${feet}`),
       h('div', { class: 'scroll' }, h('div', { class: 'wrapper stack' },
-        panel(null,
-          kvRow(
-            ['Overall', String(p.overall)],
-            ['Ceiling', String(p.potential)],
-            ['Room', p.potential > p.overall ? `+${p.potential - p.overall}` : 'none'],
-            ['Work', String(p.work)],
-          ),
-          h('div', { class: 'tiny',
-            text: p.potential - p.overall >= 8
-              ? 'There is a lot more here than he has shown. He needs minutes.'
-              : p.potential - p.overall >= 3
-                ? 'Some room left in him yet.'
-                : 'He is about what he is going to be.' })),
-
-        season.games ? panel('This season',
-          kvRow(
-            ['Games', String(season.games)],
-            ['Starts', String(career.season[p.id]?.starts ?? 0)],
-            ['Points', season.ppg.toFixed(1)],
-            ['Rebounds', season.rpg.toFixed(1)],
-            ['Assists', season.apg.toFixed(1)],
-            ['Minutes', season.mpg.toFixed(0)],
-            ['FG%', `${(season.fgPct * 100).toFixed(0)}`],
-            ['3P%', `${(season.tpPct * 100).toFixed(0)}`],
-            ['FT%', `${(season.ftPct * 100).toFixed(0)}`],
-          )) : null,
-
-        total.games > season.games ? panel('In this programme',
-          kvRow(
-            ['Games', String(total.games)],
-            ['Starts', String(career.careerStats[p.id]?.starts ?? 0)],
-            ['Points', total.ppg.toFixed(1)],
-            ['Rebounds', total.rpg.toFixed(1)],
-            ['Assists', total.apg.toFixed(1)],
-          )) : null,
-
-        ...ATTR_GROUPS.map(([label, keys]) => panel(label,
-          kvRow(...keys.map((k) => [ATTR_LABEL[k], String(p.attrs[k])] as [string, string])))),
-      )),
+        this.body = h('div', { class: 'stack' }))),
     );
+    this.paint();
+  }
+
+  /** Spend on one attribute, then redraw: the numbers, the room and the budget
+   *  all move together and a stale panel would lie about all three. */
+  private train(attr: AttrKey): void {
+    const r = trainPlayer(this.career, this.p.id, attr);
+    if (r.ok) saveHoopsCareer(this.career);
+    this.paint(r.ok ? `${ATTR_LABEL[attr]} ${r.from} to ${r.to}.` : r.reason);
+  }
+
+  private paint(note?: string): void {
+    const { career, p } = this;
+    const season = averages(career.season[p.id]);
+    const total = averages(career.careerStats[p.id]);
+    const room = p.potential - p.overall;
+
+    const parts: (HTMLElement | null)[] = [
+      panel(null,
+        kvRow(
+          ['Overall', String(p.overall)],
+          ['Ceiling', String(p.potential)],
+          ['Room', room > 0 ? `+${room}` : 'none'],
+          ['Work', String(p.work)],
+        ),
+        h('div', { class: 'tiny',
+          text: room >= 8
+            ? 'There is a lot more here than he has shown. He needs minutes.'
+            : room >= 3
+              ? 'Some room left in him yet.'
+              : 'He is about what he is going to be.' })),
+
+      season.games ? panel('This season',
+        kvRow(
+          ['Games', String(season.games)],
+          ['Starts', String(career.season[p.id]?.starts ?? 0)],
+          ['Points', season.ppg.toFixed(1)],
+          ['Rebounds', season.rpg.toFixed(1)],
+          ['Assists', season.apg.toFixed(1)],
+          ['Minutes', season.mpg.toFixed(0)],
+          ['FG%', `${(season.fgPct * 100).toFixed(0)}`],
+          ['3P%', `${(season.tpPct * 100).toFixed(0)}`],
+          ['FT%', `${(season.ftPct * 100).toFixed(0)}`],
+        )) : null,
+
+      total.games > season.games ? panel('In this programme',
+        kvRow(
+          ['Games', String(total.games)],
+          ['Starts', String(career.careerStats[p.id]?.starts ?? 0)],
+          ['Points', total.ppg.toFixed(1)],
+          ['Rebounds', total.rpg.toFixed(1)],
+          ['Assists', total.apg.toFixed(1)],
+        )) : null,
+
+      panel('Work on him',
+        h('div', { class: 'small',
+          text: `${TRAIN_COST} coach points buys two points of one attribute. `
+            + `You have ${career.coach.points}.` }),
+        note ? h('div', { class: 'tiny', text: note }) : null),
+
+      ...ATTR_GROUPS.map(([label, keys]) => panelFlush(label,
+        ...keys.map((k) => this.attrRow(k)))),
+    ];
+    this.body.replaceChildren(...parts.filter((x): x is HTMLElement => x !== null));
+  }
+
+  private attrRow(k: AttrKey): HTMLElement {
+    const { career, p } = this;
+    const blocked = trainBlockedReason(career, p, k);
+    return h('button', {
+      class: 'roster-row',
+      ...(blocked ? { disabled: true } : {}),
+      on: { click: () => { if (!blocked) this.train(k); } },
+    },
+    h('div', { class: 'roster-row__body' },
+      h('div', { class: 'roster-row__name', text: ATTR_LABEL[k] }),
+      h('div', { class: 'roster-row__note tiny',
+        text: blocked ?? `Train for ${TRAIN_COST} points` })),
+    h('span', { class: 'roster-row__ovr num', text: String(p.attrs[k]) }));
   }
 }

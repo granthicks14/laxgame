@@ -55,7 +55,8 @@
     "test:two-sports": "node scripts/two-sports.mjs",
     "hoops-control": "esbuild src/dev/hoopsControl.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-control.mjs --log-level=warning && node node_modules/.cache/hoops-control.mjs",
     "hoops-ai": "esbuild src/dev/hoopsAi.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-ai.mjs --log-level=warning && node node_modules/.cache/hoops-ai.mjs",
-    "hoops-feel": "esbuild src/dev/hoopsFeel.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-feel.mjs --log-level=warning && node node_modules/.cache/hoops-feel.mjs"
+    "hoops-feel": "esbuild src/dev/hoopsFeel.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-feel.mjs --log-level=warning && node node_modules/.cache/hoops-feel.mjs",
+    "hoops-parity": "esbuild src/dev/hoopsParity.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-parity.mjs --log-level=warning && node node_modules/.cache/hoops-parity.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

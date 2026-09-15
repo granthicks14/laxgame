@@ -16,6 +16,9 @@ import { squadRank, standingOf, expectedWinPct } from '../../../../sports/basket
 import { postseasonFinish, seedNumber, stillAlive } from '../../../../sports/basketball/career/playoffs';
 import { coachLevel } from '../../../../sports/basketball/career/coach';
 import { rungLabel } from '../../../../sports/basketball/career/ladder';
+import { approachesFor } from '../../../../sports/basketball/career/interest';
+import { newsFeed, newsKindLabel } from '../../../../sports/basketball/career/news';
+import { validateCareer } from '../../../../sports/basketball/career/records';
 import { saveHoopsCareer } from '../../../../sports/basketball/career/save';
 import type { HoopsCareer, HoopsFixture } from '../../../../sports/basketball/career/types';
 import { HoopsGameScreen } from '../HoopsGameScreen';
@@ -30,6 +33,7 @@ import { OffseasonScreen } from './Offseason';
 import { JobsScreen } from './Jobs';
 import { BoardScreen } from './Board';
 import { WindowScreen } from './Window';
+import { ApproachesScreen } from './Approaches';
 
 /* ---------------------------------------------------------------------------
  * THE CAREER HUB
@@ -49,6 +53,15 @@ export class HoopsCareerHub implements Screen {
   el: HTMLElement;
 
   constructor(app: App, private career: HoopsCareer) {
+    /* EVERY TIME THE HUB IS BUILT, THE SAVE IS CHECKED. A career is a machine
+     * that runs for twenty years, and the way one dies is quietly — a table a game
+     * out of step with the fixture list, a total that stopped matching its own
+     * seasons. Anything derived from the results that disagrees with them is wrong
+     * by definition and is repaired here; anything that cannot be is reported
+     * rather than swallowed, because a coach can act on a sentence and cannot act
+     * on a number that is silently wrong. */
+    const problems = validateCareer(career);
+    if (problems.length) app.toast(`Save repaired: ${problems[0]}`);
     this.el = this.build(app);
   }
 
@@ -87,6 +100,7 @@ export class HoopsCareerHub implements Screen {
         c.mode === 'challenge' ? this.boardExpects() : null,
         this.tiles(app),
         this.leaders(),
+        this.news(),
       )),
     );
   }
@@ -194,6 +208,11 @@ export class HoopsCareerHub implements Screen {
     const sim = (): void => {
       if (!postseason) advanceLeague(c);
       if (postseason) simulatePostseasonGame(c, f); else simulateUserGame(c, f);
+      /* THE RESULT, IN A SENTENCE. A coach who skipped the game still wants to know
+       * what kind of game it was, and the recap the engine wrote is read off the box
+       * score that produced the scoreline — so it is never a generic line about a
+       * win. */
+      if (f.story) app.toast(`${f.story.headline} — ${f.story.line}`);
       this.refresh(app);
     };
 
@@ -259,6 +278,11 @@ export class HoopsCareerHub implements Screen {
     const advice = schemeAdvice(c);
     const needs = needsFor(c);
     const urgent = needs.list.filter((n) => n.need >= 3).length;
+    /* A dynasty coach is only ever approached in the offseason — a programme does
+     * not hire somebody else's coach in February, and a coach mid-season has a
+     * season to finish. */
+    const approaches = c.stage === 'offseason' || c.stage === 'preseason'
+      ? approachesFor(c) : [];
     return panel(null, tileGrid([
       {
         label: 'Squad',
@@ -295,6 +319,13 @@ export class HoopsCareerHub implements Screen {
         badge: 'OPEN',
         go: () => app.push((a: App) => new BoardScreen(a, c)),
       }] : []),
+      ...(approaches.length ? [{
+        label: 'The phone',
+        note: `${approaches.length} programme${approaches.length === 1 ? '' : 's'} `
+          + `${approaches.length === 1 ? 'has' : 'have'} made an approach`,
+        badge: approaches.some((o) => o.stepUp) ? 'STEP UP' : 'OPEN',
+        go: () => app.push((a: App) => new ApproachesScreen(a, c)),
+      }] : []),
       ...(c.market.length ? [{
         label: 'The portal',
         note: `${c.pitchesLeft} approach${c.pitchesLeft === 1 ? '' : 'es'} left`,
@@ -302,6 +333,23 @@ export class HoopsCareerHub implements Screen {
         go: () => app.push((a: App) => new WindowScreen(a, c)),
       }] : []),
     ]));
+  }
+
+  /**
+   * WHAT PEOPLE ARE SAYING, and every line of it points at a record in the save —
+   * a margin in the fixture list, a jump in the development report, a commitment
+   * on the recruiting board. Nothing here is stored and nothing is invented, so
+   * the panel cannot drift out of step with the career it describes.
+   */
+  private news(): HTMLElement | null {
+    const items = newsFeed(this.career, 5);
+    if (!items.length) return null;
+    return panelFlush('Around the programme',
+      ...items.map((n) => h('div', { class: 'roster-row' },
+        h('div', { class: 'roster-row__body' },
+          h('div', { class: 'roster-row__name', text: n.headline }),
+          h('div', { class: 'roster-row__note tiny', text: n.body })),
+        pill(newsKindLabel(n.kind), n.kind === 'result' || n.kind === 'streak' ? 'warn' : 'flat'))));
   }
 
   private leaders(): HTMLElement | null {

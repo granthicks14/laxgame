@@ -7,6 +7,7 @@ import { simulateGame, type SimResult, type SimTeam } from '../sim';
 import { teamsAtLevel, worldTeam, type HoopsWorldTeam } from '../world';
 import { perksOf } from './coach';
 import { modsFor } from './difficulty';
+import { matchRoster } from './practice';
 import type { HoopsCareer, HoopsFixture } from './types';
 
 /* ---------------------------------------------------------------------------
@@ -37,6 +38,27 @@ export function parOf(career: HoopsCareer, teamId: string): number {
   return teamPar(team.level, standingOf(career, teamId));
 }
 
+/* ---------------------------------------------------------------------------
+ * WHICH SEASON'S SQUADS
+ * ---------------------------------------------------------------------------
+ * Every rival roster is derived from `(club, seed, YEAR)`, so the year is not a
+ * detail — it decides who is on the team. `career.year` is the year the coach is
+ * living in, and during an offseason it has ALREADY MOVED ON while the schedule
+ * in the save still belongs to the season just finished.
+ *
+ * So anything that wants to look back at a finished season has to say which
+ * season it means. Without this, opening the statistics screen in the offseason
+ * replayed last season's fixtures with next season's rosters and quietly rewrote
+ * the results a coach had just been congratulated for.
+ * ------------------------------------------------------------------------- */
+
+/** The season the fixture list in the save belongs to. */
+export function scheduleYear(career: HoopsCareer): number {
+  return career.stage === 'offseason' || career.stage === 'preseason'
+    ? career.year - 1
+    : career.year;
+}
+
 /**
  * A club's squad.
  *
@@ -45,12 +67,14 @@ export function parOf(career: HoopsCareer, teamId: string): number {
  * how a rival programme graduates its seniors, signs its class and comes back
  * different without a single byte being stored about it.
  */
-export function rosterFor(career: HoopsCareer, teamId: string): HoopsPlayer[] {
+export function rosterFor(
+  career: HoopsCareer, teamId: string, year = career.year,
+): HoopsPlayer[] {
   if (teamId === career.teamId) return career.roster;
   const team = worldTeam(teamId);
   return buildRoster(
-    `${teamId}:${career.seed}:${career.year}`,
-    career.seed + career.year,
+    `${teamId}:${career.seed}:${year}`,
+    career.seed + year,
     rosterOptionsFor(team.level, parOf(career, teamId)),
   );
 }
@@ -69,15 +93,17 @@ export function rosterFor(career: HoopsCareer, teamId: string): HoopsPlayer[] {
  * proper staff runs the right system, a bottom-half programme runs the third or
  * fourth best thing for its players, every year, deterministically.
  */
-export function schemeFor(career: HoopsCareer, teamId: string): ResolvedScheme {
-  const roster = rosterFor(career, teamId);
+export function schemeFor(
+  career: HoopsCareer, teamId: string, year = career.year,
+): ResolvedScheme {
+  const roster = rosterFor(career, teamId, year);
   const par = parOf(career, teamId);
   if (teamId === career.teamId) {
     return resolveScheme(career.offense, career.defense, roster, par);
   }
   const ranked = rankedSchemesFor(roster, par);
   const staff = worldTeam(teamId).coaching / 99;
-  const rng = new Rng(`hoops:aischeme:${career.seed}:${career.year}:${teamId}`);
+  const rng = new Rng(`hoops:aischeme:${career.seed}:${year}:${teamId}`);
   const reach = (len: number): number => {
     // 0 for a strong staff, up to a third of the way down the list for a poor one.
     const depth = Math.max(0, Math.round((1 - staff) * (len - 1) * 0.55));
@@ -102,26 +128,52 @@ export function coachingOf(career: HoopsCareer, teamId: string): number {
   return 0.94 + (t.coaching / 99) * 0.12;
 }
 
-export function simTeam(career: HoopsCareer, teamId: string): SimTeam {
+export function simTeam(
+  career: HoopsCareer, teamId: string, year = career.year,
+): SimTeam {
   return {
     id: teamId,
-    roster: rosterFor(career, teamId),
-    scheme: schemeFor(career, teamId),
+    // The coach's own side takes the floor with this week's practice on it.
+    roster: teamId === career.teamId ? matchRoster(career) : rosterFor(career, teamId, year),
+    scheme: schemeFor(career, teamId, year),
     coaching: coachingOf(career, teamId),
   };
 }
 
 /** Play a fixture with the fast engine and write the result into it. */
 export function simulateFixture(career: HoopsCareer, f: HoopsFixture): SimResult {
-  const info = LEVELS[career.level];
-  const r = simulateGame(simTeam(career, f.homeId), simTeam(career, f.awayId), {
-    seed: `${career.seed}:${career.year}:${f.id}`,
-    quarterSeconds: info.quarterSeconds,
-  });
+  const r = playFixture(career, f, career.year);
   f.homeScore = r.home.score;
   f.awayScore = r.away.score;
   f.played = true;
   return r;
+}
+
+/**
+ * Recover a finished fixture's box score, changing NOTHING.
+ *
+ * The fast engine is deterministic, so replaying a fixture with the squads that
+ * actually played it returns the game that actually happened — which is how a
+ * whole level's statistics are recovered from a save that stores none of them. It
+ * takes the year explicitly because the year is what decides the squads, and a
+ * caller looking back at a finished season must say which season it means.
+ */
+export function replayFixture(
+  career: HoopsCareer, f: HoopsFixture, year: number,
+): SimResult {
+  return playFixture(career, f, year);
+}
+
+function playFixture(career: HoopsCareer, f: HoopsFixture, year: number): SimResult {
+  const info = LEVELS[career.level];
+  return simulateGame(
+    simTeam(career, f.homeId, year),
+    simTeam(career, f.awayId, year),
+    {
+      seed: `${career.seed}:${year}:${f.id}`,
+      quarterSeconds: info.quarterSeconds,
+    },
+  );
 }
 
 /* ----------------------------------------------------------------- ratings */

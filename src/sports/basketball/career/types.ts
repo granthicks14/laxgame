@@ -8,6 +8,7 @@ import type { TransferTarget, PortalDeparture } from './portal';
 import type { ChallengeState } from './challenge';
 import type { PointAward } from './coach';
 import type { HoopsTier } from './difficulty';
+import type { PracticeArea } from './practice';
 
 /* ---------------------------------------------------------------------------
  * WHAT A BASKETBALL CAREER IS
@@ -45,6 +46,19 @@ export interface HoopsFixture {
   rivalry: boolean;
   /** Set for postseason games. */
   postseason?: PostseasonRound;
+  /**
+   * WHAT KIND OF GAME IT WAS, for the coach's own fixtures.
+   *
+   * The one thing in a career that is written down rather than derived, and for a
+   * reason that is the same argument as everywhere else: a recap describes a BOX
+   * SCORE, and the box score of a finished game cannot be recovered later. The
+   * squad has developed, the practice emphasis has changed, and a coach may have
+   * played the game himself — so re-simulating the fixture to recap it would
+   * produce a recap of a game nobody played. Twenty-odd short strings a season is
+   * the cheapest possible way to keep the recap honest, and it is thrown away with
+   * the schedule when the next season starts.
+   */
+  story?: { kind: string; headline: string; line: string };
 }
 
 export type PostseasonRound =
@@ -82,13 +96,45 @@ export interface HoopsStanding {
 export interface StatLine extends BoxLine {
   games: number;
   starts: number;
+  /**
+   * How many SEASONS fed this line. Zero on a season line, which is aggregating
+   * games rather than seasons; one per season on a career line. It is the only
+   * honest way to say "four seasons, 1,480 points" about a man who transferred
+   * in as a junior, because his CLASS says four years and his time here was two.
+   */
+  seasons: number;
 }
 
 export const emptyStatLine = (): StatLine => ({
-  games: 0, starts: 0, points: 0, fga: 0, fgm: 0, tpa: 0, tpm: 0, fta: 0, ftm: 0,
-  offReb: 0, defReb: 0, assists: 0, steals: 0, blocks: 0, turnovers: 0, fouls: 0,
-  seconds: 0,
+  games: 0, starts: 0, seasons: 0, points: 0, fga: 0, fgm: 0, tpa: 0, tpm: 0,
+  fta: 0, ftm: 0, offReb: 0, defReb: 0, assists: 0, steals: 0, blocks: 0,
+  turnovers: 0, fouls: 0, seconds: 0,
 });
+
+/** Per-game averages, which is how basketball says a statistic. */
+export interface Averages {
+  games: number;
+  ppg: number; rpg: number; apg: number; spg: number; bpg: number;
+  fgPct: number; tpPct: number; ftPct: number; topg: number; mpg: number;
+}
+
+export function averages(line: StatLine | undefined): Averages {
+  const g = Math.max(1, line?.games ?? 0);
+  const l = line ?? emptyStatLine();
+  return {
+    games: l.games,
+    ppg: l.points / g,
+    rpg: (l.offReb + l.defReb) / g,
+    apg: l.assists / g,
+    spg: l.steals / g,
+    bpg: l.blocks / g,
+    topg: l.turnovers / g,
+    mpg: l.seconds / g / 60,
+    fgPct: l.fga > 0 ? l.fgm / l.fga : 0,
+    tpPct: l.tpa > 0 ? l.tpm / l.tpa : 0,
+    ftPct: l.fta > 0 ? l.ftm / l.fta : 0,
+  };
+}
 
 /** One completed season, for the history screen. */
 export interface HoopsSeasonRecord {
@@ -123,6 +169,29 @@ export interface HoopsDeparture {
   reason: string;
 }
 
+/**
+ * A player the programme used to have.
+ *
+ * Everything else in a career is about who is here NOW — the roster, the needs,
+ * the development, the depth chart. Without this, a man's name left the save the
+ * day he graduated and a twenty-year dynasty could not tell you who the best
+ * player it ever had was. His career line is copied in as he goes, so it is
+ * final and it cannot drift.
+ */
+export interface Alumnus {
+  id: string;
+  name: string;
+  pos: string;
+  /** What he was rated the day he left. */
+  overall: number;
+  /** The year he left, and why. */
+  year: number;
+  reason: string;
+  /** Seasons in THIS programme, and everything he did in them. */
+  seasons: number;
+  line: StatLine;
+}
+
 export type SeasonStage =
   | 'preseason'
   | 'regular'
@@ -145,6 +214,12 @@ export interface HoopsCareer {
   /* --- what he runs ----------------------------------------------------- */
   offense: OffenseScheme;
   defense: DefenseScheme;
+  /**
+   * What the squad is working on this week. Worth a small bonus in the next game
+   * and a lean in the offseason's development; null means nobody is emphasising
+   * anything, which is a legitimate choice and the default.
+   */
+  practice: PracticeArea | null;
 
   /* --- the squad -------------------------------------------------------- */
   roster: HoopsPlayer[];
@@ -186,6 +261,8 @@ export interface HoopsCareer {
 
   /* --- the record ------------------------------------------------------- */
   history: HoopsSeasonRecord[];
+  /** Everybody who has played here and gone, best kept first once it fills up. */
+  alumni: Alumnus[];
   championships: number;
   careerWins: number;
   careerLosses: number;

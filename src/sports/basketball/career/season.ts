@@ -11,7 +11,8 @@ import { teamsAtLevel, worldTeam } from '../world';
 import type { HoopsGame } from '../Game';
 import type { HoopsConfig } from '../types';
 import {
-  applyAwards, coachLevel, newCoach, perksOf, seasonAward, type HoopsCoach,
+  applyAwards, coachLevel, logSeasonToJob, newCoach, perksOf, seasonAward, startJob,
+  type HoopsCoach,
 } from './coach';
 import {
   DEFAULT_TIER, TIERS, courtFeel, modsFor, type HoopsTier,
@@ -34,9 +35,14 @@ import {
   blankStandings, buildSeason, recordResult, rowFor,
 } from './schedule';
 import {
-  HOOPS_CAREER_VERSION, emptyStatLine,
-  type HoopsCareer, type HoopsCareerMode, type HoopsFixture, type StatLine,
+  HOOPS_CAREER_VERSION, averages, emptyStatLine,
+  type Averages, type HoopsCareer, type HoopsCareerMode, type HoopsFixture,
+  type StatLine,
 } from './types';
+import { recordAlumnus } from './records';
+import { matchRoster } from './practice';
+import { approachesFor, type Approach } from './interest';
+import { playedStory, simStory } from './story';
 import {
   SITUATIONS, acceptOffer, declineAll, evaluateSeason, expectationFor, generateOffers,
   newChallengeState, type JobOffer, type OfferKind, type SeasonVerdict,
@@ -102,6 +108,8 @@ export function createCareer(opts: NewCareerOptions): HoopsCareer {
     roster,
     season: {},
     careerStats: {},
+    alumni: [],
+    practice: null,
     stage: 'preseason',
     schedule: [],
     standings: blankStandings(team.level),
@@ -131,6 +139,8 @@ export function createCareer(opts: NewCareerOptions): HoopsCareer {
       )
       : null,
   };
+  // The first line on the résumé, opened the day he is hired.
+  startJob(career.coach, career.teamId, career.level, career.year);
   beginSeason(career);
   return career;
 }
@@ -196,8 +206,13 @@ export function simulateUserGame(career: HoopsCareer, f: HoopsFixture): SimResul
 
 /** Fold a result the coach was part of into his squad's statistics. */
 function absorb(career: HoopsCareer, f: HoopsFixture, r: SimResult): void {
-  const mine = f.homeId === career.teamId ? r.home : r.away;
+  const home = f.homeId === career.teamId;
+  const mine = home ? r.home : r.away;
   const five = new Set(starters(career.roster).map((p) => p.id));
+  f.story = simStory(r, home ? 'home' : 'away', {
+    yourAbbr: worldTeam(career.teamId).abbr,
+    theirAbbr: worldTeam(home ? f.awayId : f.homeId).abbr,
+  });
   for (const l of mine.lines) {
     const line = career.season[l.player.id] ?? (career.season[l.player.id] = emptyStatLine());
     addLine(line, l.line);
@@ -226,6 +241,10 @@ export function recordPlayedGame(career: HoopsCareer, f: HoopsFixture, game: Hoo
   recordResult(career.standings, f);
 
   const side = home ? 'home' : 'away';
+  f.story = playedStory(game, side, {
+    yourAbbr: worldTeam(career.teamId).abbr,
+    theirAbbr: worldTeam(home ? f.awayId : f.homeId).abbr,
+  });
   const five = new Set(starters(career.roster).map((p) => p.id));
   for (const p of game.played(side)) {
     const line = career.season[p.data.id] ?? (career.season[p.data.id] = emptyStatLine());
@@ -242,9 +261,11 @@ export function gameConfigFor(
   const info = LEVELS[career.level];
   const home = worldTeam(f.homeId);
   const away = worldTeam(f.awayId);
+  const squad = (id: string): HoopsPlayer[] =>
+    (id === career.teamId ? matchRoster(career) : rosterFor(career, id));
   return {
-    home: { team: home, roster: rosterFor(career, f.homeId) },
-    away: { team: away, roster: rosterFor(career, f.awayId) },
+    home: { team: home, roster: squad(f.homeId) },
+    away: { team: away, roster: squad(f.awayId) },
     humanSide,
     quarterSeconds: info.quarterSeconds,
     difficulty: difficultyFor(career),
@@ -431,22 +452,40 @@ export function runOffseason(career: HoopsCareer): OffseasonReport {
   const remaining = career.roster.filter((p) => !transferred.has(p.id));
   const turnover = rosterTurnover(remaining, career.level, `${career.seed}:${career.year}`, par);
 
+  /* Why each man is going, so it can be said once and used twice: on the
+   * offseason report, and on the wall. */
+  const reasonFor = new Map<string, string>();
+  for (const p of turnover.leaving) {
+    reasonFor.set(p.id, turnover.reasons.get(p.id) ?? 'Left the programme');
+  }
+  for (const d of outgoing.departures) reasonFor.set(d.id, d.text);
+
   career.lastDepartures = [
     ...turnover.leaving.map((p) => ({
       name: `${p.first} ${p.last}`,
       pos: p.pos,
       overall: p.overall,
-      reason: turnover.reasons.get(p.id) ?? 'Left the programme',
+      reason: reasonFor.get(p.id) ?? 'Left the programme',
     })),
     ...outgoing.departures.map((d) => ({
       name: d.name, pos: d.pos, overall: d.overall, reason: d.text,
     })),
   ];
 
-  /* 3. CAREER TOTALS SURVIVE THE DEPARTURE. */
+  /* 3. CAREER TOTALS SURVIVE THE DEPARTURE, AND SO DOES THE MAN.
+   *
+   * The career line has to be closed BEFORE he is written to the wall, because
+   * what goes on the wall is the finished line, not the one he is still adding to.
+   */
   for (const p of [...turnover.leaving, ...outgoing.left]) {
     const line = career.season[p.id];
     if (line) mergeCareer(career, p.id, line);
+  }
+  for (const p of [...turnover.leaving, ...outgoing.left]) {
+    recordAlumnus(
+      career, p.id, `${p.first} ${p.last}`, p.pos, p.overall,
+      reasonFor.get(p.id) ?? 'Left the programme',
+    );
   }
 
   career.roster = turnover.staying;
@@ -460,6 +499,8 @@ export function runOffseason(career: HoopsCareer): OffseasonReport {
     mods,
     season: career.season,
     games,
+    // A season spent emphasising one area of the game grows that area faster.
+    practice: career.practice,
   });
 
   /* 5. EVERY SEASON LINE BECOMES A CAREER LINE. */
@@ -482,6 +523,8 @@ export function runOffseason(career: HoopsCareer): OffseasonReport {
   });
   applyAwards(career.coach, awards);
   career.lastAwards = awards;
+  // The résumé line for the club he is at, so a multi-job career reads as one.
+  logSeasonToJob(career.coach, career.year, row.wins, row.losses, champion);
 
   /* 7. THE WORLD MOVES. */
   driftStanding(career, career.teamId, row.wins, row.losses, champion);
@@ -661,6 +704,7 @@ export function takeJob(career: HoopsCareer, offer: JobOffer): void {
   career.level = team.level;
   career.conferenceId = team.conferenceId;
   career.roster = roster;
+  startJob(career.coach, team.id, team.level, career.year);
   const best = bestSchemeFor(roster, team.par);
   career.offense = best.offense;
   career.defense = best.defense;
@@ -701,11 +745,67 @@ export function refuseJobs(career: HoopsCareer): string {
   return 'A year out of the game. The phone rings again in the spring.';
 }
 
+/**
+ * Take a job somebody else offered you, in a Dynasty.
+ *
+ * The coach keeps everything he earned and loses the club entirely. He inherits
+ * the squad that programme ACTUALLY HAS — derived from the world exactly as every
+ * rival's is, so the roster he walks into is the roster the tables have been
+ * telling him about all season, not a generated approximation of it. That is the
+ * honest version: a good job comes with good players, and a coach can read the
+ * standings before he says yes.
+ *
+ * Returns false if the offer is not one this career could accept, so a stale
+ * screen cannot teleport a coach across the pyramid.
+ */
+export function acceptApproach(career: HoopsCareer, approach: Approach): boolean {
+  if (career.mode !== 'dynasty') return false;
+  if (approach.teamId === career.teamId) return false;
+  if (!approachesFor(career).some((a) => a.teamId === approach.teamId)) return false;
+
+  const team = worldTeam(approach.teamId);
+  /* The squad as the world has it — the same call every table, every scouting
+   * screen and every simulated fixture has been making about this club. Copied,
+   * because from here on it is the coach's roster and he will change it. */
+  const roster = rosterFor(career, approach.teamId)
+    .map((p) => ({ ...p, attrs: { ...p.attrs } }));
+
+  career.teamId = team.id;
+  career.level = team.level;
+  career.conferenceId = team.conferenceId;
+  career.roster = roster;
+  startJob(career.coach, team.id, team.level, career.year);
+  const best = bestSchemeFor(roster, team.par);
+  career.offense = best.offense;
+  career.defense = best.defense;
+  /* THE SEASON STARTS OVER, not continues: he is a new club's coach, so the
+   * statistics, the markets and the squad's development report all belong to the
+   * job he just left. His CAREER totals and his wall of alumni do not — those are
+   * his. */
+  career.season = {};
+  career.recruiting = null;
+  career.market = [];
+  career.pitchesLeft = 0;
+  career.lastDevelopment = [];
+  career.lastDepartures = [];
+  career.portalOut = [];
+  career.practice = null;
+  /* He arrives in the MIDDLE OF AN OFFSEASON, so he gets that programme's
+   * offseason: its transfer window, its recruiting board, and its holes to fill.
+   * `startNextSeason` builds the schedule when he is done, exactly as it does for
+   * a coach who stayed — there is one path into a season, not two. */
+  openOffseasonMarkets(career);
+  career.stage = 'offseason';
+  return true;
+}
+
 function mergeCareer(career: HoopsCareer, id: string, line: StatLine): void {
   const into = career.careerStats[id] ?? (career.careerStats[id] = emptyStatLine());
   addLine(into, line);
   into.games += line.games;
   into.starts += line.starts;
+  // One more season in the programme, which is the only place that is counted.
+  if (line.games > 0) into.seasons += 1;
 }
 
 export function openOffseasonMarkets(career: HoopsCareer): void {
@@ -909,30 +1009,10 @@ function bestSeasonLine(career: HoopsCareer): string | null {
   return `${name} ${(line.points / Math.max(1, line.games)).toFixed(1)} ppg`;
 }
 
-/** Per-game averages, which is how basketball says a statistic. */
-export interface Averages {
-  games: number;
-  ppg: number; rpg: number; apg: number; spg: number; bpg: number;
-  fgPct: number; tpPct: number; ftPct: number; topg: number; mpg: number;
-}
-
-export function averages(line: StatLine | undefined): Averages {
-  const g = Math.max(1, line?.games ?? 0);
-  const l = line ?? emptyStatLine();
-  return {
-    games: l.games,
-    ppg: l.points / g,
-    rpg: (l.offReb + l.defReb) / g,
-    apg: l.assists / g,
-    spg: l.steals / g,
-    bpg: l.blocks / g,
-    topg: l.turnovers / g,
-    mpg: l.seconds / g / 60,
-    fgPct: l.fga > 0 ? l.fgm / l.fga : 0,
-    tpPct: l.tpa > 0 ? l.tpm / l.tpa : 0,
-    ftPct: l.fta > 0 ? l.ftm / l.fta : 0,
-  };
-}
+/* Averages live with the stat line itself, in ./types, so a screen can turn a
+ * line into per-game numbers without pulling in the whole season engine — and so
+ * the record book can do it without importing the module that imports it. */
+export { averages, type Averages } from './types';
 
 /** The squad's leaders, for the dashboard. */
 export function teamLeaders(career: HoopsCareer): {
