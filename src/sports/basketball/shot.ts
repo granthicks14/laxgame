@@ -60,10 +60,29 @@ export interface ShotInput {
   contestRating: number;
   /** True when the defender is between the shooter and the rim. */
   contestInLine: boolean;
+  /**
+   * How high the contesting hand actually got, 0..1. A defender standing flat is
+   * not a contest whatever his rating; one who left the floor on time and can
+   * reach the release is the real thing. This is what makes a closeout a RACE
+   * rather than a proximity check.
+   */
+  contestHand?: number;
+  /**
+   * How fast the defender is closing, in ft/s. A man flying at a shooter has not
+   * arrived yet — he is worth less than a man who is already there and set, and
+   * he is the reason a pump fake works.
+   */
+  contestClosing?: number;
   /** Speed the shooter was moving at, in ft/s: a runner is off balance. */
   moving: number;
   /** True when the shooter has a hand in his face from the side or behind. */
   fading: boolean;
+  /** The shooter's stamina, 0..100. Tired legs are short legs. */
+  fatigue?: number;
+  /** Multiplies what a contest takes off. From the difficulty tier. */
+  contestScale?: number;
+  /** Multiplies how harshly a bad release is punished. From the difficulty tier. */
+  timingBite?: number;
   /**
    * A flat edge on the shot, in percentage points of make chance. The home floor
    * is the only thing that sets it, and only in a career — an exhibition is
@@ -73,21 +92,49 @@ export interface ShotInput {
   edge?: number;
 }
 
-/** How wide this shooter's release window is. */
-export function releaseWindow(rating: number): number {
-  return WINDOW_MIN + (clamp(rating, 0, 99) / 99) * (WINDOW_MAX - WINDOW_MIN);
+/**
+ * How wide this shooter's release window is.
+ *
+ * TWO INPUTS. The RATING decides how much room a shooter is given — a career
+ * marksman hands you a target you can hit, a centre hands you a sliver — and the
+ * DIFFICULTY scales the whole thing, because the size of the window is the single
+ * thing a player feels most about how hard a game is. On Rookie it is half again
+ * as wide as the real one; on Legend it is two-thirds of it.
+ */
+export function releaseWindow(rating: number, scale = 1): number {
+  const own = WINDOW_MIN + (clamp(rating, 0, 99) / 99) * (WINDOW_MAX - WINDOW_MIN);
+  return own * clamp(scale, 0.4, 2);
 }
 
 /**
  * Turn a gather fraction into a release quality.
  * 1 at the centre of the window, 0 at its edge, negative outside it.
  */
-export function releaseQuality(gather: number, rating: number): number {
-  const half = releaseWindow(rating);
+export function releaseQuality(gather: number, rating: number, scale = 1): number {
+  const half = releaseWindow(rating, scale);
   const err = Math.abs(gather - RELEASE_CENTRE);
   if (err <= half) return 1 - err / half;
   // Outside the window: how badly, so a near miss is not the same as a heave.
   return -Math.min(1, (err - half) / 0.25);
+}
+
+/**
+ * WHAT A GOOD RELEASE IS WORTH, AND WHY IT DEPENDS ON THE SHOOTER.
+ *
+ * This is the number the whole complaint about shooting came down to. When a
+ * perfect release was worth the same to everybody, a centre with a 35 three-point
+ * rating shot 37% from the arc as long as the player timed it — which is an
+ * elite NBA percentage — and the ratings on the roster screen were decoration.
+ *
+ * A great shooter converts good timing into a made shot. A poor one does not:
+ * his mechanics are the problem, and hitting the middle of a window does not fix
+ * a flat release and a slow gather. So the VALUE of the release scales with the
+ * rating, on top of the rating's own flat contribution, and the gap between a
+ * marksman and a big man at the arc is about twenty points of percentage rather
+ * than the thirteen it was.
+ */
+function releaseValue(rating: number): number {
+  return 0.045 + (clamp(rating, 0, 99) / 99) * 0.115;
 }
 
 /**
@@ -125,12 +172,17 @@ export function makeChance(s: ShotInput): number {
   const skill = s.kind === 'layup' || s.kind === 'dunk' ? s.finishing : s.rating;
   p += ((clamp(skill, 0, 99) - 55) / 44) * 0.115;
 
-  // THE RELEASE. The largest single term, because it is the part the player is
-  // actually doing. A perfect release is worth a lot; a bad one is fatal. It
-  // applies at the free-throw line too — a free throw is a pure timing shot.
+  /* THE RELEASE. The largest single term, because it is the part the player is
+   * actually doing — but what it is WORTH depends on who is shooting. See
+   * `releaseValue`: good timing is how a shooter expresses his ability, not a
+   * substitute for having any. It applies at the free-throw line too, where a
+   * shot is pure timing.
+   *
+   * A bad release is punished harder on a harder tier, which is the other half of
+   * what a difficulty setting should mean in your hands. */
   p += s.release >= 0
-    ? s.release * 0.13 - 0.035
-    : s.release * 0.34;
+    ? s.release * releaseValue(skill) - 0.035
+    : s.release * 0.34 * clamp(s.timingBite ?? 1, 0.4, 2.2);
 
   /* THE CONTEST. A hand in the face is worth more than a body nearby, and a
    * defender who is actually between you and the rim is worth more again.
@@ -146,9 +198,23 @@ export function makeChance(s: ShotInput): number {
   p += s.edge ?? 0;
 
   if (s.kind !== 'freeThrow') {
-    const pressure = clamp(1 - s.contestDistance / 7.5, 0, 1);
+    /* FOUR THINGS MAKE A CONTEST, and only one of them is distance.
+     *
+     *   NEAR     how close he is, which is the start and not the end of it.
+     *   HAND     whether he actually got a hand up to the release. A man standing
+     *            flat two feet away is not contesting a jump shot; he is watching
+     *            one. This is what makes a closeout a race the offence can win.
+     *   LINE     between you and the rim, which is worth more than beside you.
+     *   ARRIVING a defender still flying at the shooter has not got there yet,
+     *            which is exactly why a pump fake beats a hard closeout.
+     */
+    const near = clamp(1 - s.contestDistance / 7.5, 0, 1);
+    const hand = clamp(s.contestHand ?? 1, 0, 1);
     const quality = 0.6 + (clamp(s.contestRating, 0, 99) / 99) * 0.8;
-    p -= pressure * pressure * 0.105 * quality * (s.contestInLine ? 1.3 : 0.85);
+    const arriving = clamp(1 - (s.contestClosing ?? 0) / 26, 0.62, 1);
+    const line = s.contestInLine ? 1.3 : 0.85;
+    const scale = clamp(s.contestScale ?? 1, 0.3, 2.4);
+    p -= near * near * (0.35 + hand * 0.65) * 0.105 * quality * line * arriving * scale;
     if (s.fading) p -= 0.02;
   }
 
@@ -156,6 +222,13 @@ export function makeChance(s: ShotInput): number {
   // works to get them.
   if (s.kind === 'jumper' || s.kind === 'three') {
     p -= clamp(s.moving / 14, 0, 1) * 0.05;
+  }
+
+  /* TIRED LEGS ARE SHORT LEGS. The fourth quarter is a different game, and a
+   * rotation is a decision with a cost. Small — five points of percentage at the
+   * point of exhaustion — because a tired shooter is worse, not helpless. */
+  if (s.fatigue !== undefined && s.kind !== 'freeThrow') {
+    p -= clamp(1 - s.fatigue / 100, 0, 1) * 0.055;
   }
 
   return clamp(p, 0.02, 0.97);

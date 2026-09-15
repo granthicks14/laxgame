@@ -1059,6 +1059,25 @@ export class HoopsGame {
     }
   }
 
+  /**
+   * HOW HIGH THE HAND GOT, 0..1.
+   *
+   * A defender standing flat two feet away is not contesting a jump shot; he is
+   * watching one. What makes a contest is a hand at the release point, and
+   * getting one there is a race — which is why a hard closeout beaten by a pump
+   * fake is a real thing that happens in this game now.
+   */
+  private contestHand(d: CourtPlayer | null, shooter: CourtPlayer, kind: ShotKind): number {
+    if (!d) return 0;
+    const releaseZ = releasePoint(shooter.x, shooter.y, kind).z + shooter.z;
+    const got = this.reach(d) - releaseZ;
+    // Reaching over the release is a full contest; a foot under it is nothing.
+    const height = clamp(1 + got / 1.6, 0, 1);
+    // And he has to be looking at it: a man running past has no hand up.
+    const rising = d.vz > 0.5 ? 1 : d.z > 0.5 ? 0.9 : 0.55;
+    return clamp(height * rising, 0, 1);
+  }
+
   /** Let go. This is where a possession is decided. */
   releaseShot(p: CourtPlayer): void {
     const kind = p.gatherKind ?? this.shotKindFor(p);
@@ -1070,7 +1089,7 @@ export class HoopsGame {
     const rating = kind === 'three' ? p.data.attrs.three
       : kind === 'jumper' ? p.data.attrs.shooting
         : p.data.attrs.finishing;
-    const release = releaseQuality(gather, rating);
+    const release = releaseQuality(gather, rating, this.cfg.difficulty.window);
 
     const { defender, distance } = this.contestOn(p);
     const rim = attackRim(p.side);
@@ -1136,8 +1155,13 @@ export class HoopsGame {
         ? (defender.data.attrs.perimeterD + defender.data.attrs.interiorD) / 2
         : 0,
       contestInLine: inLine,
+      contestHand: this.contestHand(defender, p, kind),
+      contestClosing: defender ? Math.hypot(defender.vx, defender.vy) : 0,
       moving: Math.hypot(p.vx, p.vy),
       fading: defender ? distance < 4 && !inLine : false,
+      fatigue: p.stamina,
+      contestScale: this.cfg.difficulty.contest,
+      timingBite: this.cfg.difficulty.timingBite,
       edge: p.side === 'home' ? this.cfg.homeEdge ?? 0 : 0,
     };
 
@@ -1535,7 +1559,11 @@ export class HoopsGame {
         return;
       }
       // Never leave him standing there for ever.
-      if (this.phaseTimer < -6) this.shootFreeThrow(shooter, RELEASE_CENTRE - releaseWindow(shooter.data.attrs.freeThrow) * 1.4);
+      if (this.phaseTimer < -6) {
+        this.shootFreeThrow(shooter,
+          RELEASE_CENTRE - releaseWindow(shooter.data.attrs.freeThrow,
+            this.cfg.difficulty.window) * 1.4);
+      }
       stepHeld(this.ball, shooter.x, shooter.y, 6.4);
       return;
     }
@@ -1550,7 +1578,7 @@ export class HoopsGame {
     shooter.gather = 0;
     if (this.freeThrows) this.freeThrows.taken = true;
     const rating = shooter.data.attrs.freeThrow;
-    const release = releaseQuality(gather, rating);
+    const release = releaseQuality(gather, rating, this.cfg.difficulty.window);
     const from = releasePoint(shooter.x, shooter.y, 'freeThrow');
     const input: ShotInput = {
       kind: 'freeThrow',
@@ -1563,6 +1591,7 @@ export class HoopsGame {
       contestInLine: false,
       moving: 0,
       fading: false,
+      timingBite: this.cfg.difficulty.timingBite,
     };
     const sol = solveShot(input, shooter.side, from, this.rng);
     launchAt(this.ball, from, sol.target, sol.extraArc);
@@ -2116,7 +2145,7 @@ export class HoopsGame {
     const rating = kind === 'three' ? p.data.attrs.three
       : kind === 'jumper' ? p.data.attrs.shooting
         : p.data.attrs.finishing;
-    const half = releaseWindow(rating);
+    const half = releaseWindow(rating, this.cfg.difficulty.window);
     return {
       active: true,
       gather: clamp(p.gather, 0, 1.28),
@@ -2145,8 +2174,15 @@ export class HoopsGame {
         ? (defender.data.attrs.perimeterD + defender.data.attrs.interiorD) / 2 : 0,
       contestInLine: defender
         ? floorDist(defender.x, defender.y, rim.x, rim.y) < dist : false,
+      // The AI reads a contest exactly as the shot model resolves one. If it did
+      // not, it would keep taking shots it has no business taking — and worse,
+      // pass up open ones because it thought a flat-footed man was a contest.
+      contestHand: this.contestHand(defender, p, kind),
+      contestClosing: defender ? Math.hypot(defender.vx, defender.vy) : 0,
       moving: Math.hypot(p.vx, p.vy),
       fading: false,
+      fatigue: p.stamina,
+      contestScale: this.cfg.difficulty.contest,
     });
   }
 

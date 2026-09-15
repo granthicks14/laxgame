@@ -133,6 +133,93 @@ const rushedThree = shotRow('open three, rushed', 'three', 24, -0.4);
 const freeThrow = shotRow('free throw', 'freeThrow', 15, 1, 78);
 
 console.log();
+
+/* ------------------------------------------------- does the rating matter? */
+
+console.log('WHO IS SHOOTING  (open three from 24ft)\n');
+console.log('  3PT rating   perfect   good(.6)   ok(.2)   rushed(-.4)');
+const byRating = (rating: number): number[] =>
+  [1, 0.6, 0.2, -0.4].map((release) => makeChance({
+    kind: 'three', distance: 24, release, rating, finishing: rating,
+    contestDistance: 99, contestRating: 0, contestInLine: false,
+    moving: 0, fading: false,
+  }));
+const marksman = byRating(92);
+const average = byRating(62);
+const bigMan = byRating(34);
+for (const [label, row] of [
+  ['92 marksman', marksman], ['62 average', average], ['34 big man', bigMan],
+] as [string, number[]][]) {
+  console.log(`  ${label.padEnd(13)}${row.map((n) => fmt(n).padStart(8)).join(' ')}`);
+}
+console.log();
+
+check('an elite shooter is far better than a big man, perfectly timed',
+  marksman[0] - bigMan[0] > 0.17,
+  `${fmt(marksman[0])} v ${fmt(bigMan[0])} — ${((marksman[0] - bigMan[0]) * 100).toFixed(0)} points`);
+check('perfect timing does not turn a big man into a shooter',
+  bigMan[0] < 0.35, `${fmt(bigMan[0])}`);
+check('and a marksman who mistimes it is still beaten by his own release',
+  marksman[3] < marksman[0] - 0.18, `${fmt(marksman[0])} -> ${fmt(marksman[3])}`);
+check('timing matters more to a good shooter than a bad one',
+  (marksman[0] - marksman[2]) > (bigMan[0] - bigMan[2]),
+  `${((marksman[0] - marksman[2]) * 100).toFixed(1)} v ${((bigMan[0] - bigMan[2]) * 100).toFixed(1)} points of swing`);
+check('every rating band is ordered at every release',
+  [0, 1, 2, 3].every((i) => marksman[i] > average[i] && average[i] > bigMan[i]));
+
+/* ------------------------------------------------------- what a contest is */
+
+console.log('WHAT A CONTEST COSTS  (open three from 24ft, 70 rating)\n');
+const contestRow = (
+  label: string, distance: number, hand: number, closing: number, inLine: boolean,
+): number => {
+  const p = makeChance({
+    kind: 'three', distance: 24, release: 1, rating: 70, finishing: 70,
+    contestDistance: distance, contestRating: 75, contestInLine: inLine,
+    contestHand: hand, contestClosing: closing, moving: 0, fading: false,
+  });
+  console.log(`  ${label.padEnd(30)} ${fmt(p).padStart(7)}`);
+  return p;
+};
+const wideOpen = contestRow('nobody within ten feet', 99, 0, 0, false);
+const flatFooted = contestRow('a man two feet away, flat', 2, 0, 0, true);
+const handUp = contestRow('same man, hand up', 2, 1, 0, true);
+const flyingAt = contestRow('closing hard, hand up', 2, 1, 22, true);
+const sideOn = contestRow('hand up, but beside not in front', 2, 1, 0, false);
+console.log();
+
+check('a hand up is most of what a contest is',
+  flatFooted - handUp > 0.04, `${fmt(flatFooted)} -> ${fmt(handUp)}`);
+check('a defender still flying at you has not arrived',
+  flyingAt > handUp + 0.015, `${fmt(handUp)} set v ${fmt(flyingAt)} closing`);
+check('and being in the line of the shot is worth more than being beside it',
+  sideOn > handUp, `${fmt(handUp)} in line v ${fmt(sideOn)} beside`);
+check('a wide open three is a much better shot than a contested one',
+  wideOpen - handUp > 0.08, `${fmt(wideOpen)} v ${fmt(handUp)}`);
+
+/* AND A CONTEST BITES HARDER ON A HARDER TIER, which is one of the things a
+ * difficulty setting is supposed to mean and did not. */
+{
+  const at = (scale: number): number => makeChance({
+    kind: 'three', distance: 24, release: 1, rating: 70, finishing: 70,
+    contestDistance: 2, contestRating: 75, contestInLine: true,
+    contestHand: 1, contestClosing: 0, moving: 0, fading: false,
+    contestScale: scale,
+  });
+  const soft = at(DIFFICULTIES.rookie.contest);
+  const hard = at(DIFFICULTIES.legend.contest);
+  console.log(`  the same shot on Rookie ${fmt(soft)}, on Legend ${fmt(hard)}\n`);
+  check('a contest costs more than twice as much on Legend as on Rookie',
+    (wideOpen - hard) > (wideOpen - soft) * 2,
+    `${((wideOpen - soft) * 100).toFixed(1)} v ${((wideOpen - hard) * 100).toFixed(1)} points`);
+}
+check('but an elite shooter can still make a contested one',
+  makeChance({
+    kind: 'three', distance: 24, release: 1, rating: 94, finishing: 94,
+    contestDistance: 2, contestRating: 75, contestInLine: true,
+    contestHand: 1, contestClosing: 0, moving: 0, fading: false,
+  }) > 0.3, 'a 94 shooter, hand in his face');
+
 check('an open layup is the best shot on the floor',
   openLayup > openMid && openLayup > openThree, fmt(openLayup));
 check('a mid-range jumper beats a three on percentage',
