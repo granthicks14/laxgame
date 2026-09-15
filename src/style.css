@@ -1305,6 +1305,7 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
   .grid-teams { grid-template-columns: 1fr; }
   .tbtns { grid-template-columns: repeat(2, 70px); grid-template-rows: repeat(2, 70px); gap: 9px; }
   .tbtn--screen { bottom: calc(var(--safe-b) + 178px); width: 70px; }
+  .tbtn--timeout { bottom: calc(var(--safe-b) + 226px); width: 62px; }
   .hint-strip { display: none; }
 }
 
@@ -1647,6 +1648,39 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
   white-space: nowrap;
 }
 .hoop-bonus:empty { display: none; }
+
+/* Five pips a side. A coach reads how many he has left the way he reads the
+   shot clock: without stopping to think about it. */
+.hoop-timeouts {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.hoop-timeouts:empty { display: none; }
+
+/* The timeout button sits ABOVE the screen call, which is itself above the
+   thumb cluster. It is not a play, it is a decision — and a decision must never
+   be one thumb-slip away from a shot. It dims itself when the rules will not
+   allow one, so it never does nothing when pressed without saying why. */
+.tbtn--timeout {
+  position: absolute;
+  right: calc(var(--safe-r) + 14px);
+  bottom: calc(var(--safe-b) + 238px);
+  /* A THUMB'S SIZE, like every other control. It was 56x36 — small enough that
+   * the phone suite caught it, which is exactly what that check is for: a button
+   * a thumb misses is worse than no button, because the player thinks he called
+   * a timeout and finds out he did not when the run reaches twelve. */
+  width: 64px;
+  height: 44px;
+  border-radius: 22px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  border-color: rgba(230, 200, 120, 0.5);
+  pointer-events: auto;
+}
+.tbtn--timeout.is-dim { opacity: 0.3; }
 
 .hoop-banner {
   position: absolute;
@@ -2179,4 +2213,282 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
   .factor { flex-wrap: wrap; }
   .factor__label { min-width: 88px; }
   .factor__note { flex-basis: 100%; }
+}
+
+/* ===========================================================================
+ * THE BASKETBALL BROADCAST
+ * ===========================================================================
+ * The cards that appear around a game rather than in it: the lineups before the
+ * tip, the quarter-by-quarter sheet at a break, the plate on a free throw and
+ * the one moment a season turns on.
+ *
+ * Two rules hold all of them together. They are BUILT OUT OF THE SCOREBOARD —
+ * same display face, same letter-spacing, same hard 2px borders and offset
+ * shadow — so a card reads as part of the same broadcast rather than as a
+ * dialog that wandered in from the menus. And they are all `pointer-events:
+ * auto` on the backdrop, because every one of them dismisses on a tap.
+ * ======================================================================== */
+
+.bcast {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--safe-t) + 12px) 12px calc(var(--safe-b) + 12px);
+  background: rgba(6, 8, 12, 0.82);
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.bcast.is-on { opacity: 1; }
+
+/* While a card is up it is the only thing talking. */
+.game.has-beat .hoop-banner,
+.game.has-beat .hoop-ticker,
+.game.has-beat .bcast-ft { opacity: 0; }
+
+.bcast__inner {
+  width: min(100%, 560px);
+  max-height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  text-align: center;
+}
+
+.bcast__kicker {
+  font-family: var(--display);
+  font-size: clamp(13px, 3.4vw, 17px);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.bcast__hint {
+  font-family: var(--display);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.bcast__star {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------------- the lineups */
+
+.bcast__fives {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+.bcast__at {
+  align-self: center;
+  font-family: var(--display);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+.bcast-five {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 7px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.5);
+}
+.bcast-five__badge {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #fff;
+  padding: 2px 7px;
+  border: 2px solid;
+}
+.bcast-five__club {
+  font-family: var(--display);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  line-height: 1.2;
+}
+.bcast-five__list { width: 100%; display: flex; flex-direction: column; gap: 2px; }
+
+/* Each man slides in on his own beat, oldest trick in sports television and the
+   reason a lineup card reads as an announcement rather than as a list. */
+.bcast-five__man {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 3px;
+  font-size: 11px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  opacity: 0;
+  transform: translateY(5px);
+  animation: bcastIn 220ms ease forwards;
+}
+.bcast-five__man:last-child { border-bottom: 0; }
+.bcast-five__pos {
+  flex: 0 0 22px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--accent);
+}
+.bcast-five__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bcast-five__ovr { flex: 0 0 auto; color: var(--text-2); font-size: 11px; }
+
+@keyframes bcastIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* -------------------------------------------------------- the quarter sheet */
+
+.bcast-sheet {
+  width: 100%;
+  padding: 8px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.5);
+}
+.bcast-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 2px;
+  border-bottom: 1px solid var(--line);
+}
+.bcast-line:last-child { border-bottom: 0; }
+.bcast-line--head { color: var(--muted); }
+.bcast-line.is-lead .bcast-line__t { color: var(--accent); }
+.bcast-line__badge {
+  flex: 0 0 42px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  padding: 1px 0;
+  border: 2px solid;
+  text-align: center;
+}
+.bcast-line__badge--blank { background: none; border-color: transparent; color: var(--muted); }
+.bcast-line__q {
+  flex: 1 1 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: center;
+}
+.bcast-line__t {
+  flex: 0 0 38px;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* ---------------------------------------------------------- the free throw */
+
+.bcast-ft {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-b) + 74px);
+  z-index: 5;
+  pointer-events: none;
+  padding: 5px 13px;
+  text-align: center;
+  background: rgba(9, 13, 18, 0.88);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  opacity: 0;
+  transform: translate(-50%, 6px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.bcast-ft.is-on { opacity: 1; transform: translate(-50%, 0); }
+.bcast-ft__name {
+  font-family: var(--display);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.bcast-ft__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.bcast-ft__pct { font-family: var(--mono); font-size: 13px; color: var(--text-2); }
+.bcast-ft__count { font-family: var(--mono); color: var(--accent); }
+
+/* --------------------------------------------------------- the big moment */
+
+/* The one flourish in the game. It is loud on purpose and it happens at most
+   once or twice a season, which is what buys it the right to be loud. */
+.bcast-moment {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  z-index: 8;
+  pointer-events: none;
+  padding: 10px 22px;
+  text-align: center;
+  background: var(--accent);
+  border: 3px solid #fff3cc;
+  box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.55);
+  color: var(--accent-ink);
+  opacity: 0;
+  transform: translate(-50%, 0) scale(0.6) rotate(-2deg);
+  transition: opacity 120ms ease, transform 320ms cubic-bezier(0.16, 1.6, 0.36, 1);
+}
+.bcast-moment.is-on { opacity: 1; transform: translate(-50%, 0) scale(1) rotate(-2deg); }
+.bcast-moment--winner { background: #7ad151; border-color: #dcffc9; }
+.bcast-moment--tie { background: #4a9be8; border-color: #cfe6ff; color: #04121f; }
+.bcast-moment__title {
+  font-family: var(--display);
+  font-size: clamp(20px, 6vw, 38px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+.bcast-moment__who {
+  font-family: var(--display);
+  font-size: clamp(13px, 3.6vw, 19px);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+.bcast-moment__detail {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+/* A phone has one thumb's worth of width: the two lineups stack. */
+@media (max-width: 460px) {
+  .bcast__fives { flex-direction: column; gap: 6px; }
+  .bcast__at { display: none; }
+  .bcast-five { flex-direction: row; align-items: flex-start; gap: 8px; }
+  .bcast-five__list { flex: 1 1 auto; }
 }

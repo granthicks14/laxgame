@@ -1,6 +1,7 @@
 import { h } from '../../../dom';
 import type { App, Screen } from '../../../App';
 import { screenEl, topbar, panel, panelFlush, segmented } from '../../../components';
+import { GAME_LENGTHS, type GameLengthKey } from '../../../../sports/basketball/tuning';
 import { LEVELS, LEVEL_ORDER, type HoopsLevel } from '../../../../sports/basketball/levels';
 import {
   IDENTITY_LABEL, conferencesAt, rankedAtLevel, programmeBlurb, worldTeam,
@@ -41,6 +42,8 @@ export class DynastyStartScreen implements Screen {
   private level: HoopsLevel = 'd2';
   private teamId: string;
   private tier: HoopsTier = 'standard';
+  /** 'default' means the tier's own game length, which is the honest choice. */
+  private length: GameLengthKey | 'default' = 'default';
   private body!: HTMLElement;
 
   constructor(private app: App) {
@@ -114,6 +117,20 @@ export class DynastyStartScreen implements Screen {
           text: 'It changes what you can afford and who you can sign. It never gives a '
             + 'rival programme a rating it did not earn.' })),
 
+      panel('Game length',
+        segmented<GameLengthKey | 'default'>(
+          [{ value: 'default', label: 'The level' },
+            ...(Object.keys(GAME_LENGTHS) as GameLengthKey[])
+              .map((k) => ({ value: k, label: GAME_LENGTHS[k].label }))],
+          this.length, (v) => { this.length = v; this.paint(); }, true),
+        h('div', { class: 'small',
+          text: this.length === 'default'
+            ? `${LEVELS[this.level].name} plays ${quarterText(LEVELS[this.level].quarterSeconds)}.`
+            : GAME_LENGTHS[this.length].blurb }),
+        h('div', { class: 'tiny',
+          text: 'The whole league plays the same length you do, so a scoring average '
+            + 'means the same thing on the leader board as it does on your own squad.' })),
+
       panel(null, bigButton('Take the job',
         `${team.city} · ${LEVELS[this.level].short} · ${TIERS[this.tier].name}`,
         () => this.begin())),
@@ -123,7 +140,10 @@ export class DynastyStartScreen implements Screen {
   private begin(): void {
     deleteHoopsCareer('dynasty');
     const career = createCareer({
-      mode: 'dynasty', teamId: this.teamId, tier: this.tier,
+      mode: 'dynasty',
+      teamId: this.teamId,
+      tier: this.tier,
+      gameLength: this.length === 'default' ? null : this.length,
     });
     saveHoopsCareer(career);
     this.app.replace((a) => new HoopsCareerHub(a, career));
@@ -240,4 +260,11 @@ export class ChallengeStartScreen implements Screen {
     saveHoopsCareer(career);
     this.app.replace((a) => new HoopsCareerHub(a, career));
   }
+}
+
+/** "4 x 3:30" from a number of seconds, which is how a game length is said. */
+function quarterText(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const sec = seconds % 60;
+  return `4 x ${m}:${String(sec).padStart(2, '0')}`;
 }

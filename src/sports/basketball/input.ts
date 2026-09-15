@@ -18,6 +18,8 @@ import type { RawInput } from '../../input/Input';
  *                   or a step-back that buys the space to shoot over him.
  *   SCREEN          call a team-mate up to set one.
  *   SWITCH          take the defender nearest the ball.
+ *   TIMEOUT         stop a run. Only on a dead ball or with the ball in hand,
+ *                   which is the real rule, and there are only five of them.
  *
  * The left hand moves and sprints, the right hand acts — the same split lacrosse
  * uses, so a player who has learned one is not starting from nothing.
@@ -25,7 +27,7 @@ import type { RawInput } from '../../input/Input';
 
 export const BASKETBALL_CONTROLS: ControlScheme = {
   sport: 'basketball',
-  touch: ['pass', 'shoot', 'cross', 'switch', 'screen'],
+  touch: ['pass', 'shoot', 'cross', 'switch', 'screen', 'timeout'],
   hold: ['shoot'],
   actions: [
     { id: 'moveUp', label: 'Move up', hint: 'Left hand', group: 'move' },
@@ -38,6 +40,7 @@ export const BASKETBALL_CONTROLS: ControlScheme = {
     { id: 'cross', label: 'Crossover', hint: 'Beat your man, or step back', group: 'action' },
     { id: 'screen', label: 'Call screen', hint: 'Bring a big man up to set one', group: 'action' },
     { id: 'switch', label: 'Switch player', hint: 'Take the man on the ball', group: 'action' },
+    { id: 'timeout', label: 'Timeout', hint: 'Stop a run and rest your five', group: 'action' },
     { id: 'pause', label: 'Pause', hint: 'Menu, controls and the box score', group: 'system' },
   ],
   defaults: {
@@ -51,6 +54,7 @@ export const BASKETBALL_CONTROLS: ControlScheme = {
     cross: ['KeyL', 'KeyE'],
     screen: ['KeyI'],
     switch: ['KeyO', 'Tab'],
+    timeout: ['KeyT'],
     pause: ['Escape', 'KeyP'],
   },
 };
@@ -68,12 +72,15 @@ export interface HoopsInput {
   crossPressed: boolean;
   screenPressed: boolean;
   switchPressed: boolean;
+  /** Ask for a timeout. The engine decides whether one can be had. */
+  timeoutPressed: boolean;
 }
 
 export const neutralHoopsInput = (): HoopsInput => ({
   moveX: 0, moveY: 0, sprint: false,
   passPressed: false, shootHeld: false, shootReleased: false,
   crossPressed: false, screenPressed: false, switchPressed: false,
+  timeoutPressed: false,
 });
 
 export function hoopsInput(raw: RawInput): HoopsInput {
@@ -87,5 +94,6 @@ export function hoopsInput(raw: RawInput): HoopsInput {
     crossPressed: raw.pressed.has('cross'),
     screenPressed: raw.pressed.has('screen'),
     switchPressed: raw.pressed.has('switch'),
+    timeoutPressed: raw.pressed.has('timeout'),
   };
 }

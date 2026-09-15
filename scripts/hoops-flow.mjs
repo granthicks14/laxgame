@@ -32,6 +32,25 @@ async function newPage(browser, opts = {}) {
   return { ctx, page };
 }
 
+
+/**
+ * PAST THE LINEUP CARD.
+ *
+ * Every basketball game now opens on the starting fives, which hold the clock
+ * until somebody presses something. A suite is somebody: it presses the same key
+ * a player would, and then it is in a live game. Waiting the card out would work
+ * too, and would add four seconds to every game in every suite.
+ */
+async function pastTheLineups(page) {
+  const card = page.locator('.bcast--lineups');
+  if (await card.count()) {
+    await page.waitForTimeout(200);
+    await page.keyboard.press('Escape');
+    await card.waitFor({ state: 'detached', timeout: 6000 });
+  }
+  await page.waitForTimeout(120);
+}
+
 const menu = (page, label) =>
   page.locator('.menu-btn__label').filter({ hasText: label }).first().click();
 
@@ -101,6 +120,10 @@ async function desktop(browser) {
   check('the setup screen names both clubs',
     await page.locator('.club-line__name').count() >= 2);
   await page.getByRole('button', { name: /Tip off \(home\)/i }).click();
+  check('a game opens on the starting fives',
+    await page.locator('.bcast--lineups .bcast-five__man').count() === 10,
+    `${await page.locator('.bcast--lineups .bcast-five__man').count()} names`);
+  await pastTheLineups(page);
   await page.waitForTimeout(1400);
 
   const s0 = await state(page);
@@ -309,6 +332,7 @@ async function phone(browser) {
   await page.locator('.menu-btn__label').filter({ hasText: 'Play Now' }).first().tap();
   await page.waitForTimeout(350);
   await page.getByRole('button', { name: /Tip off \(home\)/i }).tap();
+  await pastTheLineups(page);
   await page.waitForTimeout(1400);
 
   check('the game runs on a phone', (await state(page))?.players === 10);
@@ -316,7 +340,8 @@ async function phone(browser) {
   check('the ball is on screen on a phone', cam.ballOnScreen, `${cam.viewX.toFixed(0)}x${cam.viewY.toFixed(0)}ft`);
 
   const touch = await page.locator('.tbtn').count();
-  check('every touch control is present', touch === 5, `${touch} buttons`);
+  // Stick aside: pass, shoot, crossover, switch, screen and the timeout.
+  check('every touch control is present', touch === 6, `${touch} buttons`);
   const boxes = await page.evaluate(() => [...document.querySelectorAll('.tbtn')].map((b) => {
     const r = b.getBoundingClientRect();
     return { w: Math.round(r.width), h: Math.round(r.height), x: Math.round(r.x), y: Math.round(r.y) };

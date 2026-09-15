@@ -64,6 +64,7 @@ export function loadHoopsCareer(mode: HoopsCareerMode): HoopsCareer | null {
   if (!Array.isArray(c.history)) c.history = [];
   if (!Array.isArray(c.alumni)) c.alumni = [];
   if (c.practice === undefined) c.practice = null;
+  if (c.gameLength === undefined) c.gameLength = null;
   if (!c.careerStats) c.careerStats = {};
   if (!c.season) c.season = {};
   return c;

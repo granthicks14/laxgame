@@ -9,6 +9,7 @@ import type { ChallengeState } from './challenge';
 import type { PointAward } from './coach';
 import type { HoopsTier } from './difficulty';
 import type { PracticeArea } from './practice';
+import type { GameLengthKey } from '../tuning';
 
 /* ---------------------------------------------------------------------------
  * WHAT A BASKETBALL CAREER IS
@@ -220,6 +221,16 @@ export interface HoopsCareer {
    * anything, which is a legitimate choice and the default.
    */
   practice: PracticeArea | null;
+  /**
+   * How long a game is, for this career.
+   *
+   * null means the tier's own length, which is the honest default — a high school
+   * game is shorter than a professional one and the level says so. A coach who
+   * wants longer games gets them, AND THE WHOLE LEAGUE PLAYS THEM: a coach on
+   * five-minute quarters while the league simulates three-and-a-half would see his
+   * own men at the top of every leader board for no reason but the clock.
+   */
+  gameLength: GameLengthKey | null;
 
   /* --- the squad -------------------------------------------------------- */
   roster: HoopsPlayer[];

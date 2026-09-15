@@ -24,7 +24,7 @@ import {
 } from './playoffs';
 import {
   bestPlayer, coachingOf, driftLeague, driftStanding, expectedWinPct, inheritedRoster,
-  parOf, rosterFor, schemeFor, simTeam, standingOf,
+  parOf, quarterSecondsFor, rosterFor, schemeFor, simTeam, standingOf,
 } from './league';
 import { computeNeeds, type Incoming } from './needs';
 import {
@@ -42,6 +42,7 @@ import {
 import { recordAlumnus } from './records';
 import { matchRoster } from './practice';
 import { approachesFor, type Approach } from './interest';
+import type { GameLengthKey } from '../tuning';
 import { playedStory, simStory } from './story';
 import {
   SITUATIONS, acceptOffer, declineAll, evaluateSeason, expectationFor, generateOffers,
@@ -75,6 +76,8 @@ export interface NewCareerOptions {
   /** Challenge only: how far the first job sits below its peers. */
   hole?: number;
   coach?: HoopsCoach;
+  /** Null, or the default for the level, is the honest choice. */
+  gameLength?: GameLengthKey | null;
 }
 
 export function createCareer(opts: NewCareerOptions): HoopsCareer {
@@ -110,6 +113,7 @@ export function createCareer(opts: NewCareerOptions): HoopsCareer {
     careerStats: {},
     alumni: [],
     practice: null,
+    gameLength: opts.gameLength ?? null,
     stage: 'preseason',
     schedule: [],
     standings: blankStandings(team.level),
@@ -185,10 +189,9 @@ export function advanceLeague(career: HoopsCareer): void {
 }
 
 function simulate(career: HoopsCareer, f: HoopsFixture): SimResult {
-  const info = LEVELS[career.level];
   const r = simulateGame(simTeam(career, f.homeId), simTeam(career, f.awayId), {
     seed: `${career.seed}:${career.year}:${f.id}`,
-    quarterSeconds: info.quarterSeconds,
+    quarterSeconds: quarterSecondsFor(career),
   });
   f.homeScore = r.home.score;
   f.awayScore = r.away.score;
@@ -258,7 +261,6 @@ export function recordPlayedGame(career: HoopsCareer, f: HoopsFixture, game: Hoo
 export function gameConfigFor(
   career: HoopsCareer, f: HoopsFixture, humanSide: 'home' | 'away' | null,
 ): HoopsConfig {
-  const info = LEVELS[career.level];
   const home = worldTeam(f.homeId);
   const away = worldTeam(f.awayId);
   const squad = (id: string): HoopsPlayer[] =>
@@ -267,7 +269,7 @@ export function gameConfigFor(
     home: { team: home, roster: squad(f.homeId) },
     away: { team: away, roster: squad(f.awayId) },
     humanSide,
-    quarterSeconds: info.quarterSeconds,
+    quarterSeconds: quarterSecondsFor(career),
     difficulty: difficultyFor(career),
     seed: hashSeed(`${career.seed}:${career.year}:${f.id}`),
     label: f.postseason ? f.postseason : `Game ${career.schedule.indexOf(f) + 1}`,
@@ -350,10 +352,9 @@ export function advanceBracket(career: HoopsCareer): void {
 }
 
 export function simulatePostseasonGame(career: HoopsCareer, f: HoopsFixture): SimResult {
-  const info = LEVELS[career.level];
   const r = simulateGame(simTeam(career, f.homeId), simTeam(career, f.awayId), {
     seed: `${career.seed}:${career.year}:${f.id}`,
-    quarterSeconds: info.quarterSeconds,
+    quarterSeconds: quarterSecondsFor(career),
   });
   f.homeScore = r.home.score;
   f.awayScore = r.away.score;

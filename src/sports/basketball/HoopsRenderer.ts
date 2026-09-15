@@ -5,6 +5,7 @@ import {
   COURT_MARGIN, CourtLayer, LIFT, drawBall, drawCourtPlayer, drawHoop, sortForDraw,
   type Jersey,
 } from './render';
+import { CrowdFlashes } from './arena';
 import type { HoopsGame } from './Game';
 
 /* ---------------------------------------------------------------------------
@@ -52,6 +53,22 @@ export class HoopsRenderer {
   }
 
   /**
+   * WHOSE BUILDING THIS IS.
+   *
+   * The home club decides the room: the crowd's colours, the mark at centre
+   * court, the name along the baseline and the name on the signage band. A game
+   * played at a blue blood should not look like the same gym as one played at a
+   * bottom-half programme, and attendance is how that is said — a full house is
+   * a wall of colour, a poor one is rows of empty seats.
+   */
+  setVenue(v: {
+    home: Jersey; away: Jersey; arenaName: string; homeAbbr: string; club: string;
+    seed: string; attendance: number;
+  }): void {
+    this.floor.setVenue(v);
+  }
+
+  /**
    * How tall the scoreboard is, in CSS pixels. The court stands upright, so the
    * basket and the score want the same piece of screen; the camera settles it by
    * dropping the floor rather than by moving the score somewhere useless.
@@ -73,12 +90,15 @@ export class HoopsRenderer {
 
   private cssW = 0;
 
-  /** A made basket: flash the net and shake the camera. */
+  /** A made basket: flash the net, shake the camera, and wake the building up. */
   celebrate(side: Side, power: number): void {
     this.swish = 1;
     this.swishSide = side;
     this.cam.punch(power);
+    this.crowd.stir(clamp(power * 0.7, 0.3, 2));
   }
+
+  private crowd = new CrowdFlashes();
 
   resize(): boolean {
     const host = this.canvas.parentElement ?? this.canvas;
@@ -118,6 +138,7 @@ export class HoopsRenderer {
     const h = this.buffer.height;
 
     this.swish = Math.max(0, this.swish - dt * 2.2);
+    this.crowd.update(dt);
 
     // The camera holds the half being played and swings on a turnover.
     if (game.phase === 'live' || game.phase === 'freeThrow') {
@@ -146,6 +167,20 @@ export class HoopsRenderer {
       Math.round(-(cam.y - cam.shakeY + COURT_MARGIN) * cam.ppy),
     );
     ctx.restore();
+
+    /* CAMERA FLASHES. Drawn straight after the floor so they are behind every
+     * player: a flash is three rows up in the stand, not on the court. Four
+     * rectangles a frame, and the building stops being wallpaper. */
+    for (const f of this.crowd.flashes) {
+      if (!cam.visible(f.x, f.y, 2)) continue;
+      const fxp = cam.projectX(f.x, f.y);
+      const fyp = cam.projectY(f.x, f.y);
+      const s = Math.max(1, cam.ppy * 0.8);
+      ctx.fillStyle = 'rgba(255,252,240,0.92)';
+      ctx.fillRect(Math.round(fxp - s / 2), Math.round(fyp - s / 2), s, s);
+      ctx.fillStyle = 'rgba(255,248,220,0.28)';
+      ctx.fillRect(Math.round(fxp - s * 1.4), Math.round(fyp - s * 1.4), s * 2.8, s * 2.8);
+    }
 
     // The basket at the far end of the screen first, so bodies pass in front.
     const far: Side = cam.projectY(attackRim('home').x, attackRim('home').y)

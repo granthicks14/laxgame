@@ -196,7 +196,13 @@ async function run() {
     /place/i.test(needsSeen) && /need/i.test(needsSeen));
   await page.locator('.seg__opt').filter({ hasText: 'Squad' }).first().click();
   await page.locator('.roster-row').first().click();
-  check('a player page opens', (await page.locator('.kv__k').count()) > 6);
+  const playerPage = await page.locator('.wrapper').first().innerText();
+  check('a player page opens', /ceiling/i.test(playerPage) && /work on him/i.test(playerPage));
+  /* EVERY ATTRIBUTE IS A BUTTON, because training lives on the player's own
+   * screen. A page full of numbers a coach cannot act on is a page he reads once. */
+  check('and every attribute on it can be trained',
+    (await page.locator('button.roster-row').count()) >= 15,
+    `${await page.locator('button.roster-row').count()} trainable attributes`);
   await page.locator('.topbar .btn--icon').first().click();
   await page.locator('.topbar .btn--icon').first().click();
   await page.waitForSelector('.tile__label');

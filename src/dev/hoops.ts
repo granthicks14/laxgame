@@ -292,7 +292,7 @@ for (let g = 0; g < GAMES; g++) {
       game.update(dtSim, {
         moveX: 0, moveY: 0, sprint: false, passPressed: false,
         shootHeld: false, shootReleased: false, crossPressed: false,
-        screenPressed: false, switchPressed: false,
+        screenPressed: false, switchPressed: false, timeoutPressed: false,
       });
       elapsed += dtSim;
     }

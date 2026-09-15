@@ -236,6 +236,76 @@ console.log('\nNOBODY AT THE STICKS\n');
   check('and it was a game of basketball', total > 90 && total < 300, `${total} points`);
 }
 
+/* ---------------------------------------------------------------- timeouts */
+
+console.log('\nTHE ONE THING A COACH DOES THAT IS NOT MOVING A PLAYER\n');
+
+{
+  const g = new HoopsGame(config(31, HUMAN));
+  check('a game starts with five timeouts a side',
+    g.timeouts.home === 5 && g.timeouts.away === 5,
+    `${g.timeouts.home} / ${g.timeouts.away}`);
+
+  // Run to a live possession with the human holding the ball.
+  let live = 0;
+  for (let i = 0; i < 60_000 && live < 1; i++) {
+    g.update(1 / 60, botInput(g, HUMAN, i));
+    const c = g.carrier;
+    if (g.phase === 'live' && c && c.side === HUMAN) live = 1;
+  }
+  check('the human can call one with the ball in his hands',
+    g.canCallTimeout(HUMAN), `phase ${g.phase}`);
+
+  const tired = g.players.filter((p) => p.side === HUMAN);
+  for (const p of tired) p.stamina = 40;
+  const before = g.timeouts[HUMAN];
+  const called = g.callTimeout(HUMAN);
+  check('and calling one is accepted', called && g.phase === 'timeout', g.phase);
+  check('and it costs him one', g.timeouts[HUMAN] === before - 1,
+    `${g.timeouts[HUMAN]} left`);
+
+  /* A SECOND ONE CANNOT BE CHAINED off the first: without the cooldown a held
+   * button calls five in five frames and the game never restarts. */
+  check('and he cannot call another on top of it', !g.canCallTimeout(HUMAN));
+
+  for (let i = 0; i < 400; i++) g.update(1 / 60, idle);
+  const rested = tired.reduce((n, p) => n + p.stamina, 0) / tired.length;
+  check('the huddle puts legs back under his five', rested > 55,
+    `${rested.toFixed(0)} stamina`);
+  check('and play restarts afterwards', g.phase !== 'timeout', g.phase);
+
+  // Spend the rest and check the floor holds.
+  for (let i = 0; i < 12; i++) {
+    for (let f = 0; f < 700; f++) g.update(1 / 60, botInput(g, HUMAN, f));
+    g.callTimeout(HUMAN);
+  }
+  check('a coach can never call more than he has', g.timeouts[HUMAN] >= 0,
+    `${g.timeouts[HUMAN]}`);
+  check('and asking with none left is refused, not ignored',
+    g.timeouts[HUMAN] > 0 || !g.canCallTimeout(HUMAN));
+}
+
+{
+  /* THE COMPUTER'S OWN HAND ON THE LEVER. Played out with nobody at the sticks
+   * on both a soft tier and a hard one: a better-coached bench stops a run
+   * sooner, and neither of them is allowed to run out of timeouts entirely
+   * before the last minutes. */
+  const spent = (key: 'rookie' | 'legend'): number => {
+    // Nobody at the sticks, so both benches are the computer's and both of them
+    // have to manage themselves. A side being run off the floor is what a run is.
+    const cfg = config(4242, null);
+    cfg.difficulty = DIFFICULTIES[key];
+    const g = new HoopsGame(cfg);
+    for (let i = 0; i < 260_000 && g.phase !== 'final'; i++) g.update(1 / 60, idle);
+    return (5 - g.timeouts.away) + (5 - g.timeouts.home);
+  };
+  const soft = spent('rookie');
+  const hard = spent('legend');
+  check('the computer calls timeouts of its own', hard > 0, `${hard} on Legend`);
+  check('and a better-coached bench stops a run sooner', hard >= soft,
+    `rookie ${soft}, legend ${hard}`);
+}
+
 console.log(`\n${passed}/${passed + failures.length} checks passed`);
 if (failures.length) {
   console.log(`\n${failures.length} FAILED:`);

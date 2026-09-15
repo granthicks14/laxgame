@@ -88,10 +88,32 @@ export class HoopsGame {
   banner = '';
   bannerTimer = 0;
 
+  /* ------------------------------------------------------------- timeouts
+   *
+   * THE ONLY THING A COACH CAN DO DURING A GAME THAT IS NOT MOVING A PLAYER.
+   *
+   * A timeout is not a cutscene. It does three things that matter, all of them
+   * real: it STOPS A RUN, because the other side has to come back out and set up
+   * again; it puts legs back under a tired five, which is why a coach spends one
+   * late in a quarter rather than early; and it costs him one he will not have in
+   * the last minute. Five a game, which is roughly what basketball gives, and the
+   * computer spends its own on exactly the same rule the human is offered: when it
+   * is being run off the floor.
+   */
+  timeouts: Record<Side, number> = { home: 5, away: 5 };
+  /** Points conceded in a row, per side, which is what a run actually is. */
+  run: Record<Side, number> = { home: 0, away: 0 };
+  /** Who called the one being taken. */
+  timeoutBy: Side | null = null;
+  /** Seconds since either side last called one, so they cannot be chained. */
+  private sinceTimeout = 99;
+
   /** Set while free throws are being taken. */
   freeThrows: {
     shooter: CourtPlayer;
     remaining: number;
+    /** How many he was awarded, so a screen can say "one of two". */
+    total: number;
     /** Whether possession changes after the last one. */
     side: Side;
     /**
@@ -278,6 +300,18 @@ export class HoopsGame {
     if (this.bannerTimer === 0) this.banner = '';
     this.messageTimer = Math.max(0, this.messageTimer - dt);
     if (this.messageTimer === 0) this.message = '';
+    this.sinceTimeout += dt;
+
+    /* THE HUMAN'S TIMEOUT, checked before the phase machine rather than inside
+     * it: a coach calls one on a dead ball, with the ball in hand, or in the
+     * middle of an inbound, and those are three different phases. The engine
+     * decides whether he may — the button only ever asks. */
+    if (input.timeoutPressed && this.humanSide !== null) {
+      if (this.callTimeout(this.humanSide)) return;
+      this.say(this.timeouts[this.humanSide] <= 0
+        ? 'No timeouts left'
+        : 'You cannot call one from here', 1.4);
+    }
 
     switch (this.phase) {
       case 'tip': this.updateTip(dt); break;
@@ -286,6 +320,7 @@ export class HoopsGame {
       case 'madeBasket': this.updateDeadBall(dt); break;
       case 'freeThrow': this.updateFreeThrow(dt, input); break;
       case 'quarterBreak': this.updateBreak(dt); break;
+      case 'timeout': this.updateTimeout(dt); break;
     }
   }
 
@@ -343,6 +378,9 @@ export class HoopsGame {
       this.beginFreeThrow();
       return;
     }
+    // The bench's one chance to stop what is happening to it.
+    this.considerAiTimeout();
+    if (this.phase === 'timeout') return;
     const side = this.inbound?.side ?? this.defense;
     this.startPossession(side, false);
   }
@@ -1562,7 +1600,7 @@ export class HoopsGame {
   }
 
   private beginFreeThrows(shooter: CourtPlayer, count: number): void {
-    this.freeThrows = { shooter, remaining: count, side: shooter.side, taken: false };
+    this.freeThrows = { shooter, remaining: count, total: count, side: shooter.side, taken: false };
     this.phase = 'madeBasket';
     this.phaseTimer = HOOPS.freeThrowPause;
     this.ball.state = 'dead';
@@ -2004,7 +2042,8 @@ export class HoopsGame {
       shooter.stat.points++;
       this.box[shooter.side].ftm++;
       this.box[shooter.side].points++;
-      this.score[shooter.side]++;
+      // A free throw is a point on the run like any other.
+      this.addScore(shooter.side, 1);
       this.events.emit('freeThrow', { made: true });
       this.say(`${shooter.data.last} — good`, 1.2);
       this.nextFreeThrowOrPlay(true);
@@ -2036,7 +2075,7 @@ export class HoopsGame {
     }
     this.box[shooter.side].fgm++;
     this.box[shooter.side].points += points;
-    this.score[shooter.side] += points;
+    this.addScore(shooter.side, points);
     if (assist) {
       assist.stat.assists++;
       this.box[shooter.side].assists++;
@@ -2189,6 +2228,124 @@ export class HoopsGame {
     if (this.phaseTimer <= 0) {
       const side = this.inbound?.side ?? this.possession;
       this.startPossession(side, false);
+    }
+  }
+
+  /**
+   * Points on the board, and the RUN that comes with them.
+   *
+   * A run is the only thing in basketball a coach reacts to with a timeout, so it
+   * has to be a number the game keeps rather than something a screen guesses at.
+   * One side scoring resets the other's, which is exactly what a run is: points
+   * in a row, unanswered.
+   */
+  private addScore(side: Side, points: number): void {
+    this.score[side] += points;
+    this.run[side] += points;
+    this.run[otherSide(side)] = 0;
+  }
+
+  /* ------------------------------------------------------------- timeouts */
+
+  /**
+   * May this side call one right now?
+   *
+   * The real rule, kept: a coach calls a timeout on a dead ball, or while his own
+   * side has the ball and a man is holding it. He may not call one out of the
+   * air, and he may not call one to get out of a turnover he has already made.
+   */
+  canCallTimeout(side: Side): boolean {
+    if (this.timeouts[side] <= 0) return false;
+    if (this.sinceTimeout < 6) return false;
+    if (this.phase === 'madeBasket' || this.phase === 'inbound') return true;
+    if (this.phase !== 'live') return false;
+    const carrier = this.carrier;
+    /* HELD OR ON THE DRIBBLE. A man bringing the ball up the floor is the single
+     * commonest moment a timeout is called in basketball, and the first version of
+     * this rule only accepted 'held' — which is the quarter-second between a catch
+     * and the first bounce. It was, in practice, never callable. */
+    if (!carrier || carrier.side !== side) return false;
+    return this.ball.state === 'held' || this.ball.state === 'dribble';
+  }
+
+  /**
+   * Call one.
+   *
+   * WHAT IT ACTUALLY DOES, in order of how much it matters:
+   *   - the run resets, and the other side has to re-enter its offence
+   *   - both fives get their legs back, the calling side more than the other,
+   *     because they are the ones sitting down and being talked at
+   *   - the shot clock resets for the side with the ball, which is the rule
+   *   - one fewer in the pocket for the last minute
+   */
+  callTimeout(side: Side): boolean {
+    if (!this.canCallTimeout(side)) return false;
+    const stolen = this.run[otherSide(side)];
+    this.timeouts[side]--;
+    this.timeoutBy = side;
+    this.sinceTimeout = 0;
+    this.run.home = 0;
+    this.run.away = 0;
+    this.phase = 'timeout';
+    this.phaseTimer = 2.6;
+    this.ball.state = 'dead';
+    this.ball.carrier = null;
+    this.setBanner('TIMEOUT', 2.2);
+    this.events.emit('timeout', { side, left: this.timeouts[side], run: stolen });
+    this.events.emit('whistle', { reason: 'timeout' });
+    return true;
+  }
+
+  /**
+   * The huddle. Everybody stands, everybody breathes, and the side that called it
+   * breathes harder — sitting down for a minute is most of what a timeout is for.
+   */
+  private updateTimeout(dt: number): void {
+    this.phaseTimer -= dt;
+    for (const p of this.players) {
+      p.vx = damp(p.vx, 0, 9, dt);
+      p.vy = damp(p.vy, 0, 9, dt);
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      const rest = p.side === this.timeoutBy ? 26 : 16;
+      p.stamina = clamp(p.stamina + rest * dt, 0, 100);
+      p.pose = 'idle';
+    }
+    if (this.phaseTimer > 0) return;
+    const side = this.possession;
+    this.timeoutBy = null;
+    this.shotClock = Math.max(this.shotClock, HOOPS.shotClockOffReb);
+    this.startPossession(side, false);
+  }
+
+  /**
+   * THE COMPUTER'S OWN HAND ON THE SAME LEVER.
+   *
+   * It calls one when it is being run off the floor, and how quickly it notices
+   * is its coaching — a well-run programme stops a 9-0 run, a badly run one lets
+   * it get to fourteen. It keeps one back for the last two minutes, because a
+   * coach who has spent them all is a coach who cannot draw one up.
+   */
+  private considerAiTimeout(): void {
+    /* EVERY BENCH THAT IS NOT THE HUMAN'S, which in a game nobody is playing is
+     * both of them. The first version only ever looked at the opponent of a
+     * human, so an exhibition watched rather than played had two benches sitting
+     * on five timeouts each while one side was run off the floor. */
+    for (const side of ['home', 'away'] as Side[]) {
+      if (side === this.humanSide) continue;
+      if (!this.canCallTimeout(side)) continue;
+      const late = this.quarter >= HOOPS.quarters && this.clock < 120;
+      // Keep one back for the last two minutes: a coach who has spent them all
+      // is a coach who cannot draw one up when it matters.
+      if (!late && this.timeouts[side] <= 1) continue;
+      /* The bar. `decision` is the difficulty's own read on how well the AI
+       * chooses, so a Legend bench stops a run three baskets sooner than a Rookie
+       * one — and neither of them gets a rating for it. */
+      const bar = 14 - this.cfg.difficulty.decision * 7;
+      if (this.run[otherSide(side)] >= bar) {
+        this.callTimeout(side);
+        return;
+      }
     }
   }
 

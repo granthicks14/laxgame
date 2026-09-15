@@ -26,7 +26,9 @@ import {
 import { makeOffer, prospectOdds } from '../sports/basketball/career/recruit';
 import { buyUpgrade, perksOf, UPGRADES } from '../sports/basketball/career/coach';
 import { modsFor } from '../sports/basketball/career/difficulty';
-import { standingOf } from '../sports/basketball/career/league';
+import {
+  quarterSecondsFor, simulateFixture, standingOf,
+} from '../sports/basketball/career/league';
 import { rowFor } from '../sports/basketball/career/schedule';
 import {
   bestAlumni, leaderValue, leaders, leagueStatLines, levelForm, programmeRecords,
@@ -38,8 +40,10 @@ import {
 import { approachesFor, resume, resumeLabel } from '../sports/basketball/career/interest';
 import { newsFeed } from '../sports/basketball/career/news';
 import { simStory } from '../sports/basketball/career/story';
-import { simulateFixture } from '../sports/basketball/career/league';
+
 import { teamsAtLevel, worldTeam } from '../sports/basketball/world';
+import { LEVELS } from '../sports/basketball/levels';
+import { GAME_LENGTHS } from '../sports/basketball/tuning';
 import type { HoopsCareer } from '../sports/basketball/career/types';
 
 const env = (globalThis as {
@@ -276,7 +280,51 @@ check('the best alumni are actually the best',
   best.length === 3 && best[0].line.points >= best[1].line.points,
   best.map((a) => `${a.name} ${a.line.points}`).join(', '));
 
-/* ------------------------------------- 5. reading the past does not rewrite it */
+/* ---------------------------------------------------- 5. the length of a game */
+
+console.log('\n--- GAME LENGTH ---');
+{
+  const short = createCareer({
+    mode: 'dynasty', teamId: teamsAtLevel('d2')[2].id, seed: 77, gameLength: 'short',
+  });
+  const long = createCareer({
+    mode: 'dynasty', teamId: teamsAtLevel('d2')[2].id, seed: 77, gameLength: 'long',
+  });
+  check('a career can choose how long its games are',
+    quarterSecondsFor(short) === GAME_LENGTHS.short.quarterSeconds
+    && quarterSecondsFor(long) === GAME_LENGTHS.long.quarterSeconds,
+    `${quarterSecondsFor(short)}s v ${quarterSecondsFor(long)}s a quarter`);
+
+  simulateRestOfSeason(short);
+  simulateRestOfSeason(long);
+  const scoreOf = (c: HoopsCareer): number => {
+    const row = c.standings[c.teamId];
+    return row.pointsFor / Math.max(1, row.wins + row.losses);
+  };
+  check('and a longer game really is a higher score',
+    scoreOf(long) > scoreOf(short) + 12,
+    `${scoreOf(short).toFixed(1)} v ${scoreOf(long).toFixed(1)} a game`);
+
+  /* THE WHOLE LEAGUE PLAYS THE COACH'S CLOCK. If it did not, his own men would
+   * top every leader board for no reason but the length of his games. */
+  const rivals = long.schedule.filter((f) => !f.featured && f.played);
+  const mineGames = long.schedule.filter((f) => f.featured && f.played);
+  const avg = (fs: typeof rivals): number =>
+    fs.reduce((n, f) => n + f.homeScore + f.awayScore, 0) / Math.max(1, fs.length);
+  check('and the whole league plays the same clock the coach does',
+    Math.abs(avg(rivals) - avg(mineGames)) < 22,
+    `${avg(rivals).toFixed(1)} combined in rival games v ${avg(mineGames).toFixed(1)} in his`);
+
+  const defaulted = createCareer({
+    mode: 'dynasty', teamId: teamsAtLevel('d2')[2].id, seed: 77,
+  });
+  check('and a career that chooses nothing plays the level\'s own length',
+    defaulted.gameLength === null
+    && quarterSecondsFor(defaulted) === LEVELS[defaulted.level].quarterSeconds,
+    `${quarterSecondsFor(defaulted)}s`);
+}
+
+/* ------------------------------------- 6. reading the past does not rewrite it */
 
 console.log('\n--- READING THE PAST ---');
 {
@@ -313,7 +361,7 @@ console.log('\n--- READING THE PAST ---');
     `${again.length} lines`);
 }
 
-/* ----------------------------------------------------------- 6. integrity */
+/* ----------------------------------------------------------- 7. integrity */
 
 console.log('\n--- INTEGRITY ---');
 const problems = validateCareer(career);

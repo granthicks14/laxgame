@@ -188,6 +188,7 @@ export type GamePhase =
   | 'freeThrow'
   | 'madeBasket'
   | 'quarterBreak'
+  | 'timeout'
   | 'final';
 
 export interface HoopsSetup {
@@ -294,6 +295,7 @@ export interface HoopsEvents {
   foul: { by: string; shooting: boolean };
   freeThrow: { made: boolean };
   quarterEnd: { quarter: number };
+  timeout: { side: Side; left: number; run: number };
   gameEnd: Record<string, never>;
   crowd: { intensity: number };
 }

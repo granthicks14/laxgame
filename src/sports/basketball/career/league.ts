@@ -2,6 +2,7 @@ import { clamp } from '../../../core/math';
 import { Rng } from '../../../core/rng';
 import { buildRoster, starters, teamRatings, type HoopsPlayer } from '../data';
 import { LEVELS, rosterOptionsFor, teamPar } from '../levels';
+import { GAME_LENGTHS } from '../tuning';
 import { rankedSchemesFor, resolveScheme, type ResolvedScheme } from '../schemes';
 import { simulateGame, type SimResult, type SimTeam } from '../sim';
 import { teamsAtLevel, worldTeam, type HoopsWorldTeam } from '../world';
@@ -51,6 +52,19 @@ export function parOf(career: HoopsCareer, teamId: string): number {
  * replayed last season's fixtures with next season's rosters and quietly rewrote
  * the results a coach had just been congratulated for.
  * ------------------------------------------------------------------------- */
+
+/**
+ * HOW LONG A GAME IS IN THIS CAREER, and the only place that decides it.
+ *
+ * Both engines read it, which is the point: the played game and every simulated
+ * fixture in the same league run the same clock, so a per-game average means the
+ * same thing at the top of a leader board as it does on a coach's own squad page.
+ */
+export function quarterSecondsFor(career: HoopsCareer): number {
+  return career.gameLength
+    ? GAME_LENGTHS[career.gameLength].quarterSeconds
+    : LEVELS[career.level].quarterSeconds;
+}
 
 /** The season the fixture list in the save belongs to. */
 export function scheduleYear(career: HoopsCareer): number {
@@ -165,13 +179,12 @@ export function replayFixture(
 }
 
 function playFixture(career: HoopsCareer, f: HoopsFixture, year: number): SimResult {
-  const info = LEVELS[career.level];
   return simulateGame(
     simTeam(career, f.homeId, year),
     simTeam(career, f.awayId, year),
     {
       seed: `${career.seed}:${year}:${f.id}`,
-      quarterSeconds: info.quarterSeconds,
+      quarterSeconds: quarterSecondsFor(career),
     },
   );
 }

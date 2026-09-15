@@ -1,6 +1,7 @@
 import { clamp } from '../../core/math';
 import { COURT, attackRim, type Side } from './court';
 import { BALL_RADIUS, type Ball } from './ball';
+import { paintArena, paintCourtLight, paintFloorMarks, type ArenaOptions } from './arena';
 import type { CourtCamera } from './camera';
 import type { CourtPlayer } from './types';
 
@@ -25,7 +26,18 @@ import type { CourtPlayer } from './types';
 export const LIFT = 0.62;
 
 /** Feet of surround drawn around the floor: the apron, benches and seats. */
-export const COURT_MARGIN = 9;
+/**
+ * How much room is painted around the floor, in feet.
+ *
+ * It was nine, which held the apron and nothing else — beyond it the world
+ * stopped, and a basketball game played on a brown rectangle floating in black
+ * reads as a prototype however carefully the lines are drawn. Twenty holds the
+ * apron, the signage band and a fifteen-foot seating bowl, which is everything
+ * the camera can reach: it keeps about eighteen feet past a baseline and almost
+ * nothing past a sideline, so this is sized to what is actually seen rather than
+ * to what would be there in life.
+ */
+export const COURT_MARGIN = 20;
 
 export interface Jersey {
   primary: string;
@@ -49,17 +61,33 @@ export class CourtLayer {
   private builtPpy = -1;
   private builtSeed = '';
 
+  private venue: ArenaOptions | null = null;
+
+  /**
+   * Which building this is.
+   *
+   * Set before the first frame; changing it rebuilds the layer, which is right —
+   * a different club is a different room, a different crowd and a different logo
+   * at centre court.
+   */
+  setVenue(v: ArenaOptions): void {
+    this.venue = v;
+  }
+
   /** Rebuild if the zoom or the theme changed. Returns the canvas to blit. */
   ensure(ppy: number, home: Jersey, away: Jersey): HTMLCanvasElement {
-    const seed = `${home.primary}|${away.primary}`;
+    const seed = `${home.primary}|${away.primary}|${this.venue?.seed ?? ''}`;
     if (Math.abs(ppy - this.builtPpy) < 0.01 && seed === this.builtSeed) return this.canvas;
     this.builtPpy = ppy;
     this.builtSeed = seed;
-    this.paint(ppy, home, away);
+    this.paint(ppy, home);
     return this.canvas;
   }
 
-  private paint(ppy: number, home: Jersey, away: Jersey): void {
+  /* The away kit is not used here any more: the floor is the HOME club's, and
+   * the jerseys on it are drawn by the player painter. It stays in `ensure`'s
+   * cache key, because a change of visitor still changes the picture. */
+  private paint(ppy: number, home: Jersey): void {
     const w = Math.ceil((COURT.length + COURT_MARGIN * 2) * ppy);
     const h = Math.ceil((COURT.width + COURT_MARGIN * 2) * ppy);
     this.canvas.width = w;
@@ -72,42 +100,90 @@ export class CourtLayer {
     const fx = (x: number): number => (x + COURT_MARGIN) * ppy;
     const fy = (y: number): number => (y + COURT_MARGIN) * ppy;
 
-    // The arena floor around the court: dark enough that the hardwood reads as
-    // lit, light enough that it reads as a floor rather than as the edge of the
-    // world. The apron is where the camera spends its margin, so it has to be
-    // somewhere rather than nowhere.
-    ctx.fillStyle = '#241a12';
-    ctx.fillRect(0, 0, w, h);
-    // The run-off strip immediately outside the lines, a shade up from the rest,
-    // so the boundary has depth and a ball going out has somewhere to go.
-    ctx.fillStyle = '#2f2217';
-    ctx.fillRect(
-      fx(-4), fy(-4), (COURT.length + 8) * ppy, (COURT.width + 8) * ppy,
-    );
-
-    // The hardwood itself, with boards running the length of the floor.
-    const boardH = Math.max(2, Math.round(2.6 * ppy));
-    for (let y = 0; y < COURT.width; y += 2.6) {
-      const shade = Math.floor(y / 2.6) % 2 === 0 ? '#b9793f' : '#b07439';
-      ctx.fillStyle = shade;
-      ctx.fillRect(fx(0), fy(y), COURT.length * ppy, boardH);
+    /* THE ROOM, before the floor. Stands, signage, the scorer's table and the
+     * benches — everything the camera can see beyond the lines. A club that has
+     * not been named yet (the very first frame, or a test) gets a plain apron
+     * instead of a half-built building. */
+    if (this.venue) {
+      paintArena(ctx, ppy, COURT_MARGIN, this.venue);
+    } else {
+      ctx.fillStyle = '#0a0b0f';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#4a3323';
+      ctx.fillRect(fx(-5), fy(-5), (COURT.length + 10) * ppy, (COURT.width + 10) * ppy);
     }
-    // A darker painted key at each end, which is how a real floor is finished.
+
+    /* THE HARDWOOD.
+     *
+     * Maple, which is what a basketball floor is made of, and maple is PALE — a
+     * warm straw rather than the mahogany this used to be. Two things make it
+     * read as a floor rather than as a brown rectangle, and neither is a texture
+     * map: boards of VARYING tone rather than two alternating shades, and a dark
+     * seam between every one of them. Three tones in an irregular order is enough
+     * that the eye stops finding the repeat.
+     */
+    const plank = 2.2;
+    const TONES = ['#c79a5f', '#c1925a', '#cba367', '#bd8d55', '#c69b62', '#c08f57'];
+    const boardH = Math.max(2, Math.round(plank * ppy));
+    let tone = 0;
+    for (let y = 0; y < COURT.width; y += plank) {
+      ctx.fillStyle = TONES[tone % TONES.length];
+      tone += 1 + ((Math.floor(y / plank) * 7) % 2);
+      ctx.fillRect(fx(0), fy(y), COURT.length * ppy, boardH);
+      // The seam. One pixel of shadow between planks, which is the whole
+      // difference between "boards" and "stripes".
+      ctx.fillStyle = 'rgba(70,42,18,0.30)';
+      ctx.fillRect(fx(0), fy(y) + boardH - 1, COURT.length * ppy, 1);
+    }
+    /* BUTT JOINTS. A real floor is laid in lengths of eight feet or so, and the
+     * ends do not line up. A short dark tick every so often is all it takes. */
+    if (ppy >= 4) {
+      ctx.fillStyle = 'rgba(70,42,18,0.14)';
+      let j = 0;
+      for (let y = 0; y < COURT.width; y += plank) {
+        /* An irregular start AND an irregular spacing per row. With a fixed
+         * spacing the joints lined up into columns down the floor, which is the
+         * one thing a real laid floor never does. */
+        const gap = 9 + ((j * 13) % 7);
+        for (let x = ((j * 37) % gap) + 2; x < COURT.length; x += gap) {
+          ctx.fillRect(Math.round(fx(x)), fy(y), 1, boardH - 1);
+        }
+        j++;
+      }
+    }
+    /* THE PAINTED KEYS.
+     *
+     * BOTH IN THE HOME CLUB'S COLOUR, because the floor belongs to the building
+     * and not to the two sides standing on it. Taking one key from each jersey —
+     * which is what this used to do — meant the visitors' change strip painted
+     * one end of the home team's floor white the moment away kits became light.
+     *
+     * Painted, not cut out: laid over the boards at part strength so the grain
+     * still shows through, the way a real key looks. */
+    const paintColour = this.venue ? shade(home.primary, 0.9) : shade(home.primary, 0.86);
     for (const side of ['home', 'away'] as Side[]) {
       const rim = attackRim(side);
-      const dir = rim.x > COURT.centerX ? -1 : 1;
       const x0 = rim.x > COURT.centerX ? COURT.length - COURT.keyDepth : 0;
-      // Painted, not cut out of the floor: the colour is laid over the boards at
-      // part strength so the grain still shows through, the way a real key looks.
       ctx.save();
-      ctx.globalAlpha = 0.72;
-      ctx.fillStyle = shade(side === 'home' ? away.primary : home.primary, 0.86);
+      ctx.globalAlpha = 0.66;
+      ctx.fillStyle = paintColour;
       ctx.fillRect(
         fx(x0), fy(COURT.centerY - COURT.keyWidth / 2),
         COURT.keyDepth * ppy, COURT.keyWidth * ppy,
       );
       ctx.restore();
-      void dir;
+    }
+
+    /* THE DECALS: centre court and the two baseline wordmarks. Under the lines,
+     * because that is the order a real floor is finished in — paint over a logo
+     * looks like paint, a logo over paint looks like a sticker. */
+    if (this.venue) {
+      paintFloorMarks(ctx, ppy, COURT_MARGIN, {
+        homeAbbr: this.venue.homeAbbr,
+        club: this.venue.club,
+        seed: this.venue.seed,
+        home,
+      });
     }
 
     ctx.strokeStyle = '#f3e3cb';
@@ -165,6 +241,11 @@ export class CourtLayer {
         toCourt === 1 ? -half : Math.PI - half,
         toCourt === 1 ? half : Math.PI + half);
     }
+
+    /* THE LIGHT, last, over everything: a pool on the floor and darkness at the
+     * edges. One gradient, and it does more for the picture than every line
+     * above it — it is what says the court is lit and the room is not. */
+    paintCourtLight(ctx, ppy, COURT_MARGIN);
   }
 }
 
@@ -221,44 +302,95 @@ export function drawHoop(
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  // The backboard: a pane, seen nearly edge-on from above, so it is drawn as a
-  // tall thin face with the shooter's square on it.
+  /* THE BACKBOARD.
+   *
+   * Seen nearly edge-on from above, so it is a tall thin face. What makes it
+   * read as GLASS rather than as a rectangle of fog is that a real one is a pane
+   * in a painted frame: the pane is dark and barely there, the padding along the
+   * bottom edge is solid, and the two lines that matter — the outer border and
+   * the shooter's square — are the brightest thing on it.
+   */
   const bw = COURT.boardWidth * cam.ppy;
   const bh = (COURT.boardTop - COURT.boardBottom) * cam.ppy * LIFT;
   const bx = px(boardX, rim.y) - bw / 2;
   const by = py(boardX, rim.y, COURT.boardTop);
-  ctx.fillStyle = 'rgba(232, 240, 248, 0.24)';
+
+  // The pane. Dark and cold, because glass at night reflects the dark room.
+  ctx.fillStyle = 'rgba(126, 148, 172, 0.2)';
   ctx.fillRect(bx, by, bw, bh);
-  ctx.strokeStyle = '#e8f0f8';
+  // A highlight down the top edge: the one place the arena lights catch it.
+  ctx.fillStyle = 'rgba(236, 246, 255, 0.35)';
+  ctx.fillRect(bx, by, bw, Math.max(1, cam.ppy * 0.12));
+  // The padding along the bottom, which every board has and which is the part a
+  // player's hands actually reach.
+  const padH = Math.max(1, bh * 0.12);
+  ctx.fillStyle = '#1d2027';
+  ctx.fillRect(bx, by + bh - padH, bw, padH);
+
+  ctx.strokeStyle = '#eef4fb';
   ctx.lineWidth = Math.max(1, cam.ppy * 0.13);
   ctx.strokeRect(bx, by, bw, bh);
-  // The square.
+  // The shooter's square.
   ctx.strokeRect(bx + bw * 0.31, by + bh * 0.42, bw * 0.38, bh * 0.46);
 
-  // The net, hanging below the ring.
   const rx = px(rim.x, rim.y);
   const ry = py(rim.x, rim.y, COURT.rimHeight);
   const rr = COURT.rimRadius * cam.ppy;
-  const netDrop = 1.4 * cam.ppy * LIFT;
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+
+  /* THE NET. Twelve cords rather than seven, crossed by two hoops of mesh, and
+   * it TAPERS — a real net is wide at the ring and narrow at the bottom, and
+   * getting that one shape right is most of why a basket looks like a basket. */
+  const netDrop = 1.5 * cam.ppy * LIFT;
+  const cords = 12;
+  ctx.strokeStyle = 'rgba(248,250,255,0.55)';
   ctx.lineWidth = 1;
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2;
-    ctx.beginPath();
+  ctx.beginPath();
+  for (let i = 0; i < cords; i++) {
+    const a = (i / cords) * Math.PI * 2;
     ctx.moveTo(rx + Math.cos(a) * rr, ry + Math.sin(a) * rr * 0.5);
-    ctx.lineTo(rx + Math.cos(a) * rr * 0.55, ry + netDrop);
+    ctx.lineTo(rx + Math.cos(a) * rr * 0.42, ry + netDrop);
+  }
+  ctx.stroke();
+  // Two rings of mesh across the cords.
+  ctx.strokeStyle = 'rgba(248,250,255,0.3)';
+  for (const t of [0.45, 0.82]) {
+    ctx.beginPath();
+    ctx.ellipse(rx, ry + netDrop * t, rr * (1 - t * 0.58), rr * 0.5 * (1 - t * 0.5),
+      0, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  // The ring itself, last and brightest: it is what the player is aiming at.
-  ctx.strokeStyle = accent;
-  ctx.lineWidth = Math.max(1.5, cam.ppy * 0.22);
+  /* THE RING. Last and brightest, because it is what the player is aiming at —
+   * and drawn as a ring with a lit front edge rather than a flat ellipse, so it
+   * has a near side and a far side like a real one seen from above. */
+  ctx.strokeStyle = shade(accent, 0.68);
+  ctx.lineWidth = Math.max(1.5, cam.ppy * 0.24);
   ctx.beginPath();
-  ctx.ellipse(rx, ry, rr, rr * 0.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(rx, ry, rr, rr * 0.5, 0, Math.PI, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = accent;
+  ctx.beginPath();
+  ctx.ellipse(rx, ry, rr, rr * 0.5, 0, 0, Math.PI);
   ctx.stroke();
 }
 
 /* --------------------------------------------------------------- the ball */
+
+/**
+ * WHERE THE BALL HAS BEEN.
+ *
+ * A basketball spends most of a possession three feet off the floor and a third
+ * of it twenty feet up, and on a court drawn from above those two look the same:
+ * a small orange dot. The lift makes the height readable in principle, but only
+ * if the eye can see the SHAPE of the flight — so a shot and a pass leave a short
+ * fading trail behind them, and a dribble and a held ball leave none, because a
+ * ball nobody has thrown has no flight to read.
+ *
+ * Twelve positions is about a fifth of a second, which is enough to show an arc
+ * and not enough to smear the picture.
+ */
+const TRAIL_MAX = 12;
+const trail: { x: number; y: number; z: number }[] = [];
 
 export function drawBall(
   ctx: CanvasRenderingContext2D, cam: CourtCamera, ball: Ball,
@@ -267,6 +399,32 @@ export function drawBall(
   const floorY = cam.projectY(ball.x, ball.y);
   const sy = floorY - ball.z * cam.ppy * LIFT;
   const r = Math.max(1.6, BALL_RADIUS * cam.ppy * 1.15);
+
+  /* The trail is kept per FLIGHT rather than per frame: a new shot or pass wipes
+   * what the last one left, so a rebound does not drag a line back across the
+   * floor to where the miss came from. */
+  const flying = ball.state === 'shot' || ball.state === 'pass';
+  if (!flying) {
+    trail.length = 0;
+  } else {
+    /* `age` is seconds since the ball's state last changed, so a fresh flight is
+     * a young one — and a young flight wipes whatever the last one left rather
+     * than dragging a line back across the floor to where the miss came from. */
+    if (ball.age < 0.06) trail.length = 0;
+    trail.push({ x: ball.x, y: ball.y, z: ball.z });
+    if (trail.length > TRAIL_MAX) trail.shift();
+    for (let i = 0; i < trail.length - 1; i++) {
+      const t = i / TRAIL_MAX;
+      const q = trail[i];
+      const qx = cam.projectX(q.x, q.y);
+      const qy = cam.projectY(q.x, q.y) - q.z * cam.ppy * LIFT;
+      ctx.fillStyle = `rgba(255,170,90,${0.32 * t})`;
+      const qr = Math.max(1, r * (0.35 + t * 0.55));
+      ctx.beginPath();
+      ctx.arc(qx, qy, qr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 
   // The shadow is what tells you how high it is.
   const high = clamp(ball.z / 14, 0, 1);
@@ -332,6 +490,35 @@ export function drawCourtPlayer(
   ctx.beginPath();
   ctx.ellipse(sx, floorY, bodyW * 0.62 * (1 - air * 0.25), bodyW * 0.3, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  /* THE REFLECTION.
+   *
+   * A basketball floor is varnished, and a varnished floor under arena lights
+   * holds a smeared copy of everything standing on it. It is the single cheapest
+   * thing that separates "a sports game" from "shapes on a brown rectangle", and
+   * here it is three rectangles at a tenth of the alpha, squashed to a bit over a
+   * third of the height and fading out as they go.
+   *
+   * It fades as the man leaves the floor, because a reflection belongs to
+   * contact: a player at the top of a dunk has nothing on the boards under him.
+   */
+  const gloss = 0.14 * (1 - air);
+  if (gloss > 0.01 && u >= 2) {
+    const mirrorH = bodyH * 0.38;
+    const steps = 3;
+    for (let i = 0; i < steps; i++) {
+      const t = i / steps;
+      ctx.globalAlpha = gloss * (1 - t * 0.8);
+      ctx.fillStyle = i === 0 ? jersey.primary : shade(jersey.primary, 0.7);
+      ctx.fillRect(
+        Math.round(sx - bodyW * (0.5 - t * 0.08)),
+        Math.round(floorY + t * mirrorH),
+        Math.round(bodyW * (1 - t * 0.16)),
+        Math.ceil(mirrorH / steps),
+      );
+    }
+    ctx.globalAlpha = 1;
+  }
 
   /* The mark under the man you control, or the man with the ball.
    *

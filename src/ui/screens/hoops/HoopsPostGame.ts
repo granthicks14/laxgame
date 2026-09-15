@@ -3,6 +3,7 @@ import type { App, Screen } from '../../App';
 import { screenEl, panel } from '../../components';
 import type { HoopsGame } from '../../../sports/basketball/Game';
 import { boxScoreTable, quarterLine, starOfTheGame } from './boxScore';
+import { playedStory } from '../../../sports/basketball/career/story';
 
 /* ---------------------------------------------------------------------------
  * AFTER THE FINAL BUZZER
@@ -49,6 +50,21 @@ export class HoopsPostGameScreen implements Screen {
             style: 'letter-spacing:.14em;text-transform:uppercase;font-size:14px;color:var(--accent)',
             text: `${winner.city} ${winner.name} win`,
           }),
+
+          /* WHAT KIND OF GAME IT WAS, read off the box score above it rather
+           * than written for it. A scoreline says who won; this says whether it
+           * was a comeback, a shooting night or a forty-minute grind — and it is
+           * the same recap the schedule screen will carry afterwards, so the
+           * game a coach remembers and the game his season remembers are one
+           * game. */
+          (() => {
+            const side = game.humanSide ?? 'home';
+            const story = playedStory(game, side, {
+              yourAbbr: (side === 'home' ? cfg.home : cfg.away).team.abbr,
+              theirAbbr: (side === 'home' ? cfg.away : cfg.home).team.abbr,
+            });
+            return panel(story.headline, h('div', { class: 'small', text: story.line }));
+          })(),
 
           panel('By quarter', quarterLine(game, cfg)),
 

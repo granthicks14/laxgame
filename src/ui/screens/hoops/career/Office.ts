@@ -6,6 +6,8 @@ import {
   lockReason, priceOf, xpToNextLevel,
 } from '../../../../sports/basketball/career/coach';
 import { TIERS, modsFor } from '../../../../sports/basketball/career/difficulty';
+import { LEVELS } from '../../../../sports/basketball/levels';
+import { GAME_LENGTHS, type GameLengthKey } from '../../../../sports/basketball/tuning';
 import { saveHoopsCareer } from '../../../../sports/basketball/career/save';
 import type { HoopsCareer } from '../../../../sports/basketball/career/types';
 import { kvRow, pill } from './bits';
@@ -48,6 +50,55 @@ export class OfficeScreen implements Screen {
     }
   }
 
+  /**
+   * HOW LONG THE GAMES ARE, and why it can only be changed between seasons.
+   *
+   * The length is a property of the LEAGUE, not of one night: every simulated
+   * fixture in the world runs the same clock the coach's own games do, which is
+   * what makes a scoring average comparable between his squad and the leader
+   * board. Changing it mid-season would leave half a season's box scores measured
+   * against a different clock from the other half, so the control is shown and
+   * disabled rather than hidden — a coach can see the setting, see when he can
+   * change it, and not wonder where it went.
+   */
+  private gameLength(): HTMLElement {
+    const c = this.career;
+    const between = c.stage === 'offseason' || c.stage === 'preseason';
+    const current = c.gameLength;
+    const options: (GameLengthKey | 'default')[] = [
+      'default', ...(Object.keys(GAME_LENGTHS) as GameLengthKey[]),
+    ];
+    return panelFlush('Game length',
+      h('div', { class: 'prospect__open tiny',
+        text: between
+          ? 'The whole league plays whatever you pick.'
+          : 'Changeable between seasons. Half a season measured against a different '
+            + 'clock from the other half would make every average meaningless.' }),
+      ...options.map((key) => {
+        const on = key === 'default' ? current === null : current === key;
+        const label = key === 'default'
+          ? `The level's own (${quarterText(LEVELS[c.level].quarterSeconds)})`
+          : GAME_LENGTHS[key].label;
+        const note = key === 'default'
+          ? `${LEVELS[c.level].name} plays this by default.`
+          : GAME_LENGTHS[key].blurb;
+        return h(between ? 'button' : 'div', {
+          class: `roster-row${on ? ' roster-row--on' : ''}`,
+          ...(between ? { on: { click: () => this.setLength(key) } } : {}),
+        },
+        h('div', { class: 'roster-row__body' },
+          h('div', { class: 'roster-row__name', text: label }),
+          h('div', { class: 'roster-row__note tiny', text: note })),
+        on ? pill('PLAYING', 'good') : null);
+      }));
+  }
+
+  private setLength(key: GameLengthKey | 'default'): void {
+    this.career.gameLength = key === 'default' ? null : key;
+    saveHoopsCareer(this.career);
+    this.paint();
+  }
+
   private paint(): void {
     const c = this.career;
     const scale = modsFor(c.tier).upgradeCost;
@@ -67,6 +118,8 @@ export class OfficeScreen implements Screen {
           text: `${xp.have} of ${xp.need} toward level ${level + 1}. `
             + `Prices here are ${TIERS[c.tier].name.toLowerCase()}: `
             + `${scale === 1 ? 'the honest ones' : `${Math.round(scale * 100)}% of the honest ones`}.` })),
+
+      this.gameLength(),
 
       ...BRANCH_ORDER.map((branch) => panelFlush(BRANCHES[branch].label,
         h('div', { class: 'prospect__open tiny', text: BRANCHES[branch].blurb }),
@@ -91,4 +144,11 @@ export class OfficeScreen implements Screen {
           + 'you are going to be, and the tree is deliberately longer than a lifetime.' }),
     );
   }
+}
+
+/** "4 x 3:30" from a number of seconds, which is how a game length is said. */
+function quarterText(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const sec = seconds % 60;
+  return `4 x ${m}:${String(sec).padStart(2, '0')}`;
 }
