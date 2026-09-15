@@ -604,6 +604,45 @@ console.log('\nWHERE THE SHOTS COME FROM\n');
   void totalShots;
 }
 
+/* ----------------------------------------------------- what a rim shot is */
+
+console.log('\nDUNKS AND LAYUPS\n');
+{
+  /* A DUNK IS SUPPOSED TO BE A THING THAT HAPPENS, not a thing that happens
+   * every ninety seconds. This was measured at nearly eighteen a game between
+   * two sides — roughly twice what the sport produces — because the rule asked
+   * only that no defender be within two and a half feet, which is closer than
+   * anybody guards anybody. It is a check rather than a table because the number
+   * drifts the moment anything about finishing, help defence or the paint moves,
+   * and nothing else in the suite would notice.
+   */
+  const kinds = new Map<string, number>();
+  const GAMES = 6;
+  for (let g = 0; g < GAMES; g++) {
+    const game = new HoopsGame({
+      home: { team: TEAMS[2], roster: generateRoster(TEAMS[2], 410 + g) },
+      away: { team: TEAMS[9], roster: generateRoster(TEAMS[9], 510 + g) },
+      humanSide: null,
+      quarterSeconds: GAME_LENGTHS.standard.quarterSeconds,
+      difficulty: DIFFICULTIES.pro,
+      seed: 41000 + g,
+    });
+    game.events.on('bucket', (e) => kinds.set(e.kind, (kinds.get(e.kind) ?? 0) + 1));
+    game.simulateRest(3600, false);
+  }
+  const per = (k: string): number => (kinds.get(k) ?? 0) / GAMES;
+  for (const k of ['dunk', 'layup', 'jumper', 'three']) {
+    console.log(`  ${k.padEnd(10)} ${per(k).toFixed(1)} a game, both sides`);
+  }
+  const dunks = per('dunk');
+  check('a dunk is a thing that happens', dunks >= 4, `${dunks.toFixed(1)} a game`);
+  check('and not a thing that happens constantly', dunks <= 15,
+    `${dunks.toFixed(1)} a game between two sides`);
+  check('and there are more layups than dunks at the rim',
+    per('layup') >= per('dunk') * 0.8,
+    `${per('layup').toFixed(1)} layups to ${dunks.toFixed(1)} dunks`);
+}
+
 /* ------------------------------------------------------- the difficulties */
 
 console.log('\nTHE DIFFICULTY LADDER\n');

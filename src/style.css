@@ -2492,3 +2492,75 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
   .bcast-five { flex-direction: row; align-items: flex-start; gap: 8px; }
   .bcast-five__list { flex: 1 1 auto; }
 }
+
+/* --------------------------------------------------------------- replays
+ *
+ * Black bands top and bottom, a pulsing dot and a label. The bands are the whole
+ * trick: they say "this is not live" without a word, which matters because a
+ * player watching a replay he does not know is a replay is a player pressing
+ * buttons at nothing. */
+.replay-strip {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.replay-strip.is-on { opacity: 1; }
+.replay-strip__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 9%;
+  background: #05070b;
+}
+.replay-strip__bar--top { top: 0; }
+.replay-strip__bar--bottom { bottom: 0; }
+.replay-strip__tag {
+  position: absolute;
+  left: 50%;
+  top: calc(9% + 10px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 11px;
+  background: rgba(9, 13, 18, 0.9);
+  border: 1px solid var(--line);
+}
+.replay-strip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: replayPulse 900ms ease-in-out infinite;
+}
+.replay-strip__label {
+  font-family: var(--display);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.replay-strip__skip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(9% + 10px);
+  transform: translateX(-50%);
+  font-family: var(--display);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+@keyframes replayPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* A replay is not a game: the controls and the ticker stand down for it. */
+.game.has-replay .touch,
+.game.has-replay .hint-strip,
+.game.has-replay .hoop-ticker,
+.game.has-replay .bcast-ft { opacity: 0; pointer-events: none; }

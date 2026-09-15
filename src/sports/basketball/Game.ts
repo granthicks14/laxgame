@@ -21,6 +21,7 @@ import {
 import { NEUTRAL_EFFECTS, type SchemeEffects } from './schemes';
 import { HOOPS } from './tuning';
 import { neutralHoopsInput, type HoopsInput } from './input';
+import { ReplayBuffer } from './replay';
 import {
   emptyLine, emptyTeamBox, type CourtPlayer, type GamePhase, type HoopsConfig,
   type HoopsEvents, type TeamBox,
@@ -107,6 +108,15 @@ export class HoopsGame {
   timeoutBy: Side | null = null;
   /** Seconds since either side last called one, so they cannot be chained. */
   private sinceTimeout = 99;
+
+  /**
+   * The last few seconds of play, for a highlight.
+   *
+   * It lives on the game rather than on the screen because the ENGINE is what
+   * knows where everybody was; a screen only knows what it drew. One allocation,
+   * at construction, for the whole game.
+   */
+  readonly replay = new ReplayBuffer(10);
 
   /** Set while free throws are being taken. */
   freeThrows: {
@@ -296,6 +306,12 @@ export class HoopsGame {
 
   update(dt: number, input: HoopsInput): void {
     if (this.phase === 'final') return;
+
+    /* THE LAST FIVE SECONDS, always. Recording costs a hundred and thirty-four
+     * array stores at twenty a second and allocates nothing, so there is no
+     * reason to only start when something interesting begins — by the time
+     * anything is interesting, the part worth watching has already happened. */
+    this.replay.record(dt, this.ball, this.players);
 
     this.bannerTimer = Math.max(0, this.bannerTimer - dt);
     if (this.bannerTimer === 0) this.banner = '';
@@ -1194,7 +1210,14 @@ export class HoopsGame {
     if (d <= HOOPS.rimRange) {
       const power = (p.data.attrs.finishing + p.data.attrs.vertical) / 2;
       const { distance } = this.contestOn(p);
-      return power >= HOOPS.dunkThreshold && distance > 2.4 ? 'dunk' : 'layup';
+      /* A DUNK NEEDS ROOM, and more of it than this used to ask for.
+       *
+       * At 2.4ft a man was dunking over anybody who was not actually holding
+       * him, and the measured result was nearly eighteen dunks a game between the
+       * two sides — roughly twice what the sport produces. A defender inside four
+       * feet is a defender who can meet you at the rim, and meeting somebody at
+       * the rim is exactly what turns a dunk into a layup. */
+      return power >= HOOPS.dunkThreshold && distance > 3.8 ? 'dunk' : 'layup';
     }
     return isThree(p.x, p.y, p.side) ? 'three' : 'jumper';
   }

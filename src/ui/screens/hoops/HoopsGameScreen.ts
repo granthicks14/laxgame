@@ -15,8 +15,10 @@ import type { HoopsConfig, CourtPlayer } from '../../../sports/basketball/types'
 import type { Side } from '../../../sports/basketball/court';
 import { boxScoreTable } from './boxScore';
 import {
-  bigMoment, freeThrowPlate, lineupCard, quarterCard, type BigMomentKind,
+  bigMoment, freeThrowPlate, lineupCard, quarterCard, replayTag, type BigMomentKind,
 } from './broadcast';
+import { emptyFrame } from '../../../sports/basketball/replay';
+import { attackRim } from '../../../sports/basketball/court';
 
 /* ---------------------------------------------------------------------------
  * PLAYING BASKETBALL
@@ -98,6 +100,27 @@ export class HoopsGameScreen implements Screen {
   private momentEl: HTMLElement | null = null;
   private momentTimer = 0;
   private beatClosedAt = 0;
+
+  /* --- the replay -------------------------------------------------------- */
+  /**
+   * A highlight, running instead of the game.
+   *
+   * `t` counts DOWN from how far back the highlight starts, so it walks forward
+   * through the buffer to the present. The engine is not stepped while one is
+   * running, which is what makes a replay safe: nothing about the game changes
+   * behind it, so there is nothing to put back when it ends.
+   */
+  private replay: {
+    t: number;
+    from: number;
+    speed: number;
+    focus: { x: number; y: number };
+    label: string;
+  } | null = null;
+  private replayFrame = emptyFrame(10);
+  private elReplay: HTMLElement | null = null;
+  /** The quarter a highlight was last shown in, so they stay rare. */
+  private replayedIn = 0;
 
   constructor(app: App, opts: HoopsGameOptions) {
     this.app = app;
@@ -265,6 +288,7 @@ export class HoopsGameScreen implements Screen {
       this.renderer.celebrate(e.side, e.kind === 'dunk' ? 2.4 : e.points === 3 ? 1.6 : 1);
       // And if it was the one that decided it, the whole picture changes.
       this.checkBigMoment(e);
+      this.maybeReplay(e);
     }));
     /* A TIMEOUT IS AN EVENT, not a pause. The whistle and the card both come off
      * the engine's own announcement, so the computer calling one looks exactly
@@ -311,7 +335,10 @@ export class HoopsGameScreen implements Screen {
     }
     this.tickBeat(delta);
 
-    if (!this.paused && !this.finished && !this.beat) {
+    /* THE ENGINE IS NOT STEPPED behind a card or a highlight. That is the whole
+     * reason either of them is safe: nothing about the game moves while one is up,
+     * so there is no state to reconcile when it goes. */
+    if (!this.paused && !this.finished && !this.beat && !this.replay) {
       this.acc += delta;
       let steps = 0;
       while (this.acc >= FIXED_DT && steps < 5) {
@@ -323,6 +350,14 @@ export class HoopsGameScreen implements Screen {
     }
 
     if (!this.finished && this.game.isFinal()) this.finish();
+
+    /* A HIGHLIGHT REPLACES THE FRAME. It draws itself and returns, so the live
+     * picture, the release meter and the input all stand down until it is over. */
+    if (this.tickReplay(delta)) {
+      this.input.consume();
+      this.updateHud(delta);
+      return;
+    }
 
     if (this.momentEl) {
       this.momentTimer -= delta;
@@ -495,6 +530,115 @@ export class HoopsGameScreen implements Screen {
     this.momentTimer = 2.8;
     this.el.appendChild(this.momentEl);
     requestAnimationFrame(() => this.momentEl?.classList.add('is-on'));
+  }
+
+  /* ----------------------------------------------------------- the replay */
+
+  /**
+   * SHOW IT AGAIN.
+   *
+   * `seconds` is how far back the highlight starts; the buffer holds five, so
+   * anything longer is silently clamped to what actually exists. The game is not
+   * stepped while it runs, so nothing changes behind it and there is nothing to
+   * restore when it ends — the one design decision that makes a replay in a live
+   * game safe rather than a source of desync.
+   */
+  private startReplay(seconds: number, label: string, focus: { x: number; y: number }): void {
+    if (!this.app.settings.goalReplays) return;
+    if (this.replay || this.beat) return;
+    const have = this.game.replay.seconds;
+    const from = Math.min(seconds, have - 0.2);
+    if (from < 0.8) return;
+    this.replay = { t: from, from, speed: 0.55, focus, label };
+    this.elReplay?.remove();
+    this.elReplay = replayTag(label);
+    this.el.appendChild(this.elReplay);
+    this.el.classList.add('has-replay');
+    requestAnimationFrame(() => this.elReplay?.classList.add('is-on'));
+    const guard = (): void => this.endReplay();
+    this.replayOff = () => {
+      this.el.removeEventListener('pointerdown', guard);
+      window.removeEventListener('keydown', guard);
+    };
+    // A quarter-second of grace, so the shot button that scored cannot skip it.
+    setTimeout(() => {
+      if (!this.replay) return;
+      this.el.addEventListener('pointerdown', guard);
+      window.addEventListener('keydown', guard);
+    }, 260);
+  }
+
+  private replayOff: (() => void) | null = null;
+
+  private endReplay(): void {
+    if (!this.replay) return;
+    this.replay = null;
+    this.replayOff?.();
+    this.replayOff = null;
+    this.elReplay?.remove();
+    this.elReplay = null;
+    this.el.classList.remove('has-replay');
+    this.last = performance.now();
+    this.acc = 0;
+  }
+
+  /** Walk the buffer forward. Returns true while the highlight is still running. */
+  private tickReplay(delta: number): boolean {
+    const r = this.replay;
+    if (!r) return false;
+    r.t -= delta * r.speed;
+    if (r.t <= 0 || !this.game.replay.sample(r.t, this.replayFrame)) {
+      this.endReplay();
+      return false;
+    }
+    /* THE CAMERA FOLLOWS THE BALL THROUGH THE HIGHLIGHT, not the rim it ends at.
+     * Holding the rim for two seconds shows an empty paint while the play that
+     * is being replayed happens forty feet away off screen — which is what the
+     * first version did, and it made a dunk look like a photograph of a floor.
+     * It eases toward the basket over the last half second, so the finish is
+     * framed the way a broadcast frames it. */
+    const b = this.replayFrame.ball;
+    const toEnd = Math.min(1, Math.max(0, 1 - r.t / 0.6));
+    this.renderer.drawReplay(this.game, this.replayFrame, delta, {
+      x: b.x + (r.focus.x - b.x) * toEnd * 0.6,
+      y: b.y + (r.focus.y - b.y) * toEnd * 0.6,
+    });
+    return true;
+  }
+
+  /**
+   * IS THAT WORTH WATCHING AGAIN?
+   *
+   * Three answers, and the bar is deliberately high: a replay after every basket
+   * is forty replays a game and nobody watches the fifth. A DUNK, because a dunk
+   * is the one shot in basketball that is worth seeing twice on its own merit; a
+   * basket that ties or wins it in the last minute; and nothing else. A big
+   * moment has already slowed the picture down, so the replay waits for the card
+   * to clear rather than fighting it.
+   */
+  private maybeReplay(e: { side: Side; points: number; kind: string }): void {
+    const g = this.game;
+    const late = (g.quarter >= HOOPS.quarters || g.overtime > 0) && g.clock <= 60;
+    const margin = Math.abs(g.score.home - g.score.away);
+    const worth = e.kind === 'dunk' || (late && margin <= 3);
+    if (!worth) return;
+
+    /* AT MOST ONE A QUARTER, unless the game is being decided.
+     *
+     * Measured rather than guessed: two sides produce about eleven dunks a game
+     * between them, so a dunk alone is a highlight roughly every ninety seconds —
+     * which is not a highlight, it is an interruption. One a quarter is a reel a
+     * player is glad to see; the late-game exception is there because the shot
+     * that decides a game is worth watching whatever else has been shown. */
+    const decisive = late && margin <= 3;
+    const period = g.overtime > 0 ? 4 + g.overtime : g.quarter;
+    if (!decisive && this.replayedIn === period) return;
+    this.replayedIn = period;
+    const rim = attackRim(e.side);
+    const label = e.kind === 'dunk' ? 'THE DUNK'
+      : e.points === 3 ? 'THE THREE' : 'THE BASKET';
+    // Start far enough back to catch the gather and the step before it.
+    this.startReplay(e.kind === 'dunk' ? 2.4 : 3, label, { x: rim.x, y: rim.y });
   }
 
   private step(dt: number): void {

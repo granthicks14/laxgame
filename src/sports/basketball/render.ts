@@ -684,6 +684,8 @@ function segment(
 }
 
 /** Painter's order: whoever is further up the screen is drawn first. */
-export function sortForDraw(players: CourtPlayer[], cam: CourtCamera): CourtPlayer[] {
+export function sortForDraw(
+  players: readonly CourtPlayer[], cam: CourtCamera,
+): CourtPlayer[] {
   return [...players].sort((a, b) => cam.projectY(a.x, a.y) - cam.projectY(b.x, b.y));
 }

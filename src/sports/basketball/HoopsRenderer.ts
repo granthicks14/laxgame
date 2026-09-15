@@ -7,6 +7,9 @@ import {
 } from './render';
 import { CrowdFlashes } from './arena';
 import type { HoopsGame } from './Game';
+import type { Ball } from './ball';
+import type { CourtPlayer } from './types';
+import type { ReplayFrame } from './replay';
 
 /* ---------------------------------------------------------------------------
  * THE BASKETBALL RENDERER
@@ -130,7 +133,70 @@ export class HoopsRenderer {
     return true;
   }
 
+  /**
+   * DRAW A RECORDED FRAME INSTEAD OF THE LIVE ONE.
+   *
+   * The floor, the baskets and the building are identical — it is the same
+   * building — so only the ten bodies and the ball come from the buffer. They are
+   * written into GHOSTS rather than into the live players: the game is paused
+   * behind the replay and its state must come back untouched when the replay
+   * ends, and a renderer that edits the thing it is drawing is a renderer that
+   * will eventually forget to put it back.
+   */
+  drawReplay(game: HoopsGame, frame: ReplayFrame, dt: number, focus: { x: number; y: number }): void {
+    if (!this.ghosts) {
+      this.ghosts = game.players.map((p) => ({ ...p }));
+      this.ghostBall = { ...game.ball };
+    }
+    const ghosts = this.ghosts;
+    for (let i = 0; i < ghosts.length; i++) {
+      const g = ghosts[i];
+      const r = frame.players[i];
+      const live = game.players[i];
+      g.data = live.data;
+      g.side = live.side;
+      g.uid = live.uid;
+      g.x = r.x; g.y = r.y; g.z = r.z; g.vx = r.vx; g.vy = r.vy;
+      g.pose = r.pose;
+      g.lean = r.lean; g.leanDir = r.leanDir; g.stridePhase = r.stridePhase;
+      g.armAngleL = r.armAngleL; g.armAngleR = r.armAngleR;
+      g.armReachL = r.armReachL; g.armReachR = r.armReachR;
+      g.flash = 0;
+    }
+    const ball = this.ghostBall!;
+    ball.x = frame.ball.x; ball.y = frame.ball.y; ball.z = frame.ball.z;
+    ball.state = frame.ball.state;
+    ball.carrier = null;
+
+    this.paint(game, dt, ghosts, ball, focus);
+  }
+
+  private ghosts: CourtPlayer[] | null = null;
+  private ghostBall: Ball | null = null;
+
+  /** Live play. Everything a replay does not change comes from the same painter. */
   draw(game: HoopsGame, dt: number): void {
+    this.paint(game, dt, game.players, game.ball, null);
+  }
+
+  /**
+   * ONE PAINTER, TWO SOURCES.
+   *
+   * Live play hands it the game's own players and ball; a replay hands it ghosts
+   * read out of the buffer. Everything else — the building, the floor, the
+   * baskets, the light, the draw order — is identical, because it IS identical:
+   * a replay is the same arena two seconds ago, not a different picture.
+   *
+   * `focus`, when given, is where the camera should look instead of following
+   * the ball, which is how a replay holds the rim while a shot comes down.
+   */
+  private paint(
+    game: HoopsGame,
+    dt: number,
+    players: readonly CourtPlayer[],
+    ball: Ball,
+    focus: { x: number; y: number } | null,
+  ): void {
     this.resize();
     const ctx = this.bctx;
     const cam = this.cam;
@@ -140,9 +206,12 @@ export class HoopsRenderer {
     this.swish = Math.max(0, this.swish - dt * 2.2);
     this.crowd.update(dt);
 
-    // The camera holds the half being played and swings on a turnover.
-    if (game.phase === 'live' || game.phase === 'freeThrow') {
-      cam.follow(game.possession, game.ball.x, game.ball.y, dt);
+    // The camera holds the half being played and swings on a turnover — or, in a
+    // replay, holds the one point the highlight is about.
+    if (focus) {
+      cam.follow(game.possession, focus.x, focus.y, dt);
+    } else if (game.phase === 'live' || game.phase === 'freeThrow') {
+      cam.follow(game.possession, ball.x, ball.y, dt);
     } else {
       cam.hold(dt);
     }
@@ -175,11 +244,11 @@ export class HoopsRenderer {
       if (!cam.visible(f.x, f.y, 2)) continue;
       const fxp = cam.projectX(f.x, f.y);
       const fyp = cam.projectY(f.x, f.y);
-      const s = Math.max(1, cam.ppy * 0.8);
+      const sz = Math.max(1, cam.ppy * 0.8);
       ctx.fillStyle = 'rgba(255,252,240,0.92)';
-      ctx.fillRect(Math.round(fxp - s / 2), Math.round(fyp - s / 2), s, s);
+      ctx.fillRect(Math.round(fxp - sz / 2), Math.round(fyp - sz / 2), sz, sz);
       ctx.fillStyle = 'rgba(255,248,220,0.28)';
-      ctx.fillRect(Math.round(fxp - s * 1.4), Math.round(fyp - s * 1.4), s * 2.8, s * 2.8);
+      ctx.fillRect(Math.round(fxp - sz * 1.4), Math.round(fyp - sz * 1.4), sz * 2.8, sz * 2.8);
     }
 
     // The basket at the far end of the screen first, so bodies pass in front.
@@ -188,25 +257,26 @@ export class HoopsRenderer {
     this.hoop(ctx, far, game);
 
     // Everything with height, from the back of the screen forward.
-    const carrier = game.ball.carrier;
+    const carrier = ball.carrier;
     const human = game.humanSide;
-    for (const p of sortForDraw(game.players, cam)) {
+    for (const p of sortForDraw(players, cam)) {
       if (!cam.visible(p.x, p.y, 8)) continue;
       drawCourtPlayer(
         ctx, cam, p, jerseys[p.side],
         carrier === p.uid,
-        human !== null && game.controlled[human] === p,
+        !focus && human !== null && game.controlled[human] === p,
       );
     }
-    drawBall(ctx, cam, game.ball);
+    drawBall(ctx, cam, ball);
 
     this.hoop(ctx, otherSide(far), game);
 
-    // The release meter, drawn in the world under the shooter so his eyes never
-    // have to leave the play. This is the one piece of HUD that belongs here
-    // rather than in the DOM: it is a timing control, and a timing control that
-    // lives at the edge of the screen cannot be used.
-    const meter = game.gatherState();
+    /* The release meter, drawn in the world under the shooter so his eyes never
+     * have to leave the play. This is the one piece of HUD that belongs here
+     * rather than in the DOM: it is a timing control, and a timing control that
+     * lives at the edge of the screen cannot be used. A replay has no meter —
+     * nobody is shooting. */
+    const meter = focus ? null : game.gatherState();
     if (meter && human) {
       const p = game.controlled[human];
       if (p) this.releaseMeter(ctx, p.x, p.y, meter);

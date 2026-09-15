@@ -170,3 +170,23 @@ export function bigMoment(kind: BigMomentKind, shooter: string, detail: string):
     h('div', { class: 'bcast-moment__who', text: shooter }),
     h('div', { class: 'bcast-moment__detail', text: detail }));
 }
+
+/* ------------------------------------------------------------- the replay */
+
+/**
+ * THE BAR ACROSS A HIGHLIGHT.
+ *
+ * Black bands top and bottom, a pulsing dot, and what is being shown. The bands
+ * are the whole trick: they say "this is not live" without a word, which matters
+ * because a player watching a replay he does not know is a replay is a player
+ * pressing buttons at nothing.
+ */
+export function replayTag(label: string): HTMLElement {
+  return h('div', { class: 'replay-strip' },
+    h('div', { class: 'replay-strip__bar replay-strip__bar--top' }),
+    h('div', { class: 'replay-strip__bar replay-strip__bar--bottom' }),
+    h('div', { class: 'replay-strip__tag' },
+      h('span', { class: 'replay-strip__dot' }),
+      h('span', { class: 'replay-strip__label', text: label })),
+    h('div', { class: 'replay-strip__skip', text: 'Press anything to skip' }));
+}

@@ -22,6 +22,8 @@ import { neutralHoopsInput, type HoopsInput } from '../sports/basketball/input';
 import { TEAMS, generateRoster } from '../sports/basketball/data';
 import { DIFFICULTIES } from '../sports/basketball/tuning';
 import type { CourtPlayer, HoopsConfig } from '../sports/basketball/types';
+import { REPLAY_SECONDS, emptyFrame } from '../sports/basketball/replay';
+import { COURT } from '../sports/basketball/court';
 
 const env = (globalThis as {
   process?: { exit(n: number): void; env?: Record<string, string | undefined> };
@@ -304,6 +306,69 @@ console.log('\nTHE ONE THING A COACH DOES THAT IS NOT MOVING A PLAYER\n');
   check('the computer calls timeouts of its own', hard > 0, `${hard} on Legend`);
   check('and a better-coached bench stops a run sooner', hard >= soft,
     `rookie ${soft}, legend ${hard}`);
+}
+
+/* ----------------------------------------------------------- the highlight */
+
+console.log('\nSHOW IT AGAIN\n');
+
+{
+  const g = new HoopsGame(config(77, HUMAN));
+  const frame = emptyFrame(10);
+
+  check('nothing can be replayed before anything has happened',
+    !g.replay.sample(1, frame), `${g.replay.seconds.toFixed(1)}s buffered`);
+
+  for (let i = 0; i < 900; i++) g.update(1 / 60, botInput(g, HUMAN, i));
+  check('the buffer fills as the game is played',
+    g.replay.seconds >= REPLAY_SECONDS - 0.2,
+    `${g.replay.seconds.toFixed(1)}s of ${REPLAY_SECONDS}`);
+  check('and it never grows past its own length',
+    g.replay.seconds <= REPLAY_SECONDS + 0.05, `${g.replay.seconds.toFixed(1)}s`);
+
+  const now = g.players.map((p) => ({ x: p.x, y: p.y }));
+  check('reading the newest sample gives the floor as it stands',
+    g.replay.sample(0.05, frame)
+    && frame.players.every((r, i) => Math.hypot(r.x - now[i].x, r.y - now[i].y) < 3),
+    frame.players.map((r, i) => Math.hypot(r.x - now[i].x, r.y - now[i].y).toFixed(1)).join(','));
+
+  check('reading further back than the buffer reaches is refused',
+    !g.replay.sample(REPLAY_SECONDS + 1, frame));
+
+  /* WALKING THE WHOLE BUFFER, which is what a replay does. Every sample has to
+   * be readable and every body has to be somewhere on the floor — a frame that
+   * comes back at the origin is a frame that draws ten men in the corner. */
+  let bad = 0;
+  let read = 0;
+  for (let t = REPLAY_SECONDS - 0.3; t > 0.05; t -= 1 / 60) {
+    if (!g.replay.sample(t, frame)) { bad++; continue; }
+    read++;
+    for (const r of frame.players) {
+      if (r.x < -12 || r.x > COURT.length + 12 || r.y < -12 || r.y > COURT.width + 12) bad++;
+    }
+  }
+  check('every frame of a highlight is readable and on the floor',
+    bad === 0 && read > 200, `${read} frames, ${bad} bad`);
+
+  /* CONTINUITY. A replay is watched at a fifth of a second a frame; if two
+   * neighbouring samples disagree by more than a stride, the picture judders. */
+  let jump = 0;
+  const a = emptyFrame(10);
+  const b = emptyFrame(10);
+  for (let t = 3; t > 0.2; t -= 0.05) {
+    if (!g.replay.sample(t, a) || !g.replay.sample(t - 0.05, b)) continue;
+    for (let i = 0; i < 10; i++) {
+      if (Math.hypot(b.players[i].x - a.players[i].x, b.players[i].y - a.players[i].y) > 2.2) jump++;
+    }
+  }
+  check('and nobody teleports between frames', jump === 0, `${jump} jumps`);
+
+  // And it costs nothing to keep: one array, allocated once.
+  const before = g.replay.seconds;
+  for (let i = 0; i < 600; i++) g.update(1 / 60, botInput(g, HUMAN, i));
+  check('recording for longer does not grow the buffer',
+    Math.abs(g.replay.seconds - before) < 0.2,
+    `${before.toFixed(1)}s then ${g.replay.seconds.toFixed(1)}s`);
 }
 
 console.log(`\n${passed}/${passed + failures.length} checks passed`);

@@ -64,6 +64,32 @@ for (const size of SIZES) {
     await shot(`court-${i + 1}`);
   }
 
+  /* A HIGHLIGHT. Wait for one to fire on its own rather than forcing it — a
+   * replay that only appears when a script pokes it is not a replay. */
+  let sawReplay = false;
+  for (let i = 0; i < 60; i++) {
+    await page.waitForTimeout(500);
+    if (await page.locator('.replay-strip.is-on').count()) {
+      await shot('replay');
+      sawReplay = true;
+      break;
+    }
+  }
+  if (!sawReplay) {
+    /* A dunk is rare enough that half a minute of play may not contain one, so
+     * the highlight is FORCED here to photograph it. The trigger itself is
+     * asserted in the engine harness, not here — this script is for looking. */
+    console.log(`${size.name}: no highlight in 30s, forcing one for the photograph`);
+    await page.evaluate(() => {
+      const g = window.hardwood.game;
+      g.events.emit('bucket', {
+        side: g.possession, points: 2, shooter: 'Test', assist: null, kind: 'dunk',
+      });
+    });
+    await page.waitForTimeout(500);
+    await shot('replay');
+  }
+
   /* THE BREAK. Waiting three and a half minutes of real time for a quarter to
    * end is not a screenshot script, so the clock is wound forward through the
    * game's own debug handle — the same one the browser suites use. */
