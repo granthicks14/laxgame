@@ -67,6 +67,16 @@ export interface ShotMeta {
    * paint than the team scored in total.
    */
   fromPaint: boolean;
+  /**
+   * WHETHER THE HORN HAD ALREADY SOUNDED when this left his hands.
+   *
+   * The whole buzzer-beater rule turns on this one boolean and it has to be
+   * recorded AT RELEASE, because by the time the ball reaches the rim the clock
+   * has been at zero for a second and a half either way. A shot released before
+   * the buzzer counts if it goes in; a shot released after it does not, however
+   * pretty it looks coming down.
+   */
+  afterBuzzer: boolean;
 }
 
 export interface Ball {

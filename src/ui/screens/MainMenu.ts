@@ -5,7 +5,6 @@ import { QuickSetupScreen } from './QuickSetup';
 import { TeamSelectScreen } from './TeamSelect';
 import { CareerEntryScreen } from './CareerEntry';
 import { ChallengeEntryScreen } from './Challenge';
-import { dominance } from '../../challenge/dominance';
 import { PracticeScreen } from './Practice';
 import { SettingsScreen } from './Settings';
 import { lacrosseSettings } from '../../sports/lacrosse/settings';
@@ -34,9 +33,6 @@ export class MainMenuScreen implements Screen {
     const dynasty = loadCareer('dynasty');
     const challenge = loadCareer('challenge');
     const climb = challenge?.challenge ?? null;
-    const superSave = loadCareer('superchallenge');
-    const superClimb = superSave?.challenge ?? null;
-    const superDom = superClimb ? dominance(superClimb) : null;
 
     const firstTime = !app.settings.seenTutorial;
 
@@ -75,15 +71,6 @@ export class MainMenuScreen implements Screen {
           : 'One coaching career, from the bottom of Class D to the professional game. Climb by winning.',
         note: climb ? 'CONTINUE' : 'NEW',
         go: (a) => a.push((b) => new ChallengeEntryScreen(b)),
-      },
-      {
-        label: 'Super Challenge',
-        desc: superClimb && superSave
-          ? `${userTeam(superSave).short} · ${superDom!.current.titles}/${superDom!.need} in seasons `
-            + `${superDom!.current.from}-${superDom!.current.to} · season ${superClimb.totalYears + 1}`
-          : 'The same climb, one thing to prove: three championships inside any ten seasons.',
-        note: superClimb ? 'CONTINUE' : 'NEW',
-        go: (a) => a.push((b) => new ChallengeEntryScreen(b, 'superchallenge')),
       },
       {
         label: 'Practice',
@@ -132,18 +119,11 @@ export class MainMenuScreen implements Screen {
         h('div', { class: 'topbar__sub', text: 'North District' })),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
-          retired
-            ? h('div', { class: 'panel', style: 'border-color:var(--accent)' },
-              h('div', { class: 'panel__head', text: 'Your old save could not be carried over' }),
-              h('div', { class: 'panel__body stack' },
-                h('div', {
-                  class: 'small',
-                  text: 'The league now uses the THSLL North District\'s real class structure '
-                    + '(Class A through Class D) instead of the old two-division split. Team ids '
-                    + `changed with it, so the saved ${retired.join(' and ')} from the previous `
-                    + 'version could not be converted. Everything else — settings and records — is intact.',
-                })))
-            : null,
+          /* TWO DIFFERENT REASONS A SAVE CAN BE GONE, and telling a player the
+           * wrong one is worse than telling him nothing: a coach whose Super
+           * Challenge career was removed with the mode does not need to read
+           * about a class restructure that has nothing to do with it. */
+          retired ? retiredNotice(retired) : null,
           ...items.map((it) => h('button', {
             class: `menu-btn${it.muted ? ' menu-btn--muted' : ''}`,
             on: { click: () => it.go(app) },
@@ -164,4 +144,45 @@ export class MainMenuScreen implements Screen {
       ),
     );
   }
+}
+
+/**
+ * Why a save is not there any more.
+ *
+ * A mode that was TAKEN OUT is a different thing from a save that could not be
+ * migrated, and the notice says which. Both are one-time: the notice is cleared
+ * as it is read.
+ */
+function retiredNotice(retired: string[]): HTMLElement {
+  const removedMode = retired.includes('superchallenge');
+  const others = retired.filter((m) => m !== 'superchallenge');
+  const lines: HTMLElement[] = [];
+
+  if (removedMode) {
+    lines.push(h('div', {
+      class: 'small',
+      text: 'Super Challenge has been removed. It never worked the way it was meant to, '
+        + 'so rather than leave it half-right it is gone, and its save has been cleared. '
+        + 'Challenge is unchanged — same ladder, same nine rungs, same difficulties — and '
+        + 'any Challenge career you had is exactly where you left it.',
+    }));
+  }
+  if (others.length) {
+    lines.push(h('div', {
+      class: 'small',
+      text: 'The league now uses the THSLL North District\'s real class structure '
+        + '(Class A through Class D) instead of the old two-division split. Team ids '
+        + `changed with it, so the saved ${others.join(' and ')} from the previous `
+        + 'version could not be converted. Everything else — settings and records — is intact.',
+    }));
+  }
+
+  return h('div', { class: 'panel', style: 'border-color:var(--accent)' },
+    h('div', {
+      class: 'panel__head',
+      text: removedMode && !others.length
+        ? 'Super Challenge has been removed'
+        : 'Your old save could not be carried over',
+    }),
+    h('div', { class: 'panel__body stack' }, ...lines));
 }

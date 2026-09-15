@@ -32,7 +32,6 @@
     "stages": "esbuild src/dev/stages.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-stages.mjs --log-level=error && node node_modules/.cache/lsl-stages.mjs",
     "seed-save": "esbuild src/dev/seed-save.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-seed.mjs --log-level=error && node node_modules/.cache/lsl-seed.mjs",
     "test:ladder": "node scripts/ladder-flow.mjs",
-    "test:super": "node scripts/super-flow.mjs",
     "shots": "node scripts/shots.mjs",
     "stars": "esbuild src/dev/stars.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-stars.mjs --log-level=error && node node_modules/.cache/lsl-stars.mjs",
     "profiles": "esbuild src/dev/profiles.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-profiles.mjs --log-level=error && node node_modules/.cache/lsl-profiles.mjs",
@@ -45,7 +44,6 @@
     "hierarchy": "esbuild src/dev/hierarchy.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-hierarchy.mjs --log-level=error && node node_modules/.cache/lsl-hierarchy.mjs",
     "gameplay": "esbuild src/dev/gameplay.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-gameplay.mjs --log-level=error && node node_modules/.cache/lsl-gameplay.mjs",
     "dominance": "esbuild src/dev/dominance.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-dominance.mjs --log-level=error && node node_modules/.cache/lsl-dominance.mjs",
-    "super": "esbuild src/dev/superchallenge.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-super.mjs --log-level=error && node node_modules/.cache/lsl-super.mjs",
     "sounds": "node scripts/sounds.mjs",
     "hoops": "esbuild src/dev/hoops.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops.mjs --log-level=warning && node node_modules/.cache/hoops.mjs",
     "hoops-world": "esbuild src/dev/hoopsWorld.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-world.mjs --log-level=warning && node node_modules/.cache/hoops-world.mjs",
@@ -57,7 +55,8 @@
     "hoops-ai": "esbuild src/dev/hoopsAi.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-ai.mjs --log-level=warning && node node_modules/.cache/hoops-ai.mjs",
     "hoops-feel": "esbuild src/dev/hoopsFeel.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-feel.mjs --log-level=warning && node node_modules/.cache/hoops-feel.mjs",
     "hoops-parity": "esbuild src/dev/hoopsParity.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-parity.mjs --log-level=warning && node node_modules/.cache/hoops-parity.mjs",
-    "hoops-e2e": "esbuild src/dev/hoopsEndToEnd.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-e2e.mjs --log-level=warning && node node_modules/.cache/hoops-e2e.mjs"
+    "hoops-e2e": "esbuild src/dev/hoopsEndToEnd.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-e2e.mjs --log-level=warning && node node_modules/.cache/hoops-e2e.mjs",
+    "hoops-buzzer": "esbuild src/dev/hoopsBuzzer.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-buzzer.mjs --log-level=warning && node node_modules/.cache/hoops-buzzer.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

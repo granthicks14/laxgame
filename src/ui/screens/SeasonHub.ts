@@ -21,8 +21,6 @@ import { staffSummary } from '../../league/coaching';
 import { movementOutlook } from '../../league/promotion';
 import { RecruitingScreen } from './Recruiting';
 import { ChallengeTrackerScreen, openJobSearch } from './Challenge';
-import { DominanceScreen, dominancePanel } from './Dominance';
-import { dominance } from '../../challenge/dominance';
 import { LEVELS } from '../../data/levels';
 import { divisionName } from './divisionName';
 import { stageAt } from '../../challenge/ladder';
@@ -31,7 +29,7 @@ import { classGrade } from '../../scouting/recruiting';
 import { newsFeed } from '../../league/news';
 import { bracketRounds, postseasonStatus, validateRecords, type PostseasonStatus } from '../../league/career';
 import { BracketScreen, ClinchedScreen } from './Playoffs';
-import { MODE_LABEL, isCareerMode, isSuperChallenge } from '../../league/modes';
+import { MODE_LABEL, isCareerMode } from '../../league/modes';
 import { marketFor } from '../../league/transfers';
 import type { GameStory } from '../../league/gameStory';
 
@@ -108,14 +106,6 @@ export class SeasonHubScreen implements Screen {
     // fixture and its controls sit directly under the header, and everything
     // that informs the decision follows. On a wide screen the tracker and the
     // table move into a column of their own beside it.
-    // Two side slots rather than one: on a phone the objective belongs at the
-    // top where it is a single compact card, and the table belongs at the
-    // bottom. On a wide screen both sit in a column beside the controls.
-    const objective = career.challenge && isSuperChallenge(mode)
-      ? h('div', { class: 'hub__objective' },
-        dominancePanel(app, dominance(career.challenge),
-          () => app.push((a) => new DominanceScreen(a))))
-      : null;
     const table = h('div', { class: 'hub__aside' }, this.miniStandings(app, career, mode));
 
     this.el = screenEl(
@@ -131,7 +121,7 @@ export class SeasonHubScreen implements Screen {
               this.focusPanel(app, career),
               this.officePanel(app, career, mode),
               isCareerMode(mode) ? this.recruitingPanel(app, career, mode) : null,
-              career.challenge ? this.challengePanel(app, career, mode) : null,
+              career.challenge ? this.challengePanel(app, career) : null,
               this.newsPanel(career),
               h('div', { class: 'row row--wrap' },
                 h('button', {
@@ -146,7 +136,6 @@ export class SeasonHubScreen implements Screen {
                 h('button', {
                   class: 'btn', text: 'Statistics', on: { click: () => app.push((a) => new DynastyStatsScreen(a, mode)) },
                 }))),
-            objective,
             table),
         ),
       ),
@@ -227,7 +216,7 @@ export class SeasonHubScreen implements Screen {
   }
 
   /** Where the coach stands in his career, and the way out of a dead end. */
-  private challengePanel(app: App, career: Career, mode: CareerMode): HTMLElement {
+  private challengePanel(app: App, career: Career): HTMLElement {
     const state = career.challenge!;
     const stage = stageAt(state.stageIndex);
     return panel('Your career',
@@ -246,9 +235,7 @@ export class SeasonHubScreen implements Screen {
           class: 'btn',
           text: 'Career tracker',
           on: {
-            click: () => app.push((a) => new ChallengeTrackerScreen(
-              a, mode === 'superchallenge' ? 'superchallenge' : 'challenge',
-            )),
+            click: () => app.push((a) => new ChallengeTrackerScreen(a)),
           },
         }),
         career.seasonComplete

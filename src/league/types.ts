@@ -7,7 +7,7 @@ import type { Level } from '../data/levels';
 import type { Bracket, PlayoffRound } from '../world/season';
 
 /** Challenge shares the season engine with Dynasty; it just never stops. */
-export type CareerMode = 'season' | 'dynasty' | 'challenge' | 'superchallenge';
+export type CareerMode = 'season' | 'dynasty' | 'challenge';
 import type { CoachStaff } from './coaching';
 import type { PortalDeparture, TransferCandidate } from './transfers';
 import type { MovementReport } from './promotion';

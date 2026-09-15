@@ -39,7 +39,7 @@ import { ApproachesScreen } from './Approaches';
  * THE CAREER HUB
  * ---------------------------------------------------------------------------
  * The screen a coach lives on, and the one screen in the mode that has to be
- * right. The lesson the lacrosse Super Challenge hub taught, applied from the
+ * right. The lesson the lacrosse career hub taught, applied from the
  * start: THE THING YOU PRESS FORTY TIMES A SEASON GOES AT THE TOP. Everything
  * read once a week — the table, the squad, the board — goes underneath it as a
  * tile, where it is one tap away and not in the way.

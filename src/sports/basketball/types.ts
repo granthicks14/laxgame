@@ -210,6 +210,14 @@ export type GamePhase =
   | 'madeBasket'
   | 'quarterBreak'
   | 'timeout'
+  /**
+   * THE CLOCK HAS EXPIRED AND A SHOT IS STILL IN THE AIR.
+   *
+   * The period is over for every purpose except the one ball that was already
+   * gone when the horn sounded. Nothing new may begin; the shot finishes, it is
+   * resolved, and then the period ends. See `reachBuzzer` in Game.ts.
+   */
+  | 'buzzer'
   | 'final';
 
 export interface HoopsSetup {
@@ -315,6 +323,12 @@ export interface HoopsEvents {
   whistle: { reason: string };
   foul: { by: string; shooting: boolean };
   freeThrow: { made: boolean };
+  /**
+   * THE HORN, which sounds the instant the clock reads zero — not when the
+   * period ends. Those are the same moment on most possessions and a second and
+   * a half apart on a buzzer-beater, and the difference is the whole feature.
+   */
+  buzzer: { quarter: number; shotInFlight: boolean };
   quarterEnd: { quarter: number };
   timeout: { side: Side; left: number; run: number };
   gameEnd: Record<string, never>;

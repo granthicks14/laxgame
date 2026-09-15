@@ -18,10 +18,10 @@ interface Feature {
   note?: string;
 }
 
-const CAREER = ['dynasty', 'challenge', 'superchallenge'] as const;
-const ALL = ['season', 'dynasty', 'challenge', 'superchallenge'] as const;
-/** Everything the ladder adds, which Super Challenge shares in full. */
-const CLIMB = ['challenge', 'superchallenge'] as const;
+const CAREER = ['dynasty', 'challenge'] as const;
+const ALL = ['season', 'dynasty', 'challenge'] as const;
+/** Everything the ladder adds on top of a career. */
+const CLIMB = ['challenge'] as const;
 
 const FEATURES: Feature[] = [
   { group: 'In season', name: 'Schedule', modes: [...ALL] },

@@ -262,11 +262,11 @@ function seasonOf(mode: CareerMode): Career {
   // Imported here: the module reads localStorage when it loads.
   const saves = await import('../state/saves');
 
-  for (const mode of ['season', 'dynasty', 'challenge', 'superchallenge'] as CareerMode[]) {
-    const career = mode === 'challenge' || mode === 'superchallenge'
+  for (const mode of ['season', 'dynasty', 'challenge'] as CareerMode[]) {
+    const career = mode === 'challenge'
       ? startChallenge({
         difficulty: 'varsity', gameLength: 'short', seed: 4242,
-        mode: mode as 'challenge' | 'superchallenge',
+        mode: 'challenge',
       })
       : createCareer({
         mode, teamId: 'highland-park', difficulty: 'varsity', gameLength: 'short', seed: 4242,
@@ -288,7 +288,7 @@ function seasonOf(mode: CareerMode): Career {
     check(`${mode}: the schedule comes back`,
       back.schedule.filter((g) => g.played).length === career.schedule.filter((g) => g.played).length);
     check(`${mode}: it is still the same mode`, back.mode === mode, back.mode);
-    if (mode === 'challenge' || mode === 'superchallenge') {
+    if (mode === 'challenge') {
       check(`${mode}: the climb comes back`, !!back.challenge
         && back.challenge.stageIndex === career.challenge!.stageIndex
         && back.challenge.tier === career.challenge!.tier,

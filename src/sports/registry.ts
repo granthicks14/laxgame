@@ -186,7 +186,7 @@ export const SPORTS: SportManifest[] = [
     blurb: 'Arcade lacrosse with a coaching career underneath it: recruit, develop, '
       + 'take a bottom-of-the-district programme to the professional game, or just '
       + 'pick two teams and drop the ball.',
-    modes: ['Play Now', 'Season', 'Dynasty', 'Challenge', 'Super Challenge', 'Practice'],
+    modes: ['Play Now', 'Season', 'Dynasty', 'Challenge', 'Practice'],
     theme: {
       accent: '#ffc53d', accentInk: '#1a1200',
       surface: '#2f7d42', surfaceLine: '#68b183', backdrop: '#090d12',

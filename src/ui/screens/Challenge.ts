@@ -18,7 +18,7 @@ import {
   challengeLegacy, declineChallengeOffers, seekChallengeJob, startChallenge,
   takeChallengeJob, userTeam,
 } from '../../league/career';
-import type { Career } from '../../league/types';
+import type { Career, CareerMode } from '../../league/types';
 import { STAGES, stageAt, stageDivisionName } from '../../challenge/ladder';
 import { SITUATIONS } from '../../challenge/situations';
 import {
@@ -33,8 +33,6 @@ import { trophyIcon } from '../icons';
 import { ChallengeDifficultyScreen } from './ChallengeDifficulty';
 import { DEFAULT_TIER, tierInfo, type ChallengeTier } from '../../challenge/difficulty';
 import { UPGRADES, identityOf } from '../../challenge/coach';
-import { dominance } from '../../challenge/dominance';
-import { DominanceScreen } from './Dominance';
 import { MODE_LABEL } from '../../league/modes';
 import { recordCareer, type HallResult } from '../../state/hall';
 
@@ -43,13 +41,8 @@ import { recordCareer, type HallResult } from '../../state/hall';
 export class ChallengeEntryScreen implements Screen {
   el: HTMLElement;
 
-  /**
-   * Serves both climbs. Super Challenge is the same ladder with a different
-   * thing to prove, so it is the same screen with the objective swapped rather
-   * than a copy that would drift.
-   */
-  constructor(app: App, mode: 'challenge' | 'superchallenge' = 'challenge') {
-    const isSuper = mode === 'superchallenge';
+  constructor(app: App) {
+    const mode: CareerMode = 'challenge';
     const existing = loadCareer(mode);
     const draft = {
       difficulty: (existing?.difficulty ?? app.settings.difficulty) as DifficultyKey,
@@ -72,25 +65,8 @@ export class ChallengeEntryScreen implements Screen {
 
     const body: (HTMLElement | null)[] = [];
 
-    const objective = () => panel('What you have to prove',
-        h('div', { class: 'display', style: 'font-size:22px', text: '3 championships in 10 seasons' }),
-        h('div', {
-          class: 'small',
-          text: 'Any ten consecutive seasons, at any point in the career. Win three inside one '
-            + 'stretch and you have proved you are a dominant coach.',
-        }),
-        bullet('There is no deadline', 'Ten seasons is a rolling window, not a countdown. Take '
-          + 'twenty seasons, or fifty. The requirement waits.'),
-        bullet('There is no way to fail it', 'A window that closes with two titles is not a loss. '
-          + 'It rolls forward, you keep your coach, your upgrades, your record and your reputation, '
-          + 'and you carry on.'),
-        bullet('Everything else is the climb', 'Same ladder, same difficulties, same job market, '
-          + 'same coach. Promotions still work exactly as they do in Challenge.'));
-
-
     if (existing && existing.challenge) {
       const state = existing.challenge;
-      const dom = isSuper ? dominance(state) : null;
       const stage = stageAt(state.stageIndex);
       body.push(panel('Career in progress',
         h('div', { class: 'row', style: 'gap:12px' },
@@ -100,12 +76,6 @@ export class ChallengeEntryScreen implements Screen {
             h('div', { class: 'small', text: `${stage.name} · season ${state.totalYears + 1}` }),
             h('div', { class: 'row row--wrap', style: 'gap:6px' },
               tierPill(state.tier),
-              dom
-                ? h('span', {
-                  class: dom.achieved ? 'pill pill--green' : 'pill pill--accent',
-                  text: dom.achieved ? 'DOMINANCE PROVED' : `${dom.current.titles}/${dom.need} in ten`,
-                })
-                : null,
               h('span', { class: 'pill pill--accent', text: `Rung ${state.stageIndex + 1} of ${STAGES.length}` }),
               h('span', { class: 'pill', text: `Reputation ${Math.round(state.reputation)}` }),
               h('span', {
@@ -121,17 +91,10 @@ export class ChallengeEntryScreen implements Screen {
               : app.replace((a) => new SeasonHubScreen(a, mode))),
           },
         }),
-        isSuper
-          ? h('button', {
-            class: 'btn btn--block',
-            text: 'Dominance tracker',
-            on: { click: () => app.push((a) => new DominanceScreen(a)) },
-          })
-          : null,
         h('button', {
           class: 'btn btn--block',
           text: 'Career tracker',
-          on: { click: () => app.push((a) => new ChallengeTrackerScreen(a, mode)) },
+          on: { click: () => app.push((a) => new ChallengeTrackerScreen(a)) },
         }),
         h('button', {
           class: 'btn btn--block',
@@ -140,15 +103,11 @@ export class ChallengeEntryScreen implements Screen {
             click: () => {
               if (!window.confirm('Delete this coaching career and start from the bottom again?')) return;
               deleteCareer(mode);
-              app.replace((a) => new ChallengeEntryScreen(a, mode));
+              app.replace((a) => new ChallengeEntryScreen(a));
             },
           },
         })));
     }
-
-    // In Super Challenge the objective IS the mode, so it leads. In Challenge
-    // the ladder leads, because the ladder is the objective there.
-    if (isSuper) body.push(objective());
 
     body.push(panel('The climb',
       h('div', {
@@ -190,8 +149,7 @@ export class ChallengeEntryScreen implements Screen {
     }
 
     this.el = screenEl(
-      topbar(app, isSuper ? 'Super Challenge' : 'Challenge',
-        isSuper ? 'Prove you can dominate' : 'Class D \u2192 PLL'),
+      topbar(app, 'Challenge', 'Class D \u2192 PLL'),
       h('div', { class: 'scroll' }, h('div', { class: 'wrapper stack' }, ...body)),
     );
   }
@@ -259,7 +217,8 @@ export function chapterCard(stageIndex: number): HTMLElement | null {
 export class ChallengeTrackerScreen implements Screen {
   el: HTMLElement;
 
-  constructor(app: App, mode: 'challenge' | 'superchallenge' = 'challenge') {
+  constructor(app: App) {
+    const mode: CareerMode = 'challenge';
     const career = loadCareer(mode);
     if (!career || !career.challenge) {
       this.el = screenEl(
@@ -270,7 +229,7 @@ export class ChallengeTrackerScreen implements Screen {
           [{
             label: 'Start a career',
             primary: true,
-            onClick: () => app.replace((a) => new ChallengeEntryScreen(a, mode)),
+            onClick: () => app.replace((a) => new ChallengeEntryScreen(a)),
           }],
         ))),
       );
@@ -559,9 +518,7 @@ export class ChallengeEndScreen implements Screen {
             on: {
               click: () => {
                 deleteCareer(career.mode);
-                app.replace((a) => new ChallengeEntryScreen(
-                  a, career.mode === 'superchallenge' ? 'superchallenge' : 'challenge',
-                ));
+                app.replace((a) => new ChallengeEntryScreen(a));
               },
             },
           }),

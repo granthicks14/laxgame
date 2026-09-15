@@ -46,13 +46,11 @@ export class SeasonSummaryScreen implements Screen {
     // A CLIMB grades the season the moment it ends: reputation, the hot seat,
     // the record of the season, and whether the phone rings.
     //
-    // This asked for `mode === 'challenge'` and so did the block below, which
-    // meant a SUPER CHALLENGE season was never graded at all: no step written
-    // to the record, no reputation, no sacking, no promotion, and — because the
-    // dominance tracker is derived from those steps — a rolling window frozen
-    // on the seasons that existed when the career was last graded. The whole
-    // mode was stuck the moment it was played through the screens rather than
-    // the harness. `isClimbMode` is the question both of them meant to ask.
+    // It asks `isClimbMode`, not `mode === 'challenge'`. The difference has bitten
+    // once already: a hard-coded mode check here silently stopped grading a whole
+    // mode's seasons — no step written to the record, no reputation, no sacking,
+    // no promotion — and nothing noticed until somebody played it through the
+    // screens rather than the harness. Ask the question, not the answer.
     const verdict = isClimbMode(career.mode) ? resolveChallengeSeason(career) : null;
     if (verdict) saveCareer(career);
     const climb = career.challenge;

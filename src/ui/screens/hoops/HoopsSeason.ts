@@ -20,7 +20,7 @@ import { HoopsPostGameScreen } from './HoopsPostGame';
  * THE SEASON
  * ---------------------------------------------------------------------------
  * One screen for the whole thing, with the next game at the top where it belongs.
- * The lesson the Super Challenge hub taught applies here from the start: the
+ * The lesson the lacrosse season hub taught applies here from the start: the
  * control the player presses forty times in a season goes above the fold, and the
  * table they read once a week goes under it.
  * ------------------------------------------------------------------------- */

@@ -5,7 +5,6 @@
  *
  *   STAGE=4 node ... seed-save.mjs > save.json
  *   STAGE=3 CHAMPION=1 ...          # a save sitting on the Class A title
- *   MODE=superchallenge SEASONS=6 ... # a Super Challenge career a few years in
  */
 import {
   advancePhase, nextUserGame, resolveChallengeSeason, runOffseason, simulateUserGame,
@@ -19,7 +18,7 @@ const env = (globalThis as { process?: { env?: Record<string, string | undefined
 const STAGE = Number(env.STAGE ?? 4);
 const CHAMPION = env.CHAMPION === '1';
 const PLAY = env.PLAY === '1';
-const MODE = env.MODE === 'superchallenge' ? 'superchallenge' : 'challenge';
+const MODE = 'challenge' as const;
 /** Seasons to play out before writing the save, for a career with a history. */
 const SEASONS = Number(env.SEASONS ?? 0);
 

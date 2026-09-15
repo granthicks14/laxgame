@@ -304,8 +304,12 @@ export class HoopsGameScreen implements Screen {
         2.2,
       );
     }));
+    /* THE HORN AND THE END OF THE PERIOD ARE TWO DIFFERENT MOMENTS, and on a
+     * buzzer-beater they are a second and a half apart. The horn sounds when the
+     * clock reads zero; the card comes up when the period is actually over, which
+     * is after the shot in the air has resolved. */
+    this.unsubscribes.push(this.game.events.on('buzzer', () => audio.play('buzzer')));
     this.unsubscribes.push(this.game.events.on('quarterEnd', (e) => {
-      audio.play('buzzer');
       this.showQuarterCard(e.quarter);
     }));
     this.unsubscribes.push(this.game.events.on('gameEnd', () => {

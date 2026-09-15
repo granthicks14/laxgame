@@ -297,9 +297,14 @@ export interface ShotSolution {
  * the wing. Getting that distribution right is the difference between rebounding
  * being a phase of the sport and being a coin toss.
  */
-export function solveShot(s: ShotInput, side: Side, from: Vec3, rng: Rng): ShotSolution {
+export function solveShot(
+  s: ShotInput, side: Side, from: Vec3, rng: Rng, forcedMake?: boolean | null,
+): ShotSolution {
   const rim = attackRim(side);
-  const make = rng.next() < makeChance(s);
+  /* `forcedMake` is the harness's, and only the harness's: a rule about whether a
+   * MADE shot counts after the horn cannot be tested through a percentage,
+   * because the percentage is what decides whether there is anything to count. */
+  const make = forcedMake ?? rng.next() < makeChance(s);
 
   if (make) {
     // Small jitter, well inside the throat, so no two makes are identical and

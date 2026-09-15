@@ -249,9 +249,27 @@ export function loadCareer(mode: CareerMode): Career | null {
  */
 export function retireOldSaves(): void {
   const found: string[] = [];
-  // Every mode, from the one list of them. This was a hand-written trio, so a
-  // retired Super Challenge save sat in storage for ever with nothing to read
-  // it and nothing to tell the player it was there.
+
+  /* A MODE THAT NO LONGER EXISTS leaves its save behind, and nothing below will
+   * ever look at it again: the loops iterate ALL_MODES, and Super Challenge is
+   * not in it. So its keys are swept explicitly, at every version rather than
+   * only the old ones, and the player is told once rather than left with a few
+   * kilobytes of a mode that has been taken out.
+   *
+   * This is a one-time cleanup for a retired mode. It is deliberately a literal
+   * rather than something derived: there is no list of removed modes to keep in
+   * step, and inventing one would be a second thing to maintain for a job that
+   * happens once. */
+  for (let v = 1; v <= CAREER_VERSION; v++) {
+    const key = `lsl.career.superchallenge.v${v}`;
+    if (readRaw(key) === null) continue;
+    removeRaw(key);
+    if (!found.includes('superchallenge')) found.push('superchallenge');
+  }
+
+  // Every current mode, from the one list of them. This was a hand-written trio
+  // once, and a retired save sat in storage for ever with nothing to read it and
+  // nothing to tell the player it was there.
   for (const mode of ALL_MODES) {
     for (let v = 1; v < CAREER_VERSION; v++) {
       if (MIGRATABLE.includes(v)) continue; // these are upgraded, not retired

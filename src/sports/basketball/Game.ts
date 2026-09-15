@@ -338,6 +338,7 @@ export class HoopsGame {
       case 'freeThrow': this.updateFreeThrow(dt, input); break;
       case 'quarterBreak': this.updateBreak(dt); break;
       case 'timeout': this.updateTimeout(dt); break;
+      case 'buzzer': this.updateBuzzer(dt); break;
     }
   }
 
@@ -628,9 +629,89 @@ export class HoopsGame {
     this.watchdog(dt);
 
     if (this.clock <= 0) {
+      this.reachBuzzer();
+      return;
+    }
+  }
+
+  /* ---------------------------------------------------------------- the horn
+   *
+   * THE ONE RULE: A SHOT COUNTS IF IT LEFT HIS HANDS BEFORE THE BUZZER.
+   *
+   * This used to end the period on the frame the clock hit zero, whatever the
+   * ball was doing — which killed the shot in mid-air, set the ball dead and
+   * made a buzzer-beater literally impossible to hit. The period now reaches a
+   * HORN rather than a stop:
+   *
+   *   NORMAL PLAY  clock > 0, everything as usual
+   *        v
+   *   BUZZER       clock has hit 0 with a shot already in the air. Nothing new
+   *                may begin — no gather, no pass, no tip-in — but the bodies
+   *                keep moving and the ball keeps flying.
+   *        v
+   *   RESOLUTION   the shot hits the rim, the board, the net or the floor and
+   *                the engine scores it exactly as it scores any other shot.
+   *        v
+   *   QUARTER END  only now.
+   *
+   * The clock is never extended. It sits at zero the whole time, which is what
+   * the scoreboard shows and what every rule below reads.
+   */
+
+  /**
+   * The horn. Ends the period unless something is legitimately still live.
+   *
+   * TWO THINGS SURVIVE IT. A shot released before the horn, because that is the
+   * rule this exists for. And free throws already awarded, because a foul before
+   * the buzzer is shot after it — a period cannot end with a man standing on the
+   * line waiting.
+   */
+  private reachBuzzer(): void {
+    /* The basket that dropped on the same frame the clock expired has already
+     * ended the period through `afterBasket`. Nothing to do. */
+    if (this.phase !== 'live') return;
+    this.clock = 0;
+    const shot = this.ball.shot;
+    const live = this.ball.state === 'shot' && shot !== null && !shot.afterBuzzer;
+    // The horn sounds NOW, whatever happens next.
+    this.events.emit('buzzer', { quarter: this.quarter, shotInFlight: live });
+    if (this.freeThrows) return; // the free-throw phase owns the ball already
+    if (!live) {
       this.endQuarter();
       return;
     }
+    this.phase = 'buzzer';
+    this.setBanner('AT THE BUZZER', 2.4);
+    /* A CEILING, because a period may not hang on a ball that never resolves.
+     * The longest real shot flight in this engine is about a second and a half;
+     * three is generous and it has never been reached. */
+    this.phaseTimer = 3;
+  }
+
+  /**
+   * The shot finishing, with the period already over around it.
+   *
+   * Everybody keeps moving — a frozen floor is worse than no buzzer-beater at
+   * all — and the ball runs the same physics it always does, so it can rattle in,
+   * roll out, or go down clean. What it CANNOT do is start anything: the shooting
+   * gate below refuses a new gather while the clock reads zero, so a tip-in after
+   * the horn is not a basket however open it was.
+   */
+  private updateBuzzer(dt: number): void {
+    this.phaseTimer -= dt;
+    for (const p of this.players) {
+      if (p.fouledOut) continue;
+      this.steerAi(p, dt);
+    }
+    for (const p of this.players) this.integrate(p, dt);
+    this.separate();
+    this.updateBall(dt);
+
+    /* THE SHOT HAS RESOLVED when the ball stops being a shot. A make routes
+     * through `afterBasket`, which sees a zero clock and ends the period itself;
+     * anything else — a miss, a rebound, a ball out of bounds — lands here. */
+    if (this.phase !== 'buzzer') return;
+    if (this.ball.state !== 'shot' || this.phaseTimer <= 0) this.endQuarter();
   }
 
   /** How long the ball has been live with nobody able to do anything about it. */
@@ -1223,6 +1304,11 @@ export class HoopsGame {
   }
 
   private beginGather(p: CourtPlayer): void {
+    /* NOTHING STARTS AFTER THE HORN. Both the human's button and the AI's
+     * `startShot` funnel through here, so this is the single place the rule has
+     * to live — and a shot already gathering when the clock expired is NOT
+     * stopped, because he had begun before the horn and the release is his. */
+    if (this.clock <= 0 && this.phase === 'buzzer') return;
     p.gathering = true;
     p.gather = 0;
     p.gatherKind = this.shotKindFor(p);
@@ -1348,7 +1434,7 @@ export class HoopsGame {
 
     const from = releasePoint(p.x, p.y, kind);
     from.z += p.z;
-    const sol = solveShot(shotInput, p.side, from, this.rng);
+    const sol = solveShot(shotInput, p.side, from, this.rng, this.forcedMake);
     launchAt(this.ball, from, sol.target, sol.extraArc);
     this.ball.state = 'shot';
     this.ball.carrier = null;
@@ -1364,6 +1450,8 @@ export class HoopsGame {
       assistId: this.assistFor(p),
       kind,
       fromPaint: inPaint(p.x, p.y, p.side),
+      // Stamped HERE, at release, which is the only moment the rule cares about.
+      afterBuzzer: this.clock <= 0,
     };
 
     p.pose = kind === 'dunk' ? 'dunk' : kind === 'layup' ? 'layup' : 'shoot';
@@ -1790,6 +1878,8 @@ export class HoopsGame {
       assistId: null,
       kind: 'freeThrow',
       fromPaint: false,
+      // A free throw awarded before the horn is taken after it and always counts.
+      afterBuzzer: false,
     };
     shooter.pose = 'shoot';
     shooter.poseTimer = 0.5;
@@ -2064,6 +2154,24 @@ export class HoopsGame {
 
   private scoreBasket(): void {
     const shot = this.ball.shot;
+
+    /* AFTER THE HORN, NOTHING COUNTS — and this is the place that decides it,
+     * because this is the only place a basket becomes points.
+     *
+     * The flag was stamped at RELEASE, which is the moment the rule is about: by
+     * the time the ball is falling through the ring the clock has read zero for a
+     * second either way, and asking the clock here would refuse the legitimate
+     * buzzer-beater as readily as the illegal tip-in. A ball that goes through
+     * with no shot attached during the buzzer phase is a tip after the horn, and
+     * that does not count either. */
+    const tooLate = shot ? shot.afterBuzzer : this.phase === 'buzzer';
+    if (tooLate) {
+      if (shot) shot.resolved = true;
+      this.say('No good — after the buzzer', 2);
+      this.endQuarter();
+      return;
+    }
+
     if (!shot || shot.resolved) {
       // Through the hoop with no shot attached: a tipped ball. Count it as two
       // for whoever touched it last, which is what the rule says.
@@ -2583,6 +2691,61 @@ export class HoopsGame {
   setPossessionForTest(side: Side): void {
     this.possession = side;
   }
+
+  /* ------------------------------------------------- hooks for the buzzer
+   *
+   * A buzzer-beater is a rule about a tenth of a second, and waiting for one to
+   * happen by itself is waiting for a thousand possessions. `npm run hoops-buzzer`
+   * builds the moment instead: a man, a spot, a clock reading, a release.
+   */
+
+  /** Put the game clock somewhere specific. */
+  setClockForTest(seconds: number): void {
+    this.clock = seconds;
+  }
+
+  /** Which quarter it is, for an end-of-regulation scenario. */
+  setQuarterForTest(quarter: number): void {
+    this.quarter = quarter;
+  }
+
+  /** Force a scoreline, to reach overtime without playing forty minutes to a tie. */
+  setScoreForTest(home: number, away: number): void {
+    this.score.home = home;
+    this.score.away = away;
+  }
+
+  /** Force a phase, to test what a rule does from inside one. */
+  setPhaseForTest(phase: GamePhase): void {
+    this.phase = phase;
+  }
+
+  /**
+   * Put a shot up from where this man is standing, at a chosen point in the
+   * gather, optionally forcing the result.
+   *
+   * `make` overrides the shooting model on purpose: the question here is whether
+   * a made shot COUNTS when the horn has gone, and letting a percentage decide
+   * would test the percentage instead.
+   */
+  releaseShotForTest(p: CourtPlayer, at: number, make?: boolean): void {
+    this.ball.carrier = p.uid;
+    p.gathering = true;
+    p.gather = at;
+    p.gatherKind = this.shotKindFor(p);
+    this.forcedMake = make ?? null;
+    this.releaseShot(p);
+    this.forcedMake = null;
+  }
+
+  /** Begin a shot the way a button does, and say whether the rules allowed it. */
+  startShotForTest(p: CourtPlayer, at: number): boolean {
+    this.startShot(p, at);
+    return p.gathering;
+  }
+
+  /** Set by `releaseShotForTest` only; null in every real game. */
+  private forcedMake: boolean | null = null;
 
   /** Drop the ball somewhere, for a physics scenario. */
   putBallAtForTest(x: number, y: number): void {
