@@ -181,6 +181,7 @@ export class HoopsGame {
       stat: emptyLine(),
       assignment: null,
       flash: 0,
+      armAngleL: 0, armAngleR: 0, armReachL: 0.5, armReachR: 0.5,
       react: 0,
       stridePhase: 0,
       lean: 0,
@@ -1069,6 +1070,21 @@ export class HoopsGame {
     p.stridePhase = (p.stridePhase + pace * dt * 1.55) % (Math.PI * 2);
     const wantLean = poseLeanTarget(p);
     p.lean = damp(p.lean, wantLean, 9, dt);
+
+    /* THE ARMS, eased toward what the pose wants rather than set to it.
+     *
+     * Different rates on purpose: a shooting motion is FAST — a release is a
+     * flick, and a hand that takes a quarter of a second to arrive is a hand that
+     * arrives after the ball has gone — while everything else settles at a human
+     * speed. Without the split, either every pose was mush or every pose snapped.
+     */
+    const arms = poseArmTarget(p, pace);
+    const rate = p.pose === 'shoot' || p.pose === 'gather'
+      || p.pose === 'dunk' || p.pose === 'layup' ? 22 : 11;
+    p.armAngleL = damp(p.armAngleL, arms.angleL, rate, dt);
+    p.armAngleR = damp(p.armAngleR, arms.angleR, rate, dt);
+    p.armReachL = damp(p.armReachL, arms.reachL, rate, dt);
+    p.armReachR = damp(p.armReachR, arms.reachR, rate, dt);
     // Which way the body is tipped: the way he is going, eased.
     const wantDir = pace > 0.6 ? Math.atan2(p.vy, p.vx) : p.facing;
     let d = wantDir - p.leanDir;
@@ -2574,6 +2590,71 @@ export class HoopsGame {
  * so the body bends into a shape over a few frames. Reading it directly in the
  * renderer is what made every pose change a snap.
  */
+/**
+ * WHERE A POSE WANTS THE ARMS.
+ *
+ * An angle in radians from straight down, positive forward and up, plus how far
+ * the arm is extended. Every shape in the game is one entry here, which is what
+ * makes them comparable: a defender's arms are out at shoulder height and long,
+ * a shooter's are up and short because a shot is a fold and an extension, and a
+ * runner's swing with his own stride.
+ *
+ * The renderer never sees this. It sees the eased result, so a change of shape
+ * is a MOVEMENT rather than a redraw.
+ */
+interface ArmPose { angleL: number; angleR: number; reachL: number; reachR: number; }
+
+function poseArmTarget(p: CourtPlayer, pace: number): ArmPose {
+  const UP = Math.PI;          // straight up
+  const OUT = Math.PI / 2;     // straight out to the side
+  switch (p.pose) {
+    case 'shoot':
+    case 'gather':
+      // Both hands up and in front, the off hand lower: a guide hand, not a
+      // second shooting hand.
+      return { angleL: UP * 0.86, angleR: UP * 0.98, reachL: 0.62, reachR: 0.86 };
+    case 'layup':
+    case 'dunk':
+      // One hand high and fully out, the other tucked across the body.
+      return { angleL: OUT * 0.5, angleR: UP * 1.02, reachL: 0.4, reachR: 1 };
+    case 'defend':
+      // Wide. The only shape that says "I am guarding you" from ten feet away.
+      return { angleL: -OUT * 0.9, angleR: OUT * 0.9, reachL: 0.74, reachR: 0.74 };
+    case 'jump':
+    case 'rebound':
+      return { angleL: UP * 0.9, angleR: UP * 0.9, reachL: 0.95, reachR: 0.95 };
+    case 'pass':
+      // Following through, across the body toward where it went.
+      return { angleL: OUT * 0.3, angleR: OUT * 1.1, reachL: 0.45, reachR: 1 };
+    case 'screen':
+      // Set: feet wide, arms braced across the chest and out on one side.
+      return { angleL: -OUT * 1.05, angleR: OUT * 0.2, reachL: 1, reachR: 0.4 };
+    case 'dribble': {
+      /* THE DRIBBLING HAND FOLLOWS THE BALL, which is the one arm in the game
+       * that has a reason to move on its own clock: it pumps with the bounce. */
+      const pump = Math.sin(p.stridePhase * 2) * 0.22;
+      return { angleL: -OUT * 0.22, angleR: -0.35 + pump, reachL: 0.5, reachR: 0.78 };
+    }
+    case 'down':
+      return { angleL: -OUT * 0.8, angleR: OUT * 0.8, reachL: 0.7, reachR: 0.7 };
+    case 'celebrate':
+      return { angleL: UP * 0.92, angleR: UP * 0.92, reachL: 1, reachR: 1 };
+    default: {
+      /* RUNNING. The arms swing against the legs, which is what an arm does, and
+       * the harder he is running the bigger the swing. A man standing still has
+       * his hands at his sides. */
+      const swing = clamp(pace / 16, 0, 1);
+      const phase = Math.sin(p.stridePhase);
+      return {
+        angleL: phase * 0.72 * swing,
+        angleR: -phase * 0.72 * swing,
+        reachL: 0.5 + swing * 0.12,
+        reachR: 0.5 + swing * 0.12,
+      };
+    }
+  }
+}
+
 function poseLeanTarget(p: CourtPlayer): number {
   switch (p.pose) {
     case 'layup':

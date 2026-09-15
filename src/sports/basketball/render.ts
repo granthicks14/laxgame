@@ -589,46 +589,48 @@ export function drawCourtPlayer(
     bodyW, Math.max(1, Math.round(u * 0.26)),
   );
 
-  // Arms, which is where the pose lives.
+  /* ARMS, DRAWN FROM WHERE THEY ACTUALLY ARE.
+   *
+   * The engine eases each arm's angle and reach toward what the pose wants (see
+   * `poseArmTarget`), so this does no deciding at all: it takes two numbers per
+   * arm and draws a limb. That is the whole difference between a shape that
+   * SNAPS between poses and a body that moves into them — a renderer cannot ease
+   * anything, because it has no memory of the frame before.
+   *
+   * An arm is two segments so it can bend: upper from the shoulder, forearm
+   * carrying on from the elbow at a fraction of the angle, which reads as a
+   * joint without needing a joint.
+   */
   ctx.fillStyle = shade(jersey.primary, 1.12);
   const armW = Math.max(1, Math.round(u * 0.42));
-  const shoulder = torsoTop + Math.round(u * 0.2);
-  switch (p.pose) {
-    case 'shoot':
-    case 'gather':
-      // Both hands up and in front.
-      ctx.fillRect(Math.round(sx - bodyW * 0.62), shoulder - Math.round(u * 1.5), armW, Math.round(u * 1.8));
-      ctx.fillRect(Math.round(sx + bodyW * 0.18), shoulder - Math.round(u * 1.9), armW, Math.round(u * 2.2));
-      break;
-    case 'layup':
-    case 'dunk':
-      // One hand high, the body stretched toward the rim.
-      ctx.fillRect(Math.round(sx + bodyW * 0.3), shoulder - Math.round(u * 2.4), armW, Math.round(u * 2.7));
-      break;
-    case 'defend':
-      // Arms wide: the only pose that says "I am guarding you".
-      ctx.fillRect(Math.round(sx - bodyW * 1.0), shoulder, armW, Math.round(u * 1.1));
-      ctx.fillRect(Math.round(sx + bodyW * 0.55), shoulder, armW, Math.round(u * 1.1));
-      break;
-    case 'jump':
-    case 'rebound':
-      ctx.fillRect(Math.round(sx - bodyW * 0.72), shoulder - Math.round(u * 2.0), armW, Math.round(u * 2.3));
-      ctx.fillRect(Math.round(sx + bodyW * 0.26), shoulder - Math.round(u * 2.0), armW, Math.round(u * 2.3));
-      break;
-    case 'pass':
-      ctx.fillRect(Math.round(sx + bodyW * 0.42), shoulder - Math.round(u * 0.3), Math.round(u * 1.3), armW);
-      break;
-    case 'screen':
-      ctx.fillRect(Math.round(sx - bodyW * 0.95), shoulder + Math.round(u * 0.2), Math.round(u * 1.9), armW);
-      break;
-    case 'dribble':
-      // One arm down on the ball.
-      ctx.fillRect(Math.round(sx + bodyW * 0.34), shoulder + Math.round(u * 0.5), armW, Math.round(u * 1.4));
-      break;
-    default:
-      ctx.fillRect(Math.round(sx - bodyW * 0.6), shoulder, armW, Math.round(u * 1.5));
-      ctx.fillRect(Math.round(sx + bodyW * 0.14), shoulder, armW, Math.round(u * 1.5));
-  }
+  const shoulder = torsoTop + Math.round(u * 0.28);
+  const limb = (side: -1 | 1, angle: number, reach: number): void => {
+    /* Drawn twice: a dark pass a pixel thicker, then the kit colour over it. Ten
+     * men in light change strips on a pale maple floor need an edge or the arms
+     * dissolve into the boards — the same reason the torso has one. */
+    const ox = sx + side * bodyW * 0.44 + lean * 0.3;
+    const upper = u * (0.72 + reach * 0.5);
+    const fore = u * (0.6 + reach * 0.55);
+    /* Angle is measured from straight DOWN and opens toward the outside of the
+     * body, so the same number means the same shape on both arms. Screen space
+     * has y going down, hence the sign. */
+    const a = -Math.PI / 2 - side * angle;
+    const ex = ox + Math.cos(a) * upper;
+    const ey = shoulder - Math.sin(a) * upper * LIFT_ARM;
+    // Forearm carries on a little straighter, which is what an elbow does.
+    const a2 = a - side * angle * 0.22;
+    const hx = ex + Math.cos(a2) * fore;
+    const hy = ey - Math.sin(a2) * fore * LIFT_ARM;
+    const keep = ctx.fillStyle;
+    ctx.fillStyle = 'rgba(12,8,4,0.7)';
+    segment(ctx, ox, shoulder, ex, ey, armW + edge);
+    segment(ctx, ex, ey, hx, hy, Math.max(1, armW - 1) + edge);
+    ctx.fillStyle = keep;
+    segment(ctx, ox, shoulder, ex, ey, armW);
+    segment(ctx, ex, ey, hx, hy, Math.max(1, armW - 1));
+  };
+  limb(-1, p.armAngleL, p.armReachL);
+  limb(1, p.armAngleR, p.armReachR);
 
   // Head, with the same dark edge and a cap of hair, so the face is not the
   // biggest and brightest thing on the man.
@@ -655,6 +657,30 @@ export function drawCourtPlayer(
     ctx.textBaseline = 'middle';
     ctx.fillText(String(p.data.number), sx + lean * 0.3, torsoTop + torsoH * 0.62);
   }
+}
+
+/**
+ * How much of an arm's vertical reach survives the three-quarter view.
+ *
+ * The same compression the whole picture uses for height, and it has to be the
+ * same number or a raised arm would reach past the rim it is shooting at.
+ */
+const LIFT_ARM = LIFT * 1.62;
+
+/** A limb: a rectangle between two points, thick enough to read at any zoom. */
+function segment(
+  ctx: CanvasRenderingContext2D,
+  x1: number, y1: number, x2: number, y2: number, w: number,
+): void {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (len < 0.4) return;
+  ctx.save();
+  ctx.translate(x1, y1);
+  ctx.rotate(Math.atan2(dy, dx));
+  ctx.fillRect(0, -w / 2, len, w);
+  ctx.restore();
 }
 
 /** Painter's order: whoever is further up the screen is drawn first. */

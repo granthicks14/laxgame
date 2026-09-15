@@ -179,6 +179,27 @@ export interface CourtPlayer {
    * answering, and it reads as the controls having broken.
    */
   flash: number;
+
+  /* --- the arms -----------------------------------------------------------
+   *
+   * WHY THE ARMS ARE STATE AND NOT A LOOKUP.
+   *
+   * They used to be a switch on the pose inside the renderer: a shooter's arms
+   * were drawn at one place, a defender's at another, and the instant the pose
+   * changed they were simply somewhere else. That is the "animations snap"
+   * problem, and it cannot be fixed in a renderer — a renderer has no memory of
+   * where the arm was last frame.
+   *
+   * So each arm carries an ANGLE (radians, measured from straight down, positive
+   * forward) and a REACH (0..1 of full extension), the engine eases both toward
+   * whatever the current pose wants, and the renderer draws what it finds. A man
+   * going from a dribble to a shot raises his hands over a few frames because his
+   * arms are being moved, not redrawn.
+   */
+  armAngleL: number;
+  armAngleR: number;
+  armReachL: number;
+  armReachR: number;
 }
 
 export type GamePhase =
