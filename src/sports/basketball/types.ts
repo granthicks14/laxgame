@@ -156,6 +156,22 @@ export interface CourtPlayer {
   react: number;
 
   /**
+   * ANIMATION STATE, advanced by the engine rather than read off a wall clock.
+   *
+   * `stridePhase` runs at the speed the man is ACTUALLY moving, so a walk is a
+   * walk and a sprint is a sprint — it used to be `performance.now()`, which gave
+   * every player on the floor the same leg speed whatever they were doing, and
+   * made a renderer that could not be tested.
+   *
+   * `lean` and `leanDir` are SMOOTHED, so a pose change bends the body into its
+   * new shape over a few frames instead of snapping to it. Snapping is most of
+   * what makes an animation look cheap.
+   */
+  stridePhase: number;
+  lean: number;
+  leanDir: number;
+
+  /**
    * Seconds left of the "you are now holding this man" highlight.
    *
    * Control moves by itself — a pass hands you the receiver — so the game has to

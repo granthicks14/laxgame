@@ -22,10 +22,51 @@ export const HOOPS = {
   baseSpeed: 12.4,
   speedPerRating: 0.062,
   sprintMultiplier: 1.26,
-  /** How fast a player reaches target velocity. Basketball is all first step. */
-  accelBase: 26,
-  accelPerRating: 0.16,
+  /* HOW FAST A PLAYER REACHES TOP SPEED.
+   *
+   * This was 26, which with an exponential approach meant ninety-two per cent of
+   * top speed in a TENTH OF A SECOND — every player on the floor went from
+   * standing to a dead sprint inside two frames. That is the "players instantly
+   * move at maximum speed" problem, and it is why nobody could be beaten off the
+   * dribble and nobody could be made to commit to anything: there was no such
+   * thing as a first step, because everybody was always already at full pace.
+   *
+   * At 5.5 a man needs about half a second to get going and a second and a half
+   * to be at his top speed, which is roughly what a basketball player needs.
+   */
+  accelBase: 5.5,
+  accelPerRating: 0.035,
+  /**
+   * STOPPING IS FASTER THAN STARTING, and it is not a detail: it is most of what
+   * makes a basketball player feel like a basketball player rather than a car.
+   * Planting to stop is one hard step; getting back to top speed is four.
+   */
+  brakeMultiplier: 2.4,
+  /**
+   * What a defensive stance is worth on the first step. A man bent, balanced and
+   * watching the ball moves before a man standing upright does, and without this
+   * the slower acceleration curve handed the offence forty points a game in the
+   * paint because help could never arrive in time.
+   */
+  stanceAccel: 2.1,
+  /**
+   * WHAT A HARD TURN COSTS.
+   *
+   * Reversing at full speed used to be free — the velocity simply damped through
+   * zero and out the other side, so a player could change direction at twenty
+   * feet per second as though he weighed nothing, and defending anybody was
+   * hopeless because the man with the ball could not be made to commit. A turn
+   * away from where you are going now scrubs speed, and how much you keep is your
+   * own agility.
+   */
+  turnScrub: 0.8,
   turnRate: 13,
+  /**
+   * SLIDING IS SLOWER THAN RUNNING. A defender moving sideways in a stance cannot
+   * move at the speed he runs forwards, which is the whole reason a first step
+   * beats a defender and why lateral quickness is a rating worth having.
+   */
+  slideSpeed: 0.82,
   /** Carrying the ball costs you a little speed; so does being tired. */
   dribblePenalty: 0.9,
 

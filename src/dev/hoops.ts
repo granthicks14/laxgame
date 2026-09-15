@@ -358,9 +358,19 @@ for (const [why, n] of [...reasons].sort((a, b) => b[1] - a[1])) {
 }
 console.log();
 
+/* WHAT A FINAL SCORE SHOULD LOOK LIKE AT EACH LENGTH.
+ *
+ * The top of the fourteen-minute band moved from 72 to 82 when movement was
+ * rebuilt. That is not the shooting getting soft — field goal percentage went
+ * DOWN, to 41.5% — it is the game playing faster: a first step that takes half a
+ * second instead of two frames means possessions resolve instead of grinding,
+ * and a team now gets about seventy-seven of them instead of seventy-two.
+ *
+ * Nudging the shooting down to defend a number calibrated against the old engine
+ * would have meant making basketball worse to keep a test green. */
 const expected = GAME_LENGTHS[LENGTH].quarterSeconds === 210
-  ? [38, 72]
-  : GAME_LENGTHS[LENGTH].quarterSeconds === 120 ? [20, 48] : [52, 98];
+  ? [38, 82]
+  : GAME_LENGTHS[LENGTH].quarterSeconds === 120 ? [20, 54] : [52, 108];
 
 check('nothing gets stuck', stuck === 0, `${stuck} games did not finish`);
 check('a game finishes inside its own clock', longest < 3000, `longest ${longest.toFixed(0)}s of sim`);
@@ -653,8 +663,14 @@ const rookieQ = tierRows[0].quality;
 const legendQ = tierRows[3].quality;
 check('a harder tier takes a better shot', legendQ > rookieQ + 0.005,
   `${fmt(rookieQ)} -> ${fmt(legendQ)}`);
+/* The top three tiers land within a point of each other on a ninety-game sample,
+ * which is noise rather than a ladder — what separates them is EXECUTION, and
+ * that is measured properly by `npm run hoops-ai` over whole games. What this
+ * check is for is the thing that would be a regression: a tier that is not
+ * clearly better than Rookie at choosing a shot. */
 check('and the ladder is ordered, not random',
-  tierRows.every((r, i) => i === 0 || r.quality >= tierRows[i - 1].quality - 0.012),
+  tierRows.every((r, i) => i === 0 || r.quality >= tierRows[i - 1].quality - 0.02)
+  && tierRows.slice(1).every((r) => r.quality > tierRows[0].quality + 0.03),
   tierRows.map((r) => fmt(r.quality)).join(' -> '));
 
 /* ------------------------------------------------------------- the corners */

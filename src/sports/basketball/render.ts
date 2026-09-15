@@ -2,7 +2,7 @@ import { clamp } from '../../core/math';
 import { COURT, attackRim, type Side } from './court';
 import { BALL_RADIUS, type Ball } from './ball';
 import type { CourtCamera } from './camera';
-import type { CourtPlayer, Pose } from './types';
+import type { CourtPlayer } from './types';
 
 /* ---------------------------------------------------------------------------
  * DRAWING BASKETBALL
@@ -357,7 +357,12 @@ export function drawCourtPlayer(
     }
   }
 
-  const lean = poseLean(p.pose) * u;
+  /* THE LEAN comes from the player, smoothed by the engine, and it tips the way
+   * he is actually going. Reading a fixed number off the pose meant every change
+   * of shape was a snap, and every lean was toward positive x whichever way the
+   * man was running. */
+  const leanX = Math.cos(p.leanDir - (cam.rotate ? 0 : 0));
+  const lean = p.lean * u * clamp(leanX, -1, 1);
 
   // A dark edge around the solid parts, so ten men in warm kit still read against
   // a floor that is itself warm. Hugging the body rather than boxing it: a single
@@ -372,11 +377,20 @@ export function drawCourtPlayer(
 
   // Legs.
   ctx.fillStyle = shade(jersey.primary, 0.62);
-  const stride = p.pose === 'run' || p.pose === 'dribble'
-    ? Math.sin(performance.now() / 90 + p.slot) * u * 0.42
+  /* THE STRIDE runs at the speed the man is moving, because the engine advances
+   * his phase by his own pace. It used to be `performance.now()`, which gave a
+   * man standing still and a man at a dead sprint exactly the same legs — and
+   * made the renderer impossible to test, because it read a wall clock. */
+  const pace = Math.hypot(p.vx, p.vy);
+  const stride = pace > 0.8 && p.z < 0.05
+    ? Math.sin(p.stridePhase) * u * clamp(0.18 + pace / 26, 0.18, 0.5)
     : 0;
-  ctx.fillRect(Math.round(sx - bodyW * 0.44 + stride), legTop, legW, legH);
-  ctx.fillRect(Math.round(sx + bodyW * 0.44 - legW - stride), legTop, legW, legH);
+  // Airborne, the legs tuck rather than churn.
+  const tuck = p.z > 0.05 ? u * 0.3 : 0;
+  ctx.fillRect(Math.round(sx - bodyW * 0.44 + stride), legTop,
+    legW, Math.round(legH - tuck));
+  ctx.fillRect(Math.round(sx + bodyW * 0.44 - legW - stride), legTop,
+    legW, Math.round(legH - tuck * 0.5));
 
   // Torso.
   ctx.fillStyle = jersey.primary;
@@ -453,18 +467,6 @@ export function drawCourtPlayer(
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(p.data.number), sx + lean * 0.3, torsoTop + torsoH * 0.62);
-  }
-}
-
-/** How far a pose leans the body, in body units. */
-function poseLean(pose: Pose): number {
-  switch (pose) {
-    case 'layup':
-    case 'dunk': return 0.8;
-    case 'run': return 0.4;
-    case 'dribble': return 0.25;
-    case 'down': return 1.4;
-    default: return 0;
   }
 }
 

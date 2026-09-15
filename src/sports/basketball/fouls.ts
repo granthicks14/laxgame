@@ -117,13 +117,13 @@ export interface FoulContext {
 /** Base rates, per event. See the note above for what they are tuned against. */
 const BASE = {
   /** Contact on a drive that the defender genuinely got wrong. */
-  rimContact: 0.55,
+  rimContact: 0.6,
   /** A late contest on a jump shot. */
   lateContest: 0.33,
   /** Sliding across a driver's path without getting there first. */
   blocking: 0.085,
   /** A bad reach on the handler. */
-  reach: 0.28,
+  reach: 0.245,
   /** Two men on a loose ball. */
   loose: 0.035,
   /** Going through the back of a man who had the inside position. */

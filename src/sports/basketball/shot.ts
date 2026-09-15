@@ -165,11 +165,15 @@ function baseByDistance(distance: number, kind: ShotKind): number {
    * to compensate: an uncontested layup should be the near-certainty it is in real
    * basketball, and a contested one genuinely hard. */
   if (kind === 'dunk') return 0.92;
-  if (kind === 'layup') return clamp(0.655 - Math.max(0, distance - 3) * 0.028, 0.4, 0.7);
-  if (distance <= 8) return clamp(0.47 - (distance - 4) * 0.012, 0.4, 0.5);
-  if (distance <= 16) return clamp(0.42 - (distance - 8) * 0.0075, 0.35, 0.42);
-  if (distance <= COURT.threeRadius) return clamp(0.365 - (distance - 16) * 0.006, 0.31, 0.365);
-  return clamp(0.315 - (distance - COURT.threeRadius) * 0.0135, 0.08, 0.315);
+  if (kind === 'layup') return clamp(0.665 - Math.max(0, distance - 3) * 0.028, 0.41, 0.71);
+  /* Every band here came up by about a point when the defence was rebuilt: real
+   * off-ball contests, help that arrives, and rim protection that works took four
+   * points off the league's field goal percentage between them, and the shot has
+   * to be worth what it was or the game stops being basketball. */
+  if (distance <= 8) return clamp(0.475 - (distance - 4) * 0.012, 0.40, 0.505);
+  if (distance <= 16) return clamp(0.435 - (distance - 8) * 0.0075, 0.36, 0.435);
+  if (distance <= COURT.threeRadius) return clamp(0.378 - (distance - 16) * 0.006, 0.32, 0.378);
+  return clamp(0.325 - (distance - COURT.threeRadius) * 0.0135, 0.08, 0.325);
 }
 
 /**
@@ -245,7 +249,7 @@ export function makeChance(s: ShotInput): number {
      * as an uncontested one — which made rim protection worthless, made the
      * paint the correct answer to every possession, and is the other half of why
      * the CPU would fire the ball inside against three defenders. */
-    const atRim = s.kind === 'layup' || s.kind === 'dunk' ? 1.38 : 1;
+    const atRim = s.kind === 'layup' || s.kind === 'dunk' ? 1.42 : 1;
 
     p -= near * near * (0.35 + hand * 0.65) * 0.105 * quality * line * arriving
       * scale * atRim;

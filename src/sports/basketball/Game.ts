@@ -160,6 +160,9 @@ export class HoopsGame {
       assignment: null,
       flash: 0,
       react: 0,
+      stridePhase: 0,
+      lean: 0,
+      leanDir: 0,
     };
   }
 
@@ -906,16 +909,22 @@ export class HoopsGame {
   drive(p: CourtPlayer, mx: number, my: number, sprint: boolean, dt: number): void {
     const mag = Math.hypot(mx, my);
     const attrs = p.data.attrs;
-    const tired = p.stamina < HOOPS.lowStamina ? 0.86 : 1;
+    /** In a stance, watching the ball: a defender is loaded and ready to move. */
+    const guarding = this.possession !== p.side && this.ball.state !== 'shot';
+
+    /* TIREDNESS IS A SLOPE, NOT A CLIFF. It used to be a single step at
+     * twenty-five stamina: a man at twenty-six ran at full speed and a man at
+     * twenty-four lost fourteen per cent in one frame. A fourth quarter should
+     * arrive gradually, and it should be visible before it is fatal. */
+    const tired = 0.84 + clamp(p.stamina / 100, 0, 1) * 0.16;
     const carrying = this.ball.carrier === p.uid ? HOOPS.dribblePenalty : 1;
     let speed = (HOOPS.baseSpeed
       + (attrs.speed - HOOPS.ratingCentre) * HOOPS.speedPerRating) * tired * carrying;
-    // Airborne players keep the momentum they left the floor with.
-    if (p.z > 0.05) {
-      p.vx *= 1;
-      p.vy *= 1;
-      return;
-    }
+
+    // Airborne: no steering at all. You land where the jump was going to put you,
+    // which is what makes leaving your feet a commitment.
+    if (p.z > 0.05) return;
+
     if (sprint && mag > 0.1 && p.stamina > 2) {
       speed *= HOOPS.sprintMultiplier;
       p.stamina = clamp(p.stamina - HOOPS.sprintDrain * dt, 0, 100);
@@ -923,14 +932,70 @@ export class HoopsGame {
       p.stamina = clamp(p.stamina + HOOPS.staminaRegen * dt, 0, 100);
     }
 
-    const accel = HOOPS.accelBase + (attrs.speed - HOOPS.ratingCentre) * HOOPS.accelPerRating;
+    /* A DEFENDER SLIDES; HE DOES NOT RUN SIDEWAYS AT FULL SPEED.
+     *
+     * Moving across your own stance is slower than moving the way you are facing,
+     * and how much slower is lateral quickness — which is why a first step beats
+     * a defender and why the rating is worth having. It applies to the defence,
+     * because that is who is in a stance. */
+    if (guarding && mag > 0.1) {
+      const want = Math.atan2(my, mx);
+      let off = Math.abs(want - p.facing);
+      while (off > Math.PI) off = Math.PI * 2 - off;
+      const sideways = clamp(off / (Math.PI / 2), 0, 1);
+      const agility = clamp((attrs.perimeterD + attrs.speed) / 2 / 99, 0.3, 1);
+      speed *= 1 - (1 - HOOPS.slideSpeed) * sideways * (1.35 - agility * 0.5);
+    }
+
+    /* A DEFENDER IN A STANCE IS ALREADY LOADED.
+     *
+     * Slowing everybody's first step made the game much better to play and handed
+     * the offence forty points in the paint, because a help defender starting from
+     * rest could never arrive. That is not how it works: a man in a defensive
+     * stance is bent, balanced and watching the ball, and he moves before a man
+     * standing upright does. The stance is worth a sharper first step, and it is
+     * the reason good defensive position is worth having. */
+    const stance = guarding ? HOOPS.stanceAccel : 1;
+    const accel = (HOOPS.accelBase
+      + (attrs.speed - HOOPS.ratingCentre) * HOOPS.accelPerRating) * stance;
     const tx = mag > 0.02 ? (mx / Math.max(mag, 1)) * speed : 0;
     const ty = mag > 0.02 ? (my / Math.max(mag, 1)) * speed : 0;
-    p.vx = damp(p.vx, tx, accel, dt);
-    p.vy = damp(p.vy, ty, accel, dt);
 
-    if (mag > 0.1) {
-      const want = Math.atan2(my, mx);
+    /* MOMENTUM. Turning away from where you are going costs speed.
+     *
+     * Reversing at full pace used to be free: the velocity damped through zero
+     * and straight out the other side, so a player could change direction at
+     * twenty feet a second as though he weighed nothing. Nobody could be made to
+     * commit to anything, which made defending a ball-handler hopeless and made
+     * the whole game feel like air hockey. */
+    const moving = Math.hypot(p.vx, p.vy);
+    if (moving > 3 && mag > 0.1) {
+      const dot = (p.vx * tx + p.vy * ty) / Math.max(0.001, moving * Math.hypot(tx, ty));
+      const turn = clamp((1 - dot) / 2, 0, 1);
+      const handles = clamp((attrs.handle + attrs.speed) / 2 / 99, 0.3, 1);
+      const keep = 1 - (1 - HOOPS.turnScrub) * turn * (1.3 - handles * 0.6);
+      p.vx *= keep;
+      p.vy *= keep;
+    }
+
+    /* And stopping is faster than starting. Planting is one hard step; getting
+     * back to top speed is four. */
+    const braking = mag < 0.1 || Math.hypot(tx, ty) < moving;
+    const rate = braking ? accel * HOOPS.brakeMultiplier : accel;
+    p.vx = damp(p.vx, tx, rate, dt);
+    p.vy = damp(p.vy, ty, rate, dt);
+
+    /* WHICH WAY HE IS FACING.
+     *
+     * An attacker faces where he is going. A DEFENDER FACES THE BALL — that is
+     * what a stance is, and it is why he slides rather than runs. Letting his
+     * facing follow his feet meant the slide penalty only applied during the turn
+     * and then vanished, so defenders sprinted sideways in a stance, which is
+     * both wrong to look at and wrong to play against. */
+    const want = guarding
+      ? Math.atan2(this.ball.y - p.y, this.ball.x - p.x)
+      : (mag > 0.1 ? Math.atan2(my, mx) : null);
+    if (want !== null) {
       let delta = want - p.facing;
       while (delta > Math.PI) delta -= Math.PI * 2;
       while (delta < -Math.PI) delta += Math.PI * 2;
@@ -954,6 +1019,24 @@ export class HoopsGame {
     p.screenTimer = Math.max(0, p.screenTimer - dt);
     p.flash = Math.max(0, p.flash - dt);
     p.react = Math.max(0, p.react - dt);
+
+    /* ANIMATION, from what the player is actually doing.
+     *
+     * The stride advances with SPEED, so legs churn at the rate the man is
+     * travelling — it used to be the wall clock, which gave a man standing still
+     * and a man at a dead sprint identical legs. And the lean is eased toward its
+     * target rather than set to it, so a body bends into a layup over a few
+     * frames instead of snapping into the shape. */
+    const pace = Math.hypot(p.vx, p.vy);
+    p.stridePhase = (p.stridePhase + pace * dt * 1.55) % (Math.PI * 2);
+    const wantLean = poseLeanTarget(p);
+    p.lean = damp(p.lean, wantLean, 9, dt);
+    // Which way the body is tipped: the way he is going, eased.
+    const wantDir = pace > 0.6 ? Math.atan2(p.vy, p.vx) : p.facing;
+    let d = wantDir - p.leanDir;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    p.leanDir += d * Math.min(1, 10 * dt);
 
     p.x += p.vx * dt;
     p.y += p.vy * dt;
@@ -1257,7 +1340,7 @@ export class HoopsGame {
     // Rising is the window; on the way down he is late.
     const rising = defender.vz > -2 ? 1 : 0.35;
     const near = clamp(1 - gap / HOOPS.blockRange, 0, 1);
-    const chance = clamp(near * rising * (0.16 + (skill - 45) / 190), 0.01, 0.62);
+    const chance = clamp(near * rising * (0.13 + (skill - 45) / 215), 0.01, 0.55);
 
     if (this.rng.next() >= chance) {
       /* A missed block is only a foul when the defender got it WRONG — coming
@@ -2300,6 +2383,18 @@ export class HoopsGame {
     this.shotClock = seconds;
   }
 
+  /** Who has the ball, for a movement scenario that needs one side on defence. */
+  setPossessionForTest(side: Side): void {
+    this.possession = side;
+  }
+
+  /** Drop the ball somewhere, for a physics scenario. */
+  putBallAtForTest(x: number, y: number): void {
+    this.ball.x = x;
+    this.ball.y = y;
+    this.phase = 'live';
+  }
+
   /** True when this side is defending and outnumbered: a live break. */
   get inTransition(): boolean {
     return this.breakSide !== null && this.elapsed - this.breakAt < 3.2;
@@ -2313,4 +2408,29 @@ export class HoopsGame {
   outOfBoundsCheck(x: number, y: number): boolean {
     return outOfBounds(x, y);
   }
+}
+
+/**
+ * How far a pose wants to tip the body, in body units.
+ *
+ * A TARGET, not a value: `integrate` eases the player's actual lean toward this
+ * so the body bends into a shape over a few frames. Reading it directly in the
+ * renderer is what made every pose change a snap.
+ */
+function poseLeanTarget(p: CourtPlayer): number {
+  switch (p.pose) {
+    case 'layup':
+    case 'dunk': return 0.85;
+    case 'down': return 1.4;
+    case 'defend': return 0.18;
+    case 'gather':
+    case 'shoot': return -0.12;
+    case 'rebound':
+    case 'jump': return -0.2;
+    default: break;
+  }
+  // Running and dribbling lean with the pace rather than by a fixed amount, so a
+  // man jogging back on defence is not bent over like a man on a fast break.
+  const pace = Math.hypot(p.vx, p.vy);
+  return clamp(pace / 20, 0, 1) * 0.55;
 }

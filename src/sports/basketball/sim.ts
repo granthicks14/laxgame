@@ -80,7 +80,7 @@ const CAL = {
   /** Seconds of game clock one possession eats at neutral tempo. */
   possessionSeconds: 11.6,
   /** Share of possessions that end in a turnover before a shot goes up. */
-  turnoverRate: 0.121,
+  turnoverRate: 0.143,
   /**
    * Of those turnovers, how many are credited as a steal. Nearly all of them:
    * the played engine records 8.8 steals against 8.9 turnovers a team, because
@@ -92,38 +92,38 @@ const CAL = {
    * player's own skills move him around this, but a team of players who are
    * equally good at everything shoots exactly this.
    */
-  mix: [0.50, 0.245, 0.40] as [number, number, number],
+  mix: [0.545, 0.235, 0.40] as [number, number, number],
   /**
    * Make chances for a shooter and a defence both rated at `REFERENCE`. Read
    * off the played engine: 36.5% from three, and a two-point game that comes out
    * at 43% across a floor that is half rim and half jump shot.
    */
-  makeThree: 0.315,
-  makeMid: 0.242,
-  makeRim: 0.452,
+  makeThree: 0.332,
+  makeMid: 0.258,
+  makeRim: 0.472,
   /** The rating both sides are measured against. */
   reference: 62,
   /** Share of missed shots the offence rebounds. */
-  offRebRate: 0.205,
+  offRebRate: 0.222,
   /**
    * Misses nobody rebounds: off a hand, out of bounds, off the back iron and
    * into the third row. The played engine loses about a third of them, which is
    * why its rebound totals are lower than its miss totals.
    */
-  reboundLost: 0.368,
+  reboundLost: 0.425,
   /** Share of made field goals that came off a pass. */
-  assistRate: 0.465,
+  assistRate: 0.52,
   /* Shooting fouls, as a share of attempts at each range.
    *
    * Read off the played engine after its fouls were rebuilt around what the
    * defender actually did rather than how close he was standing. The two engines
    * must agree: a game you watched and a game you simulated cannot send different
    * numbers of players to the line. */
-  foulRim: 0.148,
+  foulRim: 0.118,
   foulMid: 0.037,
   foulThree: 0.022,
   /** Non-shooting fouls per possession. */
-  looseFoulRate: 0.15,
+  looseFoulRate: 0.118,
   /** Share of missed shots that were blocked. */
   blockRate: 0.088,
   /** Baseline free-throw rate before the shooter's own rating. */
