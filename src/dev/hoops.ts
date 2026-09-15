@@ -63,6 +63,7 @@ interface Totals {
   offReb: number; defReb: number;
   assists: number; steals: number; blocks: number;
   turnovers: number; fouls: number;
+  foulKinds: Record<string, number>;
   paint: number; fastBreak: number;
   overtimes: number;
   quarters: number;
@@ -73,6 +74,7 @@ interface Totals {
 const zero = (): Totals => ({
   games: 0, points: 0, fga: 0, fgm: 0, tpa: 0, tpm: 0, fta: 0, ftm: 0,
   offReb: 0, defReb: 0, assists: 0, steals: 0, blocks: 0, turnovers: 0, fouls: 0,
+  foulKinds: { shooting: 0, blocking: 0, charge: 0, reach: 0, loose: 0, push: 0 },
   paint: 0, fastBreak: 0, overtimes: 0, quarters: 0, homeWins: 0, ties: 0,
 });
 
@@ -216,6 +218,7 @@ for (let g = 0; g < GAMES; g++) {
   if (game.overtime > 0) t.overtimes++;
   addBox(t, game.box.home);
   addBox(t, game.box.away);
+  for (const [k, n] of Object.entries(game.foulsByKind)) t.foulKinds[k] += n;
   scores.push(game.score.home, game.score.away);
   if (game.score.home > game.score.away) t.homeWins++;
   if (game.score.home === game.score.away) t.ties++;
@@ -252,6 +255,10 @@ console.log(`  rebounds       ${perTeam(t.defReb).toFixed(1)} defensive, ${perTe
 console.log(`  assists        ${perTeam(t.assists).toFixed(1)}  (${fmt(pct(t.assists, t.fgm))} of makes)`);
 console.log(`  turnovers      ${perTeam(t.turnovers).toFixed(1)}   steals ${perTeam(t.steals).toFixed(1)}   blocks ${perTeam(t.blocks).toFixed(1)}`);
 console.log(`  fouls          ${perTeam(t.fouls).toFixed(1)}  (most by one man: ${maxFouls})`);
+{
+  const kinds = Object.entries(t.foulKinds).sort((a, b) => b[1] - a[1]);
+  console.log(`    ${kinds.map(([k, n]) => `${k} ${perTeam(n).toFixed(1)}`).join('  ')}`);
+}
 console.log(`  paint points   ${perTeam(t.paint).toFixed(1)}   fast break ${perTeam(t.fastBreak).toFixed(1)}`);
 console.log(`  overtimes      ${t.overtimes}/${t.games}`);
 console.log(`  ball movement  ${(passes / Math.max(1, t.fga + t.turnovers)).toFixed(2)} passes a possession`);
@@ -297,6 +304,41 @@ check('turnovers happen, and are not the whole game',
 check('somebody gets to the line',
   perTeam(t.fta) > 1, perTeam(t.fta).toFixed(1));
 check('nobody plays on past six fouls', maxFouls <= HOOPS.foulOutAt, `${maxFouls}`);
+
+/* HOW OFTEN THE WHISTLE GOES.
+ *
+ * PER POSSESSION, not per minute. This game plays about seventy possessions a
+ * side in fourteen minutes — two-thirds of a real game in a quarter of the
+ * wall-clock — so the honest measure is how often a trip down the floor ends in
+ * a whistle, and the target is deliberately below basketball's own 0.20: a foul
+ * every eighth possession rather than every fifth.
+ *
+ * It was 0.17 and it felt relentless, because a real rate arriving three times
+ * as fast is not a real rate. */
+{
+  const poss = perTeam(t.fga + t.turnovers);
+  const foulsPer = perTeam(t.fouls) / Math.max(1, poss);
+  const ftaPer = perTeam(t.fta) / Math.max(1, poss);
+  check('a whistle roughly every eighth possession',
+    foulsPer > 0.08 && foulsPer < 0.16, `${foulsPer.toFixed(3)} a possession`);
+  check('and free throws are a real part of the offence',
+    ftaPer > 0.08 && ftaPer < 0.22, `${ftaPer.toFixed(3)} a possession`);
+  check('routine defence does not draw a whistle',
+    perTeam(t.fouls) / Math.max(1, perTeam(t.fga)) < 0.16,
+    `${(perTeam(t.fouls) / Math.max(1, perTeam(t.fga))).toFixed(3)} fouls a shot`);
+
+  // Every kind is a real call that really happens, not an enum with no code.
+  const kinds = t.foulKinds;
+  check('shooting fouls are the ones that cost', kinds.shooting > 0, `${kinds.shooting}`);
+  check('a defender still sliding gets called for blocking', kinds.blocking > 0, `${kinds.blocking}`);
+  check('a defender who got there first draws a charge', kinds.charge > 0, `${kinds.charge}`);
+  check('a bad reach is a reach-in', kinds.reach > 0, `${kinds.reach}`);
+  check('two men on a loose ball is its own foul', kinds.loose > 0, `${kinds.loose}`);
+  check('and the offence fouls on the glass too', kinds.push > 0, `${kinds.push}`);
+  check('no single kind is the whole of it',
+    Math.max(...Object.values(kinds)) / Math.max(1, t.fouls) < 0.55,
+    `${(Math.max(...Object.values(kinds)) / Math.max(1, t.fouls) * 100).toFixed(0)}% is one kind`);
+}
 check('the box score adds up to the team line', boxDrift === 0,
   `${boxDrift} sides drifted (${fouledOut} men fouled out)`);
 check('points are scored inside as well as out',

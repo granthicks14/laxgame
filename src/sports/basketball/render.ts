@@ -333,13 +333,28 @@ export function drawCourtPlayer(
   ctx.ellipse(sx, floorY, bodyW * 0.62 * (1 - air * 0.25), bodyW * 0.3, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // The mark under the man you control, or the man with the ball.
+  /* The mark under the man you control, or the man with the ball.
+   *
+   * Control moves on its own — a pass hands you the receiver — so when it has
+   * just moved the ring PULSES for a third of a second. Without that the ball
+   * arrives, the man you were steering stops answering the stick, and it reads
+   * as the controls having broken rather than as control having moved. */
   if (controlled || marked) {
+    const pulse = controlled ? Math.min(1, p.flash / 0.3) : 0;
     ctx.strokeStyle = controlled ? '#ffffff' : jersey.secondary;
-    ctx.lineWidth = Math.max(1, u * 0.22);
+    ctx.lineWidth = Math.max(1, u * (0.22 + pulse * 0.24));
     ctx.beginPath();
-    ctx.ellipse(sx, floorY + u * 0.15, bodyW * 0.82, bodyW * 0.38, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, floorY + u * 0.15,
+      bodyW * (0.82 + pulse * 0.5), bodyW * (0.38 + pulse * 0.24), 0, 0, Math.PI * 2);
     ctx.stroke();
+    if (pulse > 0) {
+      ctx.globalAlpha = pulse * 0.55;
+      ctx.beginPath();
+      ctx.ellipse(sx, floorY + u * 0.15,
+        bodyW * (1.1 + pulse * 0.7), bodyW * (0.5 + pulse * 0.32), 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
   }
 
   const lean = poseLean(p.pose) * u;

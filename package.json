@@ -52,7 +52,8 @@
     "hoops-sim": "esbuild src/dev/hoopsSim.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-sim.mjs --log-level=warning && node node_modules/.cache/hoops-sim.mjs",
     "hoops-career": "esbuild src/dev/hoopsCareer.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-career.mjs --log-level=warning && node node_modules/.cache/hoops-career.mjs",
     "test:hoops-career": "node scripts/hoops-career-flow.mjs",
-    "test:two-sports": "node scripts/two-sports.mjs"
+    "test:two-sports": "node scripts/two-sports.mjs",
+    "hoops-control": "esbuild src/dev/hoopsControl.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-control.mjs --log-level=warning && node node_modules/.cache/hoops-control.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

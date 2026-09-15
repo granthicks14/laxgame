@@ -150,26 +150,42 @@ export const DIFFICULTIES: Record<DifficultyKey, HoopsDifficulty> = {
   rookie: {
     key: 'rookie',
     label: 'Rookie',
-    blurb: 'Help arrives late and the closeouts are soft. Room to learn the release.',
+    blurb: 'A wide release window, soft closeouts, and help that arrives after '
+      + 'you have already finished. Room to learn the shot.',
     decision: 0.45, helpSpeed: 0.55, patience: 0.4, closeout: 0.55,
+    reaction: 1.7, passError: 1.5, mistake: 1.6, rotation: 0.5, glass: 0.8,
+    discipline: 0.75,
+    window: 1.55, contest: 0.65, timingBite: 0.6,
   },
   pro: {
     key: 'pro',
     label: 'Pro',
-    blurb: 'An honest game. The defence rotates, and a bad shot is punished.',
+    blurb: 'An honest game. They rotate, they close out, and a bad shot is '
+      + 'punished. The window is the real one.',
     decision: 0.68, helpSpeed: 0.8, patience: 0.7, closeout: 0.8,
+    reaction: 1.15, passError: 1, mistake: 1, rotation: 0.75, glass: 1,
+    discipline: 1,
+    window: 1, contest: 1, timingBite: 1,
   },
   allstar: {
     key: 'allstar',
     label: 'All-Star',
-    blurb: 'They find the open man and they are already there when you drive.',
-    decision: 0.85, helpSpeed: 1.0, patience: 0.88, closeout: 1.0,
+    blurb: 'They find the open man, they are already there when you drive, and '
+      + 'the window is small enough that you have to mean it.',
+    decision: 0.85, helpSpeed: 1, patience: 0.88, closeout: 1,
+    reaction: 0.85, passError: 0.72, mistake: 0.66, rotation: 0.9, glass: 1.12,
+    discipline: 1.15,
+    window: 0.78, contest: 1.3, timingBite: 1.35,
   },
   legend: {
     key: 'legend',
     label: 'Legend',
-    blurb: 'Every rotation on time, every mistake taken. You will have to run offence.',
-    decision: 0.96, helpSpeed: 1.15, patience: 1.0, closeout: 1.15,
+    blurb: 'Every rotation on time, every mistake taken, every contest in your '
+      + 'face. You will have to run offence, and you will have to shoot it clean.',
+    decision: 0.96, helpSpeed: 1.15, patience: 1, closeout: 1.15,
+    reaction: 0.62, passError: 0.5, mistake: 0.4, rotation: 1, glass: 1.22,
+    discipline: 1.3,
+    window: 0.62, contest: 1.6, timingBite: 1.7,
   },
 };
 

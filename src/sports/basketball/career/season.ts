@@ -13,7 +13,9 @@ import type { HoopsConfig } from '../types';
 import {
   applyAwards, coachLevel, newCoach, perksOf, seasonAward, type HoopsCoach,
 } from './coach';
-import { DEFAULT_TIER, modsFor, type HoopsTier } from './difficulty';
+import {
+  DEFAULT_TIER, TIERS, courtFeel, modsFor, type HoopsTier,
+} from './difficulty';
 import { developSquad, rosterTurnover } from './develop';
 import {
   advancePostseason, drawBracket, finishPostseason, nextPostseasonGame,
@@ -266,24 +268,40 @@ function hashSeed(s: string): number {
 }
 
 /**
- * How well the opposition plays. Their DECISIONS come from the standing of the
- * club in the world — a blue blood is better coached than a bottom side — and
- * never from the career's difficulty tier, which changes what the coach has to
- * work with and nothing about the basketball.
+ * How well the opposition plays, on the floor.
+ *
+ * TWO INPUTS, and they are different things. Their DECISIONS come from the
+ * standing of the club in the world — a blue blood is better coached than a
+ * bottom side, and that is a fact about the world rather than a difficulty
+ * setting. Their EXECUTION, and the room your own thumb gets, come from the
+ * career's tier: a Legendary career has a smaller release window, contests that
+ * bite, and a defence that reacts sooner and makes fewer messes of its own.
+ *
+ * Neither one hands anybody a rating they did not earn.
  */
 function difficultyFor(career: HoopsCareer): HoopsConfig['difficulty'] {
   const other = teamsAtLevel(career.level)
     .filter((t) => t.id !== career.teamId);
   const mean = other.reduce((n, t) => n + t.coaching, 0) / Math.max(1, other.length);
   const q = clamp(mean / 99, 0, 1);
+  const feel = courtFeel(career.tier);
   return {
     key: 'pro',
-    label: 'League',
+    label: TIERS[career.tier].name,
     blurb: 'The standard of decision-making at this level.',
     decision: 0.45 + q * 0.45,
     helpSpeed: 0.5 + q * 0.5,
     patience: 0.45 + q * 0.5,
     closeout: 0.5 + q * 0.5,
+    reaction: feel.reaction,
+    passError: feel.passError,
+    mistake: feel.mistake,
+    rotation: feel.rotation,
+    glass: feel.glass,
+    discipline: feel.discipline,
+    window: feel.window,
+    contest: feel.contest,
+    timingBite: feel.timingBite,
   };
 }
 

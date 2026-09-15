@@ -143,6 +143,15 @@ export interface CourtPlayer {
 
   /** Who this defender is guarding, by uid. Defence only. */
   assignment: string | null;
+
+  /**
+   * Seconds left of the "you are now holding this man" highlight.
+   *
+   * Control moves by itself — a pass hands you the receiver — so the game has to
+   * SAY it moved. Without this the ball arrives, the man you were steering stops
+   * answering, and it reads as the controls having broken.
+   */
+  flash: number;
 }
 
 export type GamePhase =
@@ -161,10 +170,25 @@ export interface HoopsSetup {
 
 export type DifficultyKey = 'rookie' | 'pro' | 'allstar' | 'legend';
 
+/* ---------------------------------------------------------------------------
+ * DIFFICULTY
+ * ---------------------------------------------------------------------------
+ * THE RULE: difficulty never gives anybody a rating they did not earn. Not one
+ * number in here touches a player's attributes, and no team gets a secret bonus
+ * on its shots. What changes is HOW WELL THE GAME IS PLAYED AROUND YOU and HOW
+ * MUCH ROOM YOU GET — decisions, reactions, execution, and the size of the
+ * window your own thumb has to hit.
+ *
+ * It used to be four numbers, all of them about the AI, which meant every tier
+ * played the same game with a slightly sharper opponent. A difficulty you cannot
+ * feel in your hands is not a difficulty setting.
+ * ------------------------------------------------------------------------- */
 export interface HoopsDifficulty {
   key: DifficultyKey;
   label: string;
   blurb: string;
+
+  /* --- what the AI knows ------------------------------------------------ */
   /**
    * How well the AI reads the floor: the chance it takes the best option
    * available rather than a merely reasonable one. Never a rating bonus.
@@ -176,6 +200,31 @@ export interface HoopsDifficulty {
   patience: number;
   /** How hard it closes out on a shooter. */
   closeout: number;
+
+  /* --- how well the AI executes ----------------------------------------- */
+  /** Multiplies how long the AI takes to react to something new. */
+  reaction: number;
+  /** Multiplies the chance an AI pass is sloppy enough to be picked off. */
+  passError: number;
+  /** Multiplies how often the AI simply makes a mess of a possession. */
+  mistake: number;
+  /** How well AI defenders pick the right man to rotate to. */
+  rotation: number;
+  /** How hard the AI boxes out and goes after the glass. */
+  glass: number;
+  /** How disciplined AI defence is: lower means more cheap fouls. */
+  discipline: number;
+
+  /* --- what the human gets ---------------------------------------------- */
+  /**
+   * Multiplies the size of the release window on the human's shots. Bigger is
+   * more forgiving. This is the single number a player feels most.
+   */
+  window: number;
+  /** Multiplies how much a contest takes off a shot. */
+  contest: number;
+  /** Multiplies how harshly a bad release is punished. */
+  timingBite: number;
 }
 
 export interface HoopsConfig {

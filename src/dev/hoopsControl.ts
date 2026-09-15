@@ -1,0 +1,244 @@
+/**
+ * WHO ARE YOU HOLDING?
+ *
+ * A basketball game is a team you control for forty minutes, not a player. The
+ * one way that promise breaks is invisible from the outside and fatal from the
+ * inside: you pass, the ball reaches a team-mate, and the AI takes him over. You
+ * are left steering the man who has just given the ball away, and it reads as
+ * the controls having failed.
+ *
+ * That bug shipped. `giveBall` moved control on a steal and on a rebound and NOT
+ * on a catch, so every single pass handed your team to the computer for as long
+ * as the ball was in somebody else's hands.
+ *
+ * So: a real game, played by a real input, for thousands of frames, asserting
+ * after every possession event that the human still has his own team and that
+ * the man he is holding is the man the rules say he should be.
+ *
+ *   npm run hoops-control
+ */
+import { HoopsGame } from '../sports/basketball/Game';
+import { neutralHoopsInput, type HoopsInput } from '../sports/basketball/input';
+import { TEAMS, generateRoster } from '../sports/basketball/data';
+import { DIFFICULTIES } from '../sports/basketball/tuning';
+import type { CourtPlayer, HoopsConfig } from '../sports/basketball/types';
+
+const env = (globalThis as {
+  process?: { exit(n: number): void; env?: Record<string, string | undefined> };
+}).process;
+
+let passed = 0;
+const failures: string[] = [];
+
+function check(name: string, ok: boolean, detail = ''): void {
+  if (ok) passed++;
+  else failures.push(`${name}${detail ? ` — ${detail}` : ''}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
+}
+
+function config(seed: number, human: Side | null): HoopsConfig {
+  const home = TEAMS[0];
+  const away = TEAMS[1];
+  return {
+    home: { team: home, roster: generateRoster(home, seed) },
+    away: { team: away, roster: generateRoster(away, seed + 1) },
+    humanSide: human,
+    quarterSeconds: 300,
+    difficulty: DIFFICULTIES.pro,
+    seed,
+    label: 'control test',
+  };
+}
+
+console.log('\nCONTROL FOLLOWS THE BALL\n');
+
+const HUMAN = 'home' as const;
+type Side = 'home' | 'away';
+const game = new HoopsGame(config(4242, HUMAN));
+const idle = neutralHoopsInput();
+
+/**
+ * A bot at the sticks.
+ *
+ * A neutral input is not a test of a control system: the human stands still,
+ * holds the ball for twenty-four seconds and gives it away on the shot clock,
+ * and no pass is ever thrown. So this plays — it carries the ball up, passes it
+ * on a rhythm, and shoots when it gets near the rim. Crude basketball, but it is
+ * basketball, and it throws the passes this file exists to check.
+ */
+function botInput(g: HoopsGame, side: Side, frame: number): HoopsInput {
+  const inp = neutralHoopsInput();
+  const me = g.controlled[side];
+  if (!me) return inp;
+
+  const dir = side === 'home' ? 1 : -1;
+  const rimX = side === 'home' ? 94 - 5.25 : 5.25;
+  const mine = g.carrier && g.carrier.side === side;
+
+  if (g.carrier === me) {
+    // Carry it at the rim, pass every so often, shoot when close.
+    const d = Math.hypot(rimX - me.x, 25 - me.y);
+    inp.moveX = Math.sign(rimX - me.x) * dir * dir;
+    inp.moveY = Math.sign(25 - me.y) * 0.6;
+    if (frame % 150 === 40) inp.passPressed = true;
+    if (d < 14) {
+      inp.shootHeld = frame % 40 < 22;
+      inp.shootReleased = frame % 40 === 22;
+    }
+  } else if (mine) {
+    // Off the ball: get to open floor.
+    inp.moveX = Math.sign(rimX - me.x) * 0.5;
+    inp.moveY = me.y > 25 ? -0.5 : 0.5;
+  } else {
+    // Defence: go to the ball.
+    const b = g.carrier;
+    if (b) {
+      inp.moveX = Math.sign(b.x - me.x);
+      inp.moveY = Math.sign(b.y - me.y);
+    }
+  }
+  return inp;
+}
+
+let frames = 0;
+let catches = 0;
+let heldWrongMan = 0;
+let heldOtherTeam = 0;
+let heldFouledOut = 0;
+let carrierNotHeld = 0;
+let looseWithNobody = 0;
+const worstGaps: string[] = [];
+
+/** The man the rules say the human should be holding right now. */
+function expected(g: HoopsGame): CourtPlayer | null {
+  const c = g.carrier;
+  if (c && c.side === HUMAN) return c;
+  return null;
+}
+
+let lastCarrier: string | null = null;
+
+for (; frames < 200_000 && game.phase !== 'final'; frames++) {
+  game.update(1 / 60, botInput(game, HUMAN, frames));
+  const held = game.controlled[HUMAN];
+
+  // 1. The man you hold is always one of yours, and never a man who has fouled out.
+  if (held && held.side !== HUMAN) heldOtherTeam++;
+  if (held && held.fouledOut) heldFouledOut++;
+
+  // 2. If your side has the ball, you are holding the man who has it.
+  const want = expected(game);
+  if (want && held !== want) {
+    carrierNotHeld++;
+    if (worstGaps.length < 4) {
+      worstGaps.push(`${game.phase}: holding ${held ? held.data.last : 'nobody'}`
+        + `, ball with ${want.data.last}`);
+    }
+  }
+
+  // 3. Somebody is always being held while the ball is live.
+  if (!held && game.phase === 'live') looseWithNobody++;
+
+  /* 4. Count the catches, so the test can say it actually saw passes land.
+   *
+   * The ball has NO carrier while a pass is in the air, so this tracks the last
+   * man who held it rather than the current one: a catch is the ball arriving
+   * with somebody other than whoever threw it. */
+  const c = game.carrier;
+  if (c && c.uid !== lastCarrier) {
+    const prevId: string | null = lastCarrier;
+    const prev: CourtPlayer | undefined = prevId
+      ? game.players.find((p) => p.uid === prevId) : undefined;
+    if (prev && prev.side === HUMAN && c.side === HUMAN) {
+      catches++;
+      // The frame the ball lands, control must already be on the receiver.
+      if (game.controlled[HUMAN] !== c) heldWrongMan++;
+    }
+    lastCarrier = c.uid;
+  }
+}
+
+console.log(`  ${frames} frames, ${catches} passes completed between team-mates\n`);
+
+check('the game got far enough to test anything', catches >= 20, `${catches} catches`);
+check('a completed pass hands you the receiver, every time',
+  heldWrongMan === 0, `${heldWrongMan} of ${catches} left with the AI`);
+check('you are always holding the man with the ball',
+  carrierNotHeld === 0, `${carrierNotHeld} frames`, );
+if (worstGaps.length) for (const g of worstGaps) console.log(`      ${g}`);
+check('you never end up holding an opponent', heldOtherTeam === 0, `${heldOtherTeam} frames`);
+check('and never a man who has fouled out', heldFouledOut === 0, `${heldFouledOut} frames`);
+check('somebody is always under your control while the ball is live',
+  looseWithNobody === 0, `${looseWithNobody} frames`);
+
+/* --------------------------------------------- the switch button, and defence */
+
+console.log('\nTHE SWITCH BUTTON\n');
+
+{
+  const g = new HoopsGame(config(77, HUMAN));
+  for (let i = 0; i < 4000 && g.phase !== 'final'; i++) g.update(1 / 60, botInput(g, HUMAN, i));
+
+  // With the ball, switching must never hand your handler to the computer.
+  let refusals = 0;
+  let tries = 0;
+  for (let i = 0; i < 20_000 && g.phase !== 'final'; i++) {
+    g.update(1 / 60, botInput(g, HUMAN, i));
+    const c = g.carrier;
+    if (c && c.side === HUMAN) {
+      tries++;
+      g.switchControl(HUMAN);
+      if (g.controlled[HUMAN] === c) refusals++;
+    }
+  }
+  check('switching with the ball keeps you on your own ball-handler',
+    tries > 0 && refusals === tries, `${refusals}/${tries}`);
+}
+
+{
+  // On defence the switch must actually move you, and to one of your own.
+  const g = new HoopsGame(config(1313, HUMAN));
+  let moved = 0;
+  let tries = 0;
+  let strayed = 0;
+  for (let i = 0; i < 40_000 && g.phase !== 'final'; i++) {
+    g.update(1 / 60, botInput(g, HUMAN, i));
+    const c = g.carrier;
+    if (c && c.side !== HUMAN && g.phase === 'live') {
+      const before = g.controlled[HUMAN];
+      g.switchControl(HUMAN);
+      const after = g.controlled[HUMAN];
+      tries++;
+      if (after !== before) moved++;
+      if (after && after.side !== HUMAN) strayed++;
+    }
+  }
+  check('switching on defence moves you to another defender',
+    tries > 10 && moved > tries * 0.5, `${moved} of ${tries}`);
+  check('and never off your own team', strayed === 0, `${strayed}`);
+}
+
+/* ------------------------------------------------ an exhibition with no human */
+
+console.log('\nNOBODY AT THE STICKS\n');
+
+{
+  const g = new HoopsGame(config(999, null));
+  let broke = 0;
+  for (let i = 0; i < 260_000 && g.phase !== 'final'; i++) {
+    g.update(1 / 60, idle);
+    if (g.controlled.home && g.controlled.home.side !== 'home') broke++;
+    if (g.controlled.away && g.controlled.away.side !== 'away') broke++;
+  }
+  check('a game with no human still plays itself out', g.phase === 'final', g.phase);
+  check('and nothing crosses sides', broke === 0, `${broke}`);
+  const total = g.score.home + g.score.away;
+  check('and it was a game of basketball', total > 90 && total < 300, `${total} points`);
+}
+
+console.log(`\n${passed}/${passed + failures.length} checks passed`);
+if (failures.length) {
+  console.log(`\n${failures.length} FAILED:`);
+  for (const f of failures) console.log(`  - ${f}`);
+  env?.exit(1);
+}

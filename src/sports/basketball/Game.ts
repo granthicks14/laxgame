@@ -14,6 +14,10 @@ import {
   releasePoint, solveShot, type ShotInput, type ShotKind,
 } from './shot';
 import { starters, type HoopsPlayer } from './data';
+import {
+  FOUL_TEXT, chargeCall, lateContestFoul, looseBallFoul, pushOffFoul, reachFoul,
+  rimContactFoul, type FoulContext, type FoulKind,
+} from './fouls';
 import { NEUTRAL_EFFECTS, type SchemeEffects } from './schemes';
 import { HOOPS } from './tuning';
 import { neutralHoopsInput, type HoopsInput } from './input';
@@ -154,6 +158,7 @@ export class HoopsGame {
       fouls: 0, fouledOut: false,
       stat: emptyLine(),
       assignment: null,
+      flash: 0,
     };
   }
 
@@ -462,11 +467,20 @@ export class HoopsGame {
       // where the previous team had advanced it applies any more.
       this.ballWasAdvanced = !inOwnHalf(p.x, p.side);
     }
-    if (reason === 'steal' || reason === 'rebound') {
-      this.controlled[p.side] = p;
-      const d = this.defenderOn(p);
-      if (d) this.controlled[otherSide(p.side)] = d;
-    }
+    /* CONTROL FOLLOWS THE BALL. Every time, for every reason.
+     *
+     * This used to fire on a steal and a rebound and NOT on a catch, which is
+     * the single worst bug this game has had: you passed to a team-mate, the AI
+     * took him over, and you were left steering the man who had just given the
+     * ball away. You did not lose control because you made a mistake — you lost
+     * it because you played basketball.
+     *
+     * There is no reason a pass should be different from a rebound. Whoever has
+     * the ball is the man you are holding, on every side, always. */
+    this.controlled[p.side] = p;
+    const d = this.defenderOn(p);
+    if (d) this.controlled[otherSide(p.side)] = d;
+    this.controlHold = 0;
   }
 
   private defenderOn(p: CourtPlayer): CourtPlayer | null {
@@ -516,6 +530,9 @@ export class HoopsGame {
         return;
       }
     }
+
+    // Who the human is holding, before anybody is steered.
+    this.autoSwitch(dt);
 
     // Decide what everybody is doing.
     const human = this.humanSide;
@@ -655,17 +672,139 @@ export class HoopsGame {
     this.throwPass(p, target);
   }
 
+  /* ---------------------------------------------------------------------------
+   * WHO YOU ARE HOLDING
+   * ---------------------------------------------------------------------------
+   * You control a TEAM, not a player. The man you are steering changes as the
+   * ball moves, and the rules for it are the same three every time:
+   *
+   *   1. If your side has the ball, you are the man with the ball. Always. A
+   *      pass hands you the receiver the instant he catches it.
+   *   2. If the ball is loose or in the air, you are the man best placed to go
+   *      and get it.
+   *   3. If the other side has it, you are the man guarding the ball, unless you
+   *      have deliberately switched to somebody else in the last couple of
+   *      seconds.
+   *
+   * Nothing in here ever hands your team to the AI. The AI steers the four men
+   * you are not holding, and the whole of the other side.
+   * ------------------------------------------------------------------------- */
+
+  /** Seconds left on a deliberate switch before automatic switching resumes. */
+  private controlHold = 0;
+
+  /** Roughly how long this man needs to reach a spot, in seconds. */
+  private timeToReach(p: CourtPlayer, x: number, y: number): number {
+    const d = floorDist(p.x, p.y, x, y);
+    const speed = HOOPS.baseSpeed
+      + (p.data.attrs.speed - HOOPS.ratingCentre) * HOOPS.speedPerRating;
+    return d / Math.max(4, speed);
+  }
+
+  /** Where the ball can next be played, which is not always where it is now. */
+  private ballTarget(): { x: number; y: number } {
+    const b = this.ball;
+    if (b.state === 'pass' || b.state === 'shot') {
+      // Lead the pass: chasing where it was is how you never intercept anything.
+      const t = 0.35;
+      return { x: b.x + b.vx * t, y: b.y + b.vy * t };
+    }
+    const c = this.carrier;
+    return c ? { x: c.x, y: c.y } : { x: b.x, y: b.y };
+  }
+
+  /**
+   * The squad ranked for control, best first. Time to the ball, adjusted for
+   * what the situation actually asks of a basketball player.
+   */
+  private rankForControl(side: Side): CourtPlayer[] {
+    const spot = this.ballTarget();
+    const carrier = this.carrier;
+    const pool = this.teams[side].filter((p) => !p.fouledOut && p.stun <= 0);
+    if (!pool.length) return [];
+
+    return pool
+      .map((p) => {
+        let score = this.timeToReach(p, spot.x, spot.y);
+        if (carrier && carrier.side !== side) {
+          // Defending a live carrier: the man actually assigned to him is the
+          // one who can do something, and being between him and the rim counts.
+          if (p.assignment === carrier.uid) score -= 0.5;
+          const rim = this.ownRim(side);
+          if (floorDist(p.x, p.y, rim.x, rim.y) < floorDist(carrier.x, carrier.y, rim.x, rim.y)) {
+            score -= 0.2;
+          }
+        }
+        return { p, score };
+      })
+      .sort((a, b) => a.score - b.score)
+      .map((x) => x.p);
+  }
+
+  /** The basket this side defends. */
+  private ownRim(side: Side): { x: number; y: number } {
+    const dir = attackDir(side);
+    return { x: COURT.centerX - dir * (COURT.centerX - COURT.rimInset), y: COURT.centerY };
+  }
+
+  private setControlled(side: Side, p: CourtPlayer): void {
+    if (this.controlled[side] === p) return;
+    this.controlled[side] = p;
+    p.flash = 0.3;
+  }
+
+  /**
+   * The Switch button. Never a blind cycle: it lands on the best man available,
+   * and if you are already on him it offers the next real alternative.
+   */
   switchControl(side: Side): void {
-    const ballAt = this.carrier;
-    const anchor = ballAt ?? this.byUid(this.ball.lastTouch);
-    const from = anchor ? { x: anchor.x, y: anchor.y } : { x: this.ball.x, y: this.ball.y };
-    const current = this.controlled[side];
-    const options = this.teams[side].filter((p) => !p.fouledOut && p !== current);
-    if (!options.length) return;
-    const next = options.reduce((best, p) =>
-      (floorDist(p.x, p.y, from.x, from.y) < floorDist(best.x, best.y, from.x, from.y) ? p : best),
-    options[0]);
-    this.controlled[side] = next;
+    // With the ball, control belongs to the carrier. Switching away from your
+    // own ball-handler would hand him to the AI, which is exactly the thing
+    // this whole system exists to prevent.
+    const c = this.carrier;
+    if (c && c.side === side) {
+      if (this.controlled[side] !== c) this.setControlled(side, c);
+      else this.say('You have the ball', 0.7);
+      return;
+    }
+
+    const ranked = this.rankForControl(side);
+    if (!ranked.length) return;
+    const cur = this.controlled[side];
+    const next = ranked[0] !== cur ? ranked[0] : ranked[1];
+    if (!next) return;
+    this.setControlled(side, next);
+    this.controlHold = 2;
+  }
+
+  /**
+   * Run every frame. Keeps the human on the right man without ever taking his
+   * team away from him.
+   */
+  private autoSwitch(dt: number): void {
+    const side = this.humanSide;
+    if (!side) return;
+    if (this.controlHold > 0) this.controlHold -= dt;
+
+    const cur = this.controlled[side];
+    const c = this.carrier;
+
+    // Your ball: you are the carrier, and no hold overrides that.
+    if (c && c.side === side) {
+      if (cur !== c) this.setControlled(side, c);
+      return;
+    }
+
+    // A man who has fouled out or been knocked down cannot be the one you hold.
+    const broken = !cur || cur.fouledOut || cur.stun > 0;
+    if (!broken && this.controlHold > 0) return;
+
+    // Their ball, and you are already on the man guarding it: stay put rather
+    // than flickering between defenders every time the ball moves a foot.
+    if (!broken && c && c.side !== side && cur && cur.assignment === c.uid) return;
+
+    const best = this.rankForControl(side)[0];
+    if (best && best !== cur) this.setControlled(side, best);
   }
 
   /* ------------------------------------------------------------------- AI */
@@ -794,6 +933,7 @@ export class HoopsGame {
     p.blockCool = Math.max(0, p.blockCool - dt);
     p.crossCool = Math.max(0, p.crossCool - dt);
     p.screenTimer = Math.max(0, p.screenTimer - dt);
+    p.flash = Math.max(0, p.flash - dt);
 
     p.x += p.vx * dt;
     p.y += p.vy * dt;
@@ -942,15 +1082,27 @@ export class HoopsGame {
     // A defender who has gone up in time can get a hand on it.
     if (defender && this.tryBlock(defender, p, kind)) return;
 
-    // CONTACT AT THE RIM. Most free throws in basketball come from a body in the
-    // way of a man going to the basket, not from a hack on the perimeter, so a
-    // drive into a standing defender draws one.
+    /* CONTACT AT THE RIM, and it is three different calls.
+     *
+     * A defender who got there first and stayed upright has done his job: no
+     * whistle, and if the driver runs him over it is a CHARGE. A defender still
+     * sliding across when the drive arrives is BLOCKING. A defender who is
+     * beaten and reaching through the body is a SHOOTING foul.
+     *
+     * The old code asked only "is there a defender within three and a half
+     * feet", said yes thirty per cent of the time, and produced forty-three
+     * fouls a game. Position is now the whole question. */
     if ((kind === 'layup' || kind === 'dunk') && defender && distance < 3.4
         && defender.z < 1.2) {
-      const strength = (p.data.attrs.strength + p.data.attrs.finishing) / 2;
-      const discipline = (defender.data.attrs.interiorD + defender.data.attrs.iq) / 2;
-      const chance = clamp(0.3 + (strength - discipline) / 300, 0.08, 0.5);
-      if (this.rng.next() < chance) {
+      const ctx = this.foulContext(defender, p);
+
+      if (chargeCall(ctx, distance, this.rng.next())) {
+        this.callOffensiveFoul(p, defender);
+        return;
+      }
+
+      const call = rimContactFoul(ctx, distance, this.rng.next());
+      if (call) {
         // A shot that goes in anyway is an and-one, which the free-throw code
         // handles by shooting one.
         const scores = this.rng.next() < 0.34;
@@ -960,11 +1112,11 @@ export class HoopsGame {
             kind, inPaint(p.x, p.y, p.side));
           p.stat.fga++;
           this.box[p.side].fga++;
-          this.callFoulAndOne(defender, p);
+          this.callFoulAndOne(defender, p, call);
         } else {
           p.stat.fga++;
           this.box[p.side].fga++;
-          this.callFoul(defender, p, true, kind);
+          this.callFoul(defender, p, true, kind, call);
         }
         p.pose = kind === 'dunk' ? 'dunk' : 'layup';
         p.poseTimer = 0.4;
@@ -1063,9 +1215,11 @@ export class HoopsGame {
     const chance = clamp(near * rising * (0.16 + (skill - 45) / 190), 0.01, 0.62);
 
     if (this.rng.next() >= chance) {
-      // Late and airborne into a shooter is a foul.
-      if (defender.vz < -3 && gap < 2.6 && this.rng.next() < HOOPS.blockFoulBase) {
-        this.callFoul(defender, shooter, true, kind);
+      /* A missed block is only a foul when the defender got it WRONG — coming
+       * down on the shooter, or still closing with his body when the ball had
+       * already gone. A man who goes straight up and misses has done nothing. */
+      if (lateContestFoul(this.foulContext(defender, shooter), gap, this.rng.next())) {
+        this.callFoul(defender, shooter, true, kind, 'shooting');
         return true;
       }
       return false;
@@ -1140,27 +1294,66 @@ export class HoopsGame {
       return;
     }
 
-    // Missed. A reach-in on a handler in tight is how fouls happen.
+    /* Missed. A BAD reach is a foul — across the body, or by a man already
+     * beaten. A clean swipe that misses is a missed swipe, and calling one in
+     * six of those is how the game ended up whistling twice a minute. */
     d.stun = HOOPS.stealWhiffStun;
-    if (gap < 3.4) {
-      const discipline = (d.data.attrs.iq + d.data.attrs.perimeterD) / 2;
-      // And it costs what it costs: hands are how fouls happen.
-      const foulChance = clamp(
-        (HOOPS.reachFoulBase - (discipline - 55) / 260) * this.schemeFor(d.side).fouling,
-        0.08, 0.6,
-      );
-      if (this.rng.next() < foulChance) this.callFoul(d, handler, false, null);
+    if (reachFoul(this.foulContext(d, handler), gap, this.rng.next())) {
+      this.callFoul(d, handler, false, null, 'reach');
     }
   }
 
   /* ---------------------------------------------------------------- fouls */
 
+  /** Everything the foul rules need to know about a piece of contact. */
+  private foulContext(defender: CourtPlayer, offense: CourtPlayer): FoulContext {
+    return {
+      defender,
+      offense,
+      rim: this.ownRim(defender.side),
+      difficulty: this.cfg.difficulty,
+      schemeFouling: this.schemeFor(defender.side).fouling,
+    };
+  }
+
+  /**
+   * AN OFFENSIVE FOUL. The only foul the defence wants, and the reason standing
+   * in front of a driver is worth doing: the ball goes the other way and the
+   * shot does not count.
+   */
+  private callOffensiveFoul(by: CourtPlayer, on: CourtPlayer): void {
+    by.fouls++;
+    by.stat.fouls++;
+    this.box[by.side].fouls++;
+    by.stat.turnovers++;
+    this.box[by.side].turnovers++;
+    this.lastFoul = 'charge';
+    this.foulsByKind.charge++;
+    this.events.emit('foul', { by: by.data.last, shooting: false });
+    this.events.emit('whistle', { reason: 'charge' });
+    this.say(`Charge — ${on.data.last} draws it`, 2.4);
+    on.pose = 'down';
+    on.poseTimer = 0.9;
+    on.stun = 0.5;
+    by.stun = 0.35;
+
+    if (by.fouls >= HOOPS.foulOutAt) {
+      by.fouledOut = true;
+      this.substitute(by);
+    }
+    // Offensive fouls are never in the bonus: it is a turnover, ball out.
+    const spot = inboundSpot(on.x, on.y);
+    this.deadBall(on.side, spot.x, spot.y, HOOPS.inboundPause);
+  }
+
   /** A foul on a shot that still went in: one free throw. */
-  private callFoulAndOne(by: CourtPlayer, on: CourtPlayer): void {
+  private callFoulAndOne(by: CourtPlayer, on: CourtPlayer, kind: FoulKind): void {
     by.fouls++;
     by.stat.fouls++;
     this.box[by.side].fouls++;
     this.box[by.side].quarterFouls++;
+    this.lastFoul = kind;
+    this.foulsByKind[kind]++;
     this.events.emit('foul', { by: by.data.last, shooting: true });
     this.events.emit('whistle', { reason: 'and one' });
     this.say(`${on.data.last} scores through the contact`, 2.2);
@@ -1171,13 +1364,24 @@ export class HoopsGame {
     this.beginFreeThrows(on, 1);
   }
 
+  /** The kind of the last foul called, for the HUD and the commentary. */
+  lastFoul: FoulKind | null = null;
+
+  /** How many of each kind have been called, for the balance harnesses. */
+  foulsByKind: Record<FoulKind, number> = {
+    shooting: 0, blocking: 0, charge: 0, reach: 0, loose: 0, push: 0,
+  };
+
   private callFoul(
     by: CourtPlayer, on: CourtPlayer, shooting: boolean, kind: ShotKind | null,
+    foul: FoulKind = shooting ? 'shooting' : 'reach',
   ): void {
     by.fouls++;
     by.stat.fouls++;
     this.box[by.side].fouls++;
     this.box[by.side].quarterFouls++;
+    this.lastFoul = foul;
+    this.foulsByKind[foul]++;
     this.events.emit('foul', { by: by.data.last, shooting });
     this.events.emit('whistle', { reason: 'foul' });
 
@@ -1186,7 +1390,7 @@ export class HoopsGame {
       this.say(`${by.data.last} is out with six`, 2.6);
       this.substitute(by);
     } else {
-      this.say(`Foul on ${by.data.last}${shooting ? ' — in the act' : ''}`, 2.2);
+      this.say(`${FOUL_TEXT[foul]} on ${by.data.last}`, 2.2);
     }
 
     const inBonus = this.box[by.side].quarterFouls >= HOOPS.bonusAt;
@@ -1500,6 +1704,46 @@ export class HoopsGame {
 
     // A missed shot collected is a rebound, and which kind matters.
     if (wasShot && !wasShot.resolved && b.touchedIron) {
+      /* TWO MEN ON THE SAME BALL. A rebound arrived at by a crowd is where
+       * loose-ball fouls come from — a forearm in the back, or going over the
+       * top of somebody who had the position. Rare, but it is a real foul and
+       * the game had none of them at all. */
+      const rival = this.teams[otherSide(best.side)]
+        .filter((o) => !o.fouledOut)
+        .find((o) => floorDist(o.x, o.y, best.x, best.y) < 3.2 && o.z > 0.3);
+      if (rival && looseBallFoul(this.foulContext(rival, best), this.rng.next())) {
+        wasShot.resolved = true;
+        this.callFoul(rival, best, false, null, 'loose');
+        return;
+      }
+
+      /* And the offence fouls on the glass too: an offensive rebounder going
+       * through the back of the man who had the inside position. It is a
+       * turnover, so the second chance he just won is taken straight back. */
+      if (rival && best.side === wasShot.side
+          && floorDist(rival.x, rival.y, this.ownRim(rival.side).x, this.ownRim(rival.side).y)
+             < floorDist(best.x, best.y, this.ownRim(rival.side).x, this.ownRim(rival.side).y)
+          && pushOffFoul(this.foulContext(best, rival), this.rng.next())) {
+        wasShot.resolved = true;
+        this.lastFoul = 'push';
+        this.foulsByKind.push++;
+        best.fouls++;
+        best.stat.fouls++;
+        this.box[best.side].fouls++;
+        best.stat.turnovers++;
+        this.box[best.side].turnovers++;
+        this.events.emit('foul', { by: best.data.last, shooting: false });
+        this.events.emit('whistle', { reason: 'foul' });
+        this.say(`Over the back on ${best.data.last}`, 2);
+        if (best.fouls >= HOOPS.foulOutAt) {
+          best.fouledOut = true;
+          this.substitute(best);
+        }
+        const spot = inboundSpot(rival.x, rival.y);
+        this.deadBall(rival.side, spot.x, spot.y, HOOPS.inboundPause);
+        return;
+      }
+
       wasShot.resolved = true;
       const offensive = best.side === wasShot.side;
       if (offensive) {

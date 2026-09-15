@@ -255,6 +255,70 @@ export const TIERS: Record<HoopsTier, TierInfo> = {
 
 export const DEFAULT_TIER: HoopsTier = 'standard';
 
+/* ------------------------------------------------- the tier, on the floor */
+
+/**
+ * What a career tier is worth WHEN YOU ARE ACTUALLY PLAYING.
+ *
+ * The rule has not changed: no rival gets a rating it did not earn, and nothing
+ * here touches an attribute. What a harder career changes on the floor is how
+ * well the game is played around you and how much room your own thumb gets — a
+ * smaller release window, contests that bite harder, a defence that reacts
+ * sooner and makes fewer messes of its own.
+ *
+ * A coach who chose Legendary should feel it in his hands in the first minute of
+ * the first game, not only on the recruiting board in April.
+ */
+export interface CourtFeel {
+  /** Multiplies the human's release window. */
+  window: number;
+  /** Multiplies what a contest takes off a shot. */
+  contest: number;
+  /** Multiplies how harshly a bad release is punished. */
+  timingBite: number;
+  /** Multiplies AI reaction time. Lower is sharper. */
+  reaction: number;
+  /** Multiplies AI passing error and general sloppiness. */
+  passError: number;
+  mistake: number;
+  /** How disciplined AI defence is. Higher means fewer cheap fouls. */
+  discipline: number;
+  /** How hard the AI works the glass. */
+  glass: number;
+  /** How well AI defenders pick the right rotation. */
+  rotation: number;
+}
+
+const COURT_FEEL: Record<HoopsTier, CourtFeel> = {
+  standard: {
+    window: 1.12, contest: 0.9, timingBite: 0.85,
+    reaction: 1.2, passError: 1.15, mistake: 1.2, discipline: 0.92,
+    glass: 0.92, rotation: 0.68,
+  },
+  hard: {
+    window: 1, contest: 1, timingBite: 1,
+    reaction: 1, passError: 1, mistake: 1, discipline: 1,
+    glass: 1, rotation: 0.78,
+  },
+  veryhard: {
+    window: 0.88, contest: 1.16, timingBite: 1.18,
+    reaction: 0.88, passError: 0.84, mistake: 0.8, discipline: 1.1,
+    glass: 1.06, rotation: 0.86,
+  },
+  impossible: {
+    window: 0.76, contest: 1.34, timingBite: 1.4,
+    reaction: 0.76, passError: 0.68, mistake: 0.6, discipline: 1.2,
+    glass: 1.13, rotation: 0.93,
+  },
+  legendary: {
+    window: 0.66, contest: 1.55, timingBite: 1.65,
+    reaction: 0.66, passError: 0.54, mistake: 0.45, discipline: 1.3,
+    glass: 1.2, rotation: 1,
+  },
+};
+
+export const courtFeel = (t: HoopsTier): CourtFeel => COURT_FEEL[t];
+
 export const tierInfo = (t: HoopsTier): TierInfo => TIERS[t];
 export const modsFor = (t: HoopsTier): TierMods => TIERS[t].mods;
 
