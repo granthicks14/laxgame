@@ -125,6 +125,28 @@ export function simulateGame(
     return s;
   };
 
+  /* EVERYBODY WHO TOOK THE FIELD GETS CREDITED WITH HAVING TAKEN IT.
+   *
+   * Snaps are not a cosmetic stat: the offseason reads them to decide who
+   * develops, so a simulated season that records none leaves every player on the
+   * roster looking like he sat on the bench. Measured, that was worth about half
+   * a point of development a year against a world that regenerates itself at
+   * full strength — a coached programme decayed for twenty seasons and went
+   * 42-196 while nobody could work out why.
+   */
+  const creditSnaps = (side: Side, n: number): void => {
+    const u = units[side];
+    const starters = [
+      u.qb, ...u.backs.slice(0, 2), ...u.targets.slice(0, 4), ...u.defenders.slice(0, 11),
+      u.kicker, u.punter,
+    ].filter((p): p is Player => !!p);
+    const roster = side === 'home' ? home.roster : away.roster;
+    for (const p of roster) {
+      const share = starters.includes(p) ? 1 : 0.22;
+      lineOf(side, p).snaps += Math.round(n * share);
+    }
+  };
+
   const score = { home: 0, away: 0 };
   let quarter = 1;
   let clock = quarterSeconds;
@@ -380,6 +402,9 @@ export function simulateGame(
       if (good) addPoints(side, rng.next() < 0.6 ? FOOTBALL.touchdown + 1 : FOOTBALL.fieldGoal);
     }
   }
+
+  creditSnaps('home', plays.home);
+  creditSnaps('away', plays.away);
 
   const linesOf = (side: Side): SimLine[] =>
     [...stats[side].entries()].map(([playerId, line]) => ({ playerId, line }));

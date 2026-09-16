@@ -271,9 +271,22 @@ export function worldTeam(id: string): WorldTeam | null {
  */
 export function rosterFor(team: WorldTeam, year: number): Player[] {
   const info = LEVELS[team.level];
+  /* HOW FAR THE BEST MAN AT A POSITION SITS ABOVE THE WORST.
+   *
+   * Smaller than it looks like it should be, and the reason is the career mode.
+   * A team's rating is read off its STARTERS, so a generated roster whose best
+   * man at every position is six points above par reads six points above par —
+   * while a coached programme's best man is whoever four years of recruiting and
+   * development actually produced. Set too wide, every club in the world is
+   * permanently better than the one the player is building, and a twenty-season
+   * dynasty goes 50-189 without anybody being able to say why.
+   *
+   * Seven keeps a real depth chart — a backup is visibly worse than a starter,
+   * and losing a starter hurts — without making the world unreachable.
+   */
   return buildRoster(`${team.id}:${year}`, {
     par: team.par,
-    spread: 11,
+    spread: 7,
   }).slice(0, Math.max(22, info.rosterSize));
 }
 
