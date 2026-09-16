@@ -127,6 +127,45 @@ const lacrossePreview: PreviewPainter = (ctx, w, h, theme) => {
   }
 };
 
+/**
+ * A football field, laid down for the card: end zones, a yard line every five,
+ * the hashes down the middle and a set of posts at each end. It is the only one
+ * of these that has to read as COUNTED rather than as a shape, because counting
+ * is what the sport is.
+ */
+const footballPreview: PreviewPainter = (ctx, w, h, theme) => {
+  const r = surface(ctx, w, h, theme);
+  const endW = r.w * 0.1;
+  ctx.fillStyle = theme.accent;
+  ctx.globalAlpha = 0.28;
+  ctx.fillRect(r.x, r.y, endW, r.h);
+  ctx.fillRect(r.x + r.w - endW, r.y, endW, r.h);
+  ctx.globalAlpha = 1;
+
+  ctx.strokeStyle = theme.surfaceLine;
+  const play = r.w - endW * 2;
+  for (let i = 0; i <= 20; i++) {
+    const x = r.x + endW + (play * i) / 20;
+    ctx.globalAlpha = i % 2 === 0 ? 0.85 : 0.35;
+    line(ctx, x, r.y, x, r.y + r.h);
+  }
+  ctx.globalAlpha = 1;
+  // The hashes, a short tick at each yard down two lines through the middle.
+  for (const t of [0.38, 0.62]) {
+    const y = r.y + r.h * t;
+    for (let i = 0; i < 40; i++) {
+      const x = r.x + endW + (play * i) / 40;
+      line(ctx, x, y - 1.5, x, y + 1.5);
+    }
+  }
+  // Posts.
+  ctx.strokeStyle = theme.accent;
+  for (const dir of [1, -1] as const) {
+    const bx = dir === 1 ? r.x + 2 : r.x + r.w - 2;
+    line(ctx, bx, r.y + r.h * 0.38, bx, r.y + r.h * 0.62);
+  }
+};
+
 const basketballPreview: PreviewPainter = (ctx, w, h, theme) => {
   const r = surface(ctx, w, h, theme);
   const cx = r.x + r.w / 2;
@@ -213,17 +252,18 @@ export const SPORTS: SportManifest[] = [
   {
     id: 'football',
     name: 'Football',
-    title: 'Friday Night',
-    tagline: 'Eleven a side, a playbook, and four downs.',
-    blurb: 'The next full build. A playbook that matters, route running, coverage '
-      + 'that reads what you call, and a coaching career on top.',
-    modes: [],
+    title: 'Gridiron',
+    tagline: 'Four downs, a playbook, and ten yards.',
+    blurb: 'Call the play, throw the ball, and live with it. Routes that are '
+      + 'really run, coverage that reads what you keep calling, and a pass rush '
+      + 'that has to beat a block to reach you.',
+    modes: ['Play Now'],
     theme: {
       accent: '#7ad151', accentInk: '#08160a',
       surface: '#2c6b3f', surfaceLine: '#d8e6dc', backdrop: '#0a0f0b',
     },
-    preview: genericPreview('ends'),
-    plannedNote: 'Playbook, routes and coverage — the next full build.',
+    preview: footballPreview,
+    load: async () => (await import('./football/index')).FOOTBALL,
   },
   {
     id: 'soccer',

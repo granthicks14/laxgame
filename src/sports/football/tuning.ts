@@ -72,7 +72,9 @@ export const FOOTBALL = {
   /** A punt's hang time and distance at the extremes. */
   puntDistanceMin: 32,
   puntDistanceMax: 52,
-  kickoffDistance: 62,
+  /* Far enough from the thirty-five that most of them reach the end zone, which
+   * is what the modern game does and what keeps the touchback the default. */
+  kickoffDistance: 68,
 
   /* --- the clock */
   quarters: 4,
@@ -92,11 +94,11 @@ export const FOOTBALL = {
    * So the clock — the game clock and the play clock together, so they still
    * agree with each other — runs at this multiple while the ball is dead, and at
    * 1:1 while it is live, which is the only part a player can actually perceive.
-   * At 2.5 a huddle costs about six seconds, a team killing the clock costs
+   * At 3.2 a huddle costs about eight seconds, a team killing the clock costs
    * about forty, and a minute left is worth six or seven plays. All three of
    * those are what the real game does.
    */
-  deadClockRate: 2.5,
+  deadClockRate: 3.2,
   /** Seconds of celebration after a score. */
   scorePause: 2.2,
   overtimeSeconds: 300,

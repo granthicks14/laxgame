@@ -56,6 +56,7 @@ interface Tally {
   frames: number;
   longest: number;
   air: number;
+  firstDownEvents: number;
   runGain: number[];
   passGain: number[];
 }
@@ -64,7 +65,7 @@ const blank = (): Tally => ({
   games: 0, points: [], plays: 0, passAtt: 0, comps: 0, passYards: 0, ints: 0,
   sacks: 0, carries: 0, rushYards: 0, tds: 0, fgAtt: 0, fgMade: 0, punts: 0,
   firstDowns: 0, thirdAtt: 0, thirdConv: 0, drives: 0, penalties: 0, frames: 0,
-  longest: 0, air: 0, runGain: [], passGain: [],
+  longest: 0, air: 0, firstDownEvents: 0, runGain: [], passGain: [],
 });
 
 const problems: string[] = [];
@@ -86,6 +87,7 @@ function playGame(seed: number, key: DifficultyKey, tally: Tally): void {
   });
 
   g.events.on('catch', (e) => { tally.air += e.yards; });
+  g.events.on('firstDown', () => { tally.firstDownEvents++; });
   let frames = 0;
   let lastPossession = g.possession;
   let plays = 0;
@@ -126,8 +128,17 @@ function playGame(seed: number, key: DifficultyKey, tally: Tally): void {
         (wasThrown ? tally.passGain : tally.runGain).push(r.yards);
       }
     }
-    if (g.possession !== lastPossession) {
+    /* A DRIVE IS A SERIES, NOT A POSSESSION FLAG.
+     *
+     * The ball formally changes hands twice on every kickoff — once when the
+     * kicking side is given it to kick, once when the receiving side takes it —
+     * so counting flags reported half again as many drives as the game actually
+     * had. Only a change that leaves somebody with a first down to play is a
+     * drive. */
+    if (g.possession !== lastPossession && g.kickKind === 'none' && g.phase !== 'presnap') {
       tally.drives++;
+      lastPossession = g.possession;
+    } else if (g.possession !== lastPossession) {
       lastPossession = g.possession;
     }
     lastDown = g.down;
@@ -172,7 +183,7 @@ console.log(`A par-66 roster reads: overall ${r.overall}, offence ${r.offense} `
   + `(pass ${r.passing} / run ${r.rushing}), defence ${r.defense} `
   + `(pass ${r.passDefense} / run ${r.runDefense}), kicking ${r.specialTeams}\n`);
 
-console.log('                 pts   plays  cmp%  ypa  int%  sack%  ypc   1st  3rd%  FG    drives  min   yds   td');
+console.log('                 pts   plays  cmp%  ypa  int%  sack%  ypc   1st  3rd%  FG    drives  min   yds   td  1st*');
 for (const key of DIFFICULTY_ORDER) {
   const t = blank();
   for (let i = 0; i < N; i++) playGame(1000 + i, key, t);
@@ -198,7 +209,8 @@ for (const key of DIFFICULTY_ORDER) {
     + `${(`${t.fgMade}/${t.fgAtt}`).padStart(6)} `
     + `${(t.drives / t.games).toFixed(0).padStart(6)} `
     + `${minutes.toFixed(1).padStart(5)}`
-    + `${yards.toFixed(0).padStart(6)}${tds.toFixed(1).padStart(6)}`,
+    + `${yards.toFixed(0).padStart(6)}${tds.toFixed(1).padStart(6)}`
+    + `${(t.firstDownEvents / teams).toFixed(0).padStart(6)}`,
   );
 }
 

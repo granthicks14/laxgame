@@ -968,8 +968,8 @@ export class FootballGame {
        * in the way is a chance, not a turnover — real defensive backs put both
        * hands on far more footballs than they catch, and an engine that hands
        * them every one produces a dozen interceptions a game. */
-      const read = 0.07 + (def.data.attrs.coverage * 0.6 + def.data.attrs.awareness * 0.4) / 900;
-      if (this.rng.next() < clamp(read, 0.04, 0.3)) this.intercept(def);
+      const read = 0.04 + (def.data.attrs.coverage * 0.6 + def.data.attrs.awareness * 0.4) / 1500;
+      if (this.rng.next() < clamp(read, 0.02, 0.2)) this.intercept(def);
       else { this.statFor(def).passesDefended++; this.incomplete('defended'); }
       return;
     }
@@ -1000,7 +1000,7 @@ export class FootballGame {
      * calculation and not three: a system that asks each question separately can
      * answer none of them, or all of them. */
     if (def) {
-      const pick = clamp(0.025 + def.data.attrs.coverage / 1100, 0.02, 0.16) * press;
+      const pick = clamp(0.014 + def.data.attrs.coverage / 1800, 0.012, 0.1) * press;
       if (this.rng.next() < pick) { this.intercept(def); return; }
       this.statFor(def).passesDefended++;
       this.incomplete('defended');
@@ -1259,40 +1259,21 @@ export class FootballGame {
       return;
     }
 
-    /* A SCORE IS DECIDED BY WHERE THE BALL ENDED, not by what the play was. A
-     * pick returned to the house and a forty yard run are the same rule. */
-    if (carrier && inAttackingEndZone(carrier.y, carrier.side)) {
-      this.touchdown(carrier);
-      return;
-    }
-    if (carrier && inOwnEndZone(carrier.y, carrier.side) && result.outcome !== 'incomplete') {
-      this.safety(carrier.side);
-      return;
-    }
-
-    // Spot the ball.
-    if (result.outcome !== 'incomplete' && carrier) {
-      this.lineOfScrimmage = clamp(carrier.y, FIELD.homeGoal + 0.5, FIELD.awayGoal - 0.5);
-      this.ballX = hashSpot(clamp(carrier.x, 0.5, FIELD.width - 0.5));
-    }
-
-    /* THE BALL CHANGED HANDS DURING THE PLAY.
+    /* THE BOOKS ARE KEPT BEFORE ANYTHING ELSE HAPPENS.
      *
-     * An interception returned and tackled leaves a completely different team on
-     * offence, and everything below this line — the down, the distance, the line
-     * to gain — belongs to the side that snapped it. Falling through with the old
-     * marker still set gives the intercepting team a first down it never earned,
-     * or hands the ball straight back on downs, depending on which way the two
-     * teams happened to be facing. Both were happening.
+     * The first version of this credited the stat line and the yardage AFTER the
+     * scoring checks, which return early — so a sixty yard touchdown run was
+     * worth six points and nought yards, on the box score and on the rushing
+     * line alike. A team finished with three hundred and fifty yards and six
+     * touchdowns, which is not a football game, it is two football games'
+     * numbers stapled together. Scores are plays too, and they are counted here
+     * with everything else.
      */
-    if (result.side !== this.snapSide) {
-      this.changePossession(result.side, 'Turnover');
-      return;
-    }
+    const scored = !!carrier && inAttackingEndZone(carrier.y, carrier.side);
+    const conceded = !!carrier && inOwnEndZone(carrier.y, carrier.side)
+      && result.outcome !== 'incomplete';
+    const box = this.box[result.side];
 
-    /* THE STAT LINE, AT THE WHISTLE. Everything before this point was the air:
-     * a carry is only a carry once it is over, and yards after the catch only
-     * exist when somebody has been brought down. */
     if (this.kickKind === 'none' && carrier && result.outcome !== 'incomplete') {
       if (this.completion) {
         const yac = result.yards - this.completion.air;
@@ -1311,15 +1292,57 @@ export class FootballGame {
       }
     }
 
-    // Yards on the board.
-    const box = this.box[result.side];
-    if (result.outcome !== 'incomplete') {
+    if (result.outcome !== 'incomplete' && this.kickKind === 'none') {
       box.totalYards += result.yards;
       if (this.offensivePlay.handoff || result.outcome === 'sack') box.rushYards += result.yards;
       else if (this.thrown) box.passYards += result.yards;
       else box.rushYards += result.yards;
     }
-    if (this.down === 3) box.thirdDownAtt++;
+    /* WHERE THE BALL WILL BE SPOTTED, worked out before it is spotted, because
+     * two things need it: whether a third down was converted, and the spot
+     * itself. Asking the question against the OLD line of scrimmage — which is
+     * what it looked like this was doing — makes every third down a failure. */
+    const endY = result.outcome !== 'incomplete' && carrier
+      ? clamp(carrier.y, FIELD.homeGoal + 0.5, FIELD.awayGoal - 0.5)
+      : this.lineOfScrimmage;
+
+    if (this.down === 3 && this.kickKind === 'none') {
+      box.thirdDownAtt++;
+      // A third down that ends in the end zone is the most converted third down
+      // there is, and it has to be counted as one.
+      if (scored || (endY - this.firstDownLine) * dir >= 0) box.thirdDownConv++;
+    }
+
+    /* A SCORE IS DECIDED BY WHERE THE BALL ENDED, not by what the play was. A
+     * pick returned to the house and a forty yard run are the same rule. */
+    if (scored && carrier) {
+      this.touchdown(carrier);
+      return;
+    }
+    if (conceded && carrier) {
+      this.safety(carrier.side);
+      return;
+    }
+
+    // Spot the ball.
+    if (result.outcome !== 'incomplete' && carrier) {
+      this.lineOfScrimmage = endY;
+      this.ballX = hashSpot(clamp(carrier.x, 0.5, FIELD.width - 0.5));
+    }
+
+    /* THE BALL CHANGED HANDS DURING THE PLAY.
+     *
+     * An interception returned and tackled leaves a completely different team on
+     * offence, and everything below this line — the down, the distance, the line
+     * to gain — belongs to the side that snapped it. Falling through with the old
+     * marker still set gives the intercepting team a first down it never earned,
+     * or hands the ball straight back on downs, depending on which way the two
+     * teams happened to be facing. Both were happening.
+     */
+    if (result.side !== this.snapSide) {
+      this.changePossession(result.side, 'Turnover');
+      return;
+    }
 
     if (result.turnover) {
       this.changePossession(otherSide(result.side), 'Turnover');
@@ -1329,7 +1352,6 @@ export class FootballGame {
     // Did that get a first down?
     const reached = (this.lineOfScrimmage - this.firstDownLine) * dir >= 0;
     if (reached) {
-      if (this.down === 3) box.thirdDownConv++;
       box.firstDowns++;
       this.down = 1;
       this.setFirstDown();
@@ -1623,9 +1645,26 @@ export class FootballGame {
     const dir = attackDir(side);
     // Into the end zone is a touchback: the ball comes out to the twenty-five.
     const touchback = (land - theirGoal) * dir >= 0;
-    const spot = touchback
-      ? theirGoal - dir * 25
-      : clamp(land, FIELD.homeGoal + 1, FIELD.awayGoal - 1);
+
+    /* AND A KICK THAT LANDS IN THE FIELD IS RUN BACK.
+     *
+     * Simplified to one number, which is all a return needs to be here — but it
+     * has to EXIST. Without it a sixty-two yard kickoff from the thirty-five
+     * spots the ball on the receiving team's three, every single time, and every
+     * drive in the game starts backed up against its own goal line. A returner's
+     * legs decide how far it comes back; a punt comes back less than a kickoff
+     * because a punt has hang time and a gunner arriving with it.
+     */
+    let spot: number;
+    if (touchback) {
+      spot = theirGoal - dir * 25;
+    } else {
+      const returner = starterAt(this.rosters[receiving], kind === 'kickoff' ? 'WR' : 'RB');
+      const legs = returner?.attrs.speed ?? 60;
+      const base = kind === 'kickoff' ? 17 : 5;
+      const back = Math.max(0, base + (legs - 60) * 0.2 + this.rng.range(-5, 9));
+      spot = clamp(land - dir * back, FIELD.homeGoal + 1, FIELD.awayGoal - 1);
+    }
     this.lineOfScrimmage = spot;
     this.ballX = FIELD.centerX;
     this.setBanner(kind === 'kickoff' ? '' : text, 1.4);
@@ -1816,8 +1855,12 @@ export class FootballGame {
     const d = this.defensivePlay;
     const slot = p.slot as DefensiveSlot;
 
+    /* MIRRORED WITH THE OFFENCE. The formation flips for the side attacking the
+     * other way, so the defence lined up against it has to flip too or the
+     * strong side of the offence meets the weak side of the defence. */
+    const m = dir;
     const line = (x: number): void => {
-      p.x = clampToField(this.ballX + x);
+      p.x = clampToField(this.ballX + x * m);
       p.y = los + dir * 1.2;
     };
     switch (slot) {
@@ -1826,7 +1869,7 @@ export class FootballGame {
       case 'DT2': line(1.6); break;
       case 'DE2': line(5.2); break;
       case 'LB1':
-        p.x = clampToField(this.ballX - 5);
+        p.x = clampToField(this.ballX - 5 * m);
         p.y = los + dir * (5 - d.boxLoad * 0.9);
         break;
       case 'LB2':
@@ -1834,23 +1877,23 @@ export class FootballGame {
         p.y = los + dir * (5 - d.boxLoad * 0.9);
         break;
       case 'LB3':
-        p.x = clampToField(this.ballX + 5);
+        p.x = clampToField(this.ballX + 5 * m);
         p.y = los + dir * (5 - d.boxLoad * 0.9);
         break;
       case 'CB1':
-        p.x = clampToField(this.ballX - 17);
+        p.x = clampToField(this.ballX - 17 * m);
         p.y = los + dir * d.cushion;
         break;
       case 'CB2':
-        p.x = clampToField(this.ballX + 17);
+        p.x = clampToField(this.ballX + 17 * m);
         p.y = los + dir * d.cushion;
         break;
       case 'S1':
-        p.x = clampToField(this.ballX - (d.deep >= 2 ? 12 : 0));
+        p.x = clampToField(this.ballX - (d.deep >= 2 ? 12 : 0) * m);
         p.y = los + dir * (d.deep === 0 ? 7 : 14);
         break;
       default:
-        p.x = clampToField(this.ballX + (d.deep >= 2 ? 12 : 8));
+        p.x = clampToField(this.ballX + (d.deep >= 2 ? 12 : 8) * m);
         p.y = los + dir * (d.boxLoad >= 3 ? 6 : d.deep >= 2 ? 14 : 12);
         break;
     }
@@ -1870,11 +1913,8 @@ export class FootballGame {
     const dir = attackDir(off);
     const los = this.lineOfScrimmage;
 
-    /* THE WIDEST MAN FIRST, because that is the order a secondary is built in:
-     * the corners take the outside receivers and everybody else works inward. */
     const eligible = this.players
-      .filter((p) => p.side === off && p.route && p.route.kind !== 'block')
-      .sort((a, b) => Math.abs(b.x - this.ballX) - Math.abs(a.x - this.ballX));
+      .filter((p) => p.side === off && p.route && p.route.kind !== 'block');
     const defenders = this.players.filter((p) => p.side === def);
     for (const p of defenders) {
       p.assignment = null;
@@ -1906,11 +1946,34 @@ export class FootballGame {
       const spare = Math.max(0, takers.length - eligible.length);
       const help = Math.min(d.deep, spare);
       const manOn = takers.slice(0, takers.length - help);
-      let i = 0;
+
+      /* EACH MAN TAKES THE RECEIVER HE IS STANDING NEXT TO.
+       *
+       * Assigning by width RANK instead — the corner takes the widest man, the
+       * next corner the next widest — looks equivalent and is not: two receivers
+       * split equally wide on opposite sides tie, and the tie is broken by
+       * whatever order they happen to be in. That put a corner on the left
+       * hash in man coverage on a receiver thirty-four yards away on the right,
+       * every time one side of the formation mirrored. Measured, it was a third
+       * of all completions going for twenty or more yards after the catch with
+       * no defender inside ten yards of the ball.
+       *
+       * Nearest-first is also just what a defence does, and it cannot come apart
+       * when a formation flips. */
+      const unclaimed = [...eligible];
       for (const p of manOn) {
-        const man = eligible[i++];
-        if (man) p.assignment = man.uid;
-        else p.zone = { x: this.ballX, y: los + dir * 8, radius: 9 };
+        let best = -1;
+        let near = Infinity;
+        for (let i = 0; i < unclaimed.length; i++) {
+          const gap = dist2(p.x, p.y, unclaimed[i].x, unclaimed[i].y);
+          if (gap < near) { near = gap; best = i; }
+        }
+        if (best >= 0) {
+          p.assignment = unclaimed[best].uid;
+          unclaimed.splice(best, 1);
+        } else {
+          p.zone = { x: this.ballX, y: los + dir * 8, radius: 9 };
+        }
       }
       // Whatever help the call has left sits on top of everything.
       for (const p of takers.slice(manOn.length)) {

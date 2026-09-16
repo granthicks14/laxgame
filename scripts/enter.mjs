@@ -13,13 +13,14 @@
 const CARD = {
   lacrosse: 'Lacrosse',
   basketball: 'Basketball',
+  football: 'Football',
 };
 
 /**
  * Walk from a freshly loaded page to a sport's own main menu.
  *
  * @param page       a Playwright page already at the base URL
- * @param sport      'lacrosse' | 'basketball'
+ * @param sport      'lacrosse' | 'basketball' | 'football'
  * @param opts.title the topbar title to wait for, so the suite does not race the
  *                   dynamic import.
  * @param opts.tap   drive the hub by touch rather than mouse.

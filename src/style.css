@@ -2564,3 +2564,341 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
 .game.has-replay .hint-strip,
 .game.has-replay .hoop-ticker,
 .game.has-replay .bcast-ft { opacity: 0; pointer-events: none; }
+
+/* ===========================================================================
+ * FOOTBALL
+ * ===========================================================================
+ * A football scoreboard says four things a basketball one does not, and all
+ * four of them are read on every single snap: the down, the distance, where the
+ * ball is, and how long is left on the play clock. They get their own rows in
+ * the middle column rather than being squeezed alongside the score, because a
+ * player who cannot find "3rd & 7" at a glance cannot call a play.
+ * ======================================================================== */
+
+.fb-hud {
+  position: absolute;
+  top: var(--safe-t);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  min-width: min(360px, 96vw);
+  background: rgba(9, 13, 18, 0.92);
+  border: 2px solid var(--line);
+  border-top: none;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.5);
+}
+
+.fb-score { display: flex; align-items: center; gap: 9px; padding: 6px 11px; }
+.fb-score--home { flex-direction: row-reverse; }
+.fb-score__badge {
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  min-width: 42px;
+  padding: 3px 5px;
+  text-align: center;
+  color: #fff;
+  border: 2px solid;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.65);
+}
+.fb-score__pts {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.fb-hud__mid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 14px;
+  min-width: 132px;
+  background: var(--panel);
+  border-left: 2px solid var(--line);
+  border-right: 2px solid var(--line);
+}
+.fb-clock { font-family: var(--mono); font-size: 19px; font-weight: 700; line-height: 1; }
+.fb-hud__row { display: flex; align-items: center; gap: 7px; }
+.fb-quarter {
+  font-family: var(--display);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+}
+/* The play clock only means anything between the whistle and the snap, so it
+   shows a dash the rest of the time rather than a stale number. */
+.fb-playclock {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 22px;
+  padding: 2px 4px;
+  text-align: center;
+  color: var(--text-2);
+  border: 1px solid var(--line);
+}
+.fb-playclock.is-late { color: #fff; background: var(--red); border-color: #ff9d8e; }
+/* THE DOWN AND DISTANCE. The single most-read thing on the screen, so it is the
+   largest thing in the middle column after the clock itself. */
+.fb-down {
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.fb-spot {
+  font-family: var(--display);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.fb-spot:empty { display: none; }
+
+.fb-banner {
+  position: absolute;
+  top: 17%;
+  left: 50%;
+  z-index: 6;
+  pointer-events: none;
+  padding: 4px 16px;
+  font-family: var(--display);
+  font-size: clamp(20px, 5.2vw, 38px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: 2px solid #fff0c2;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: translateX(-50%) scale(0.76);
+  transition: opacity 110ms ease, transform 190ms cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+.fb-banner.is-on { opacity: 1; transform: translateX(-50%) scale(1); }
+.fb-banner:empty { display: none; }
+
+.fb-ticker {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-b) + 40px);
+  z-index: 5;
+  pointer-events: none;
+  max-width: min(92vw, 430px);
+  padding: 4px 12px;
+  font-family: var(--display);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--text-2);
+  background: rgba(9, 13, 18, 0.82);
+  border: 1px solid var(--line);
+}
+.fb-ticker:empty { display: none; }
+.game.is-touch .fb-ticker { bottom: calc(var(--safe-b) + 238px); max-width: 74vw; }
+
+/* --- the play call ------------------------------------------------------
+ * The one screen in the whole hub that a player will see four hundred times in
+ * a season, so it is built to be answered by position rather than by reading:
+ * the same groups in the same order every down, each play one row, and the
+ * trade it makes said in one line underneath the name.
+ */
+.callcard {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: linear-gradient(to top, rgba(6, 9, 13, 0.94) 55%, rgba(6, 9, 13, 0.55));
+  padding: max(12px, var(--safe-t)) 10px calc(var(--safe-b) + 10px);
+}
+.callcard__inner {
+  width: min(620px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.55);
+}
+.callcard__head {
+  padding: 9px 12px;
+  border-bottom: 2px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+}
+.callcard__title {
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.callcard__sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.callcard__body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.callcard__family {
+  font-family: var(--display);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.callcard__play {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "name time" "blurb time";
+  gap: 1px 10px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  min-height: 46px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 90ms ease, border-color 90ms ease, transform 90ms ease;
+}
+.callcard__play:hover,
+.callcard__play:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent);
+}
+.callcard__play:active { transform: translateY(1px); }
+.callcard__play--special { border-color: rgba(245, 211, 18, 0.5); }
+.callcard__name {
+  grid-area: name;
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.callcard__blurb {
+  grid-area: blurb;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+/* How long the play needs before it is there — the cost of calling it, and the
+   number a coach learns to read against his own offensive line. */
+.callcard__time {
+  grid-area: time;
+  align-self: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .fb-hud { min-width: 0; max-width: calc(100% - 96px); }
+  .fb-score { padding: 4px 6px; gap: 5px; }
+  .fb-score__badge { min-width: 34px; font-size: 10px; }
+  .fb-score__pts { font-size: 21px; }
+  .fb-hud__mid { min-width: 108px; padding: 4px 8px; }
+  .callcard__blurb { font-size: 10px; }
+  .callcard__play { min-height: 44px; }
+}
+
+/* --- the box score ------------------------------------------------------ */
+.box-side__title {
+  font-family: var(--display);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 10px 0 4px;
+}
+.box-sec { margin-top: 8px; }
+.box-sec__title {
+  font-family: var(--display);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.box-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+/* --- the football final score and the club meters ----------------------- */
+.fb-final {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 10px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.5);
+}
+.fb-final__side { display: flex; flex-direction: column; align-items: center; gap: 6px; opacity: 0.62; }
+.fb-final__side.is-won { opacity: 1; }
+.fb-final__badge {
+  font-family: var(--display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  min-width: 52px;
+  padding: 4px 7px;
+  text-align: center;
+  color: #fff;
+  border: 2px solid;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.65);
+}
+.fb-final__pts { font-family: var(--mono); font-size: clamp(34px, 9vw, 52px); font-weight: 700; line-height: 1; }
+.fb-final__side.is-won .fb-final__pts { color: var(--accent); }
+.fb-final__name { color: var(--text-2); text-align: center; font-size: 12px; }
+.fb-final__mid { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.fb-final__dash { color: var(--muted); font-size: 20px; }
+.fb-final__ot {
+  font-family: var(--display);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  padding: 1px 6px;
+  color: var(--accent);
+  border: 1px solid var(--line);
+}
+
+/* A rating with a bar beside it, so a club card is comparable at a glance
+   rather than being five numbers somebody has to hold in their head. */
+.meter { display: grid; grid-template-columns: 84px 1fr 28px; align-items: center; gap: 8px; }
+.meter__label { color: var(--muted); }
+.meter__track { height: 7px; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line); }
+.meter__fill { height: 100%; background: var(--accent); }
+.meter__num { font-family: var(--mono); font-size: 12px; text-align: right; color: var(--text-2); }
