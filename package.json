@@ -56,7 +56,8 @@
     "hoops-feel": "esbuild src/dev/hoopsFeel.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-feel.mjs --log-level=warning && node node_modules/.cache/hoops-feel.mjs",
     "hoops-parity": "esbuild src/dev/hoopsParity.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-parity.mjs --log-level=warning && node node_modules/.cache/hoops-parity.mjs",
     "hoops-e2e": "esbuild src/dev/hoopsEndToEnd.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-e2e.mjs --log-level=warning && node node_modules/.cache/hoops-e2e.mjs",
-    "hoops-buzzer": "esbuild src/dev/hoopsBuzzer.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-buzzer.mjs --log-level=warning && node node_modules/.cache/hoops-buzzer.mjs"
+    "hoops-buzzer": "esbuild src/dev/hoopsBuzzer.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-buzzer.mjs --log-level=warning && node node_modules/.cache/hoops-buzzer.mjs",
+    "gridiron": "esbuild src/dev/gridiron.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/gridiron.mjs --log-level=warning && node node_modules/.cache/gridiron.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
