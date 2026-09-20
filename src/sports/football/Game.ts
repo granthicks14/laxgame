@@ -21,7 +21,7 @@ import {
 import {
   emptyStatLine, emptyTeamBox,
   type FieldPlayer, type FootballBall, type FootballConfig, type FootballEvents,
-  type GamePhase, type PlayResult, type StatLine, type TeamBox,
+  type GamePhase, type GamePlan, type PlayResult, type StatLine, type TeamBox,
 } from './types';
 
 /* ---------------------------------------------------------------------------
@@ -88,6 +88,13 @@ export class FootballGame {
   firstDownLine = 0;
 
   humanSide: Side | null;
+  /**
+   * THE PERSON PLAYS OFFENCE AND COACHES DEFENCE. See `FootballConfig`.
+   * With this set nobody ever hands him a safety to steer.
+   */
+  readonly offenseOnly: boolean;
+  /** How he wants his defence played while he is not playing it. */
+  gamePlan: GamePlan;
 
   /* --- what is being run ------------------------------------------------- */
   offensivePlay: OffensivePlay;
@@ -152,6 +159,8 @@ export class FootballGame {
   constructor(cfg: FootballConfig) {
     this.cfg = cfg;
     this.humanSide = cfg.humanSide;
+    this.offenseOnly = cfg.offenseOnly === true && cfg.humanSide !== null;
+    this.gamePlan = cfg.gamePlan ?? 'balanced';
     this.rng = new Rng(`football:${cfg.seed}`);
     this.clock = cfg.quarterSeconds;
     this.rosters = { home: cfg.home.roster, away: cfg.away.roster };
@@ -194,10 +203,14 @@ export class FootballGame {
   private updatePlaycall(dt: number, input: FootballInput): void {
     void dt;
     void input;
-    /* A GAME WITH A COACH IN IT WAITS FOR HIM, on either side of the ball: he
-     * calls the offence when he has it and the look when he does not. Only a
-     * game nobody is playing calls for itself. */
-    if (this.humanSide !== null) return;
+    /* A GAME WITH A COACH IN IT WAITS FOR HIM — but only while he has the ball.
+     *
+     * When the other lot have it and he is coaching rather than playing, there
+     * is nothing for him to press: his eleven play it out on their own ratings,
+     * his coordinator's work and the game plan he set. That is the whole point
+     * of the setting, and a card asking him to pick a coverage on every snap of
+     * a drive he is not in would put the eleven defenders straight back. */
+    if (this.humanSide !== null && !this.autoPlaying) return;
     const kick = aiSpecialTeams(this);
     if (kick) { this.callKick(kick); return; }
     this.callPlay(aiPlayCall(this), aiDefenseCall(this));
@@ -361,7 +374,11 @@ export class FootballGame {
     for (const p of this.players) {
       p.react = Math.max(0, p.react - dt);
       p.stunned = Math.max(0, p.stunned - dt);
-      const isHuman = human !== null && this.controlled[human] === p;
+      /* THE ONE DEFENSIVE MOMENT HE KEEPS. Coaching the defence does not mean
+       * watching somebody else run back the interception his corner has just
+       * made — a loose ball in his own hands is his. */
+      const isHuman = human !== null && this.controlled[human] === p
+        && (!this.offenseOnly || this.possession === human || this.ball.carrier === p.uid);
       if (isHuman) this.steerHuman(p, input, dt);
       else this.steerAi(p, dt);
     }
@@ -2306,7 +2323,7 @@ export class FootballGame {
   /** Take the defender nearest the ball. */
   switchDefender(): void {
     const side = this.humanSide;
-    if (side === null || side === this.possession) return;
+    if (side === null || side === this.possession || this.offenseOnly) return;
     const near = this.nearestTo(side, this.ball.x, this.ball.y);
     if (near) {
       this.controlled[side] = near;
@@ -2357,6 +2374,18 @@ export class FootballGame {
   say(text: string, seconds = 2): void {
     this.message = text;
     this.messageTimer = seconds;
+  }
+
+  /**
+   * TRUE WHEN THE ENGINE IS PLAYING ITSELF and nobody is waiting on a button.
+   *
+   * Either nobody is coaching at all, or somebody is coaching offence only and
+   * the other lot have the ball. The screen reads it too, to run the clock on
+   * faster through a drive the person is watching rather than playing.
+   */
+  get autoPlaying(): boolean {
+    if (this.humanSide === null) return true;
+    return this.offenseOnly && this.possession !== this.humanSide;
   }
 
   /** The down-and-distance line, as a scoreboard says it. */

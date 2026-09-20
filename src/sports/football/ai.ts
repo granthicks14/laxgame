@@ -971,6 +971,12 @@ export function aiDefenseCall(game: FootballGame): DefensivePlay {
   const margin = game.score[off] - game.score[otherSide(off)];
   const read = clamp(d.playRead, 0, 1);
 
+  /* WHOSE DEFENCE IS THIS? When it is the person's own — he plays offence and
+   * coaches this — his game plan bends the call below. When it is the
+   * computer's, it calls it straight. */
+  const plan = game.offenseOnly && otherSide(off) === game.humanSide
+    ? game.gamePlan : 'balanced';
+
   const ranRecently = tendency(game, off, 'run', 5);
   const deepRecently = tendency(game, off, 'deep', 5) + tendency(game, off, 'medium', 5);
 
@@ -1003,6 +1009,18 @@ export function aiDefenseCall(game: FootballGame): DefensivePlay {
     if (play.coverage === 'runstop') w *= 1 + (ranRecently - 0.4) * 2.2 * read;
     if (play.deep >= 2) w *= 1 + (deepRecently - 0.35) * 1.8 * read;
     if (play.coverage === 'blitz') w *= 0.55 + d.aggression;
+
+    /* THE GAME PLAN, when this defence belongs to somebody who is coaching it
+     * rather than playing it. One lever, three settings, and it does what it
+     * says on the card: attack presses and blitzes and lives with what gets
+     * behind it; bend keeps two men deep and makes them earn every yard. */
+    if (plan !== 'balanced') {
+      const attack = plan === 'aggressive';
+      if (play.coverage === 'blitz') w *= attack ? 2.4 : 0.3;
+      if (play.coverage === 'man') w *= attack ? 1.4 : 0.6;
+      if (play.coverage === 'runstop') w *= attack ? 1.3 : 0.8;
+      if (play.deep >= 2) w *= attack ? 0.55 : 1.8;
+    }
 
     // Trailing late, a defence has to take the ball back rather than bend.
     if (game.quarter >= 4 && game.clock < 180 && margin > 0) {

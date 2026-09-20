@@ -165,7 +165,115 @@ export interface Player {
   potential: number;
   /** 25-99. How hard he works, which decides who reaches his ceiling. */
   work: number;
+
+  /* --- the man, not the athlete ----------------------------------------- */
+  /**
+   * WHO HE IS. Seven of them, kept deliberately light: a personality moves his
+   * morale, his asking price and his willingness to stay, and it does not do
+   * anything else. A locker room simulator is a different game.
+   */
+  personality: Personality;
+  /** 0-100. Winning, playing, being paid and being coached all move it. */
+  morale: number;
+  /** Where he played before somebody drafted him. Every one invented. */
+  college: string;
+
+  /* --- the contract ------------------------------------------------------ */
+  /** Seasons left, including this one. 0 means he is a free agent in the spring. */
+  contractYears: number;
+  /** Cap hit, in millions a season. */
+  salary: number;
+
+  /** Set while he is hurt. Null the rest of the time, which is most of it. */
+  injury: Injury | null;
 }
+
+/** What is wrong with him and how long it lasts. */
+export interface Injury {
+  label: string;
+  /** Games left. A value under 1 is "a few plays" and clears at the whistle. */
+  weeks: number;
+  /** How much of him is missing while he plays through it, 0-1. */
+  severity: number;
+}
+
+export type Personality =
+  | 'team' | 'competitor' | 'quiet' | 'confident' | 'demanding' | 'loyal' | 'ambitious';
+
+export const PERSONALITIES: Personality[] = [
+  'team', 'competitor', 'quiet', 'confident', 'demanding', 'loyal', 'ambitious',
+];
+
+export interface PersonalityInfo {
+  label: string;
+  blurb: string;
+  /** How far his morale swings on a good or bad week. 1 is average. */
+  swing: number;
+  /** Multiplier on what he asks for. */
+  ask: number;
+  /** How much he discounts to stay where he is. */
+  loyalty: number;
+  /** What he does to everybody else's morale. */
+  chemistry: number;
+  /** How much he needs to be on the field. */
+  snapHunger: number;
+}
+
+export const PERSONALITY: Record<Personality, PersonalityInfo> = {
+  team: {
+    label: 'Team player',
+    blurb: 'Takes the deal, takes the role, and lifts everybody around him.',
+    swing: 0.8, ask: 0.92, loyalty: 1.3, chemistry: 2.4, snapHunger: 0.7,
+  },
+  competitor: {
+    label: 'Competitor',
+    blurb: 'Lives on winning. A losing season costs him more than anybody.',
+    swing: 1.35, ask: 1, loyalty: 1, chemistry: 1.2, snapHunger: 1.1,
+  },
+  quiet: {
+    label: 'Quiet',
+    blurb: 'Says nothing, asks for nothing, and is very hard to read.',
+    swing: 0.55, ask: 0.96, loyalty: 1.1, chemistry: 0, snapHunger: 0.6,
+  },
+  confident: {
+    label: 'Confident',
+    blurb: 'Believes it, whatever the scoreboard says. Wants the ball.',
+    swing: 0.9, ask: 1.12, loyalty: 0.9, chemistry: 0.8, snapHunger: 1.35,
+  },
+  demanding: {
+    label: 'Demanding',
+    blurb: 'Wants paying, wants winning, and will say so. Worth the trouble when he is good.',
+    swing: 1.45, ask: 1.28, loyalty: 0.7, chemistry: -1.6, snapHunger: 1.3,
+  },
+  loyal: {
+    label: 'Loyal',
+    blurb: 'Would rather stay than be paid. Almost never leaves in free agency.',
+    swing: 0.85, ask: 0.85, loyalty: 1.75, chemistry: 1.4, snapHunger: 0.8,
+  },
+  ambitious: {
+    label: 'Ambitious',
+    blurb: 'Chasing a ring and a contract, in that order, and will go where both are.',
+    swing: 1.15, ask: 1.18, loyalty: 0.6, chemistry: 0.3, snapHunger: 1.2,
+  },
+};
+
+/**
+ * WHERE HE CAME FROM.
+ *
+ * Every one of these is invented for this game. No real institution, programme
+ * or person is named anywhere in a player's history, because every player is a
+ * fiction and so is everything behind him.
+ */
+export const COLLEGES = [
+  'Cedar Ridge', 'Port Callan', 'Marston A&M', 'Vance Tech', 'Halloran State',
+  'Gulf Coast', 'North Vale', 'Ashbury', 'Kettleman', 'Silver Creek',
+  'Fort Mercer', 'Blue River State', 'Ostrander', 'Pinnacle', 'Cross Bay',
+  'Maribel State', 'Weatherford', 'Loxley', 'Granite Falls', 'Sandhill',
+  'Delacroix', 'Iron Mountain', 'St. Ambrose', 'Copperfield', 'Larkspur State',
+  'Dunmore', 'Tallgrass', 'Hollis Tech', 'Windham', 'Beaumont Valley',
+  'Alder Point', 'Quarry Hill', 'Saltillo State', 'Beckwith', 'Lindenhurst',
+  'Torrance Bay', 'Cavendish', 'Mount Auburn', 'Red Oak State', 'Fairhaven',
+];
 
 /** The overall, from the position's own weighting and nothing else. */
 export function computeOverall(pos: Position, attrs: Attrs): number {
@@ -346,8 +454,22 @@ export function makePlayer(seed: string, opts: PlayerOptions): Player {
      * development in front of him; a fourth-year one is close to what he will be.
      * Potential is never below the overall, because a ceiling under a floor is a
      * number that can only confuse a scouting screen. */
-    potential: Math.min(99, overall + Math.round(rng.range(0, 1) ** 1.7 * (26 - years * 4))),
+    /* HEADROOM SHRINKS WITH EXPERIENCE AND NEVER GOES NEGATIVE. A ceiling
+     * below a floor is a number that can only confuse a scouting screen, and
+     * a nine-year professional had one. */
+    potential: Math.min(99, overall
+      + Math.round(rng.range(0, 1) ** 1.7 * Math.max(0, 24 - years * 3.4))),
     work: rng.int(25, 99),
+    personality: PERSONALITIES[rng.int(0, PERSONALITIES.length - 1)],
+    morale: rng.int(55, 80),
+    college: COLLEGES[rng.int(0, COLLEGES.length - 1)],
+    /* A DEFAULT CONTRACT, so a player generated anywhere in the game is legal on
+     * a roster without the caller having to remember. The franchise overwrites
+     * both numbers the moment it builds a squad, which is the only place they
+     * actually mean anything. */
+    contractYears: rng.int(1, 4),
+    salary: Math.max(0.8, Math.round((overall - 48) ** 1.9 / 26) / 10 + 0.8),
+    injury: null,
   };
 }
 
@@ -382,6 +504,28 @@ export interface RosterOptions {
   spread?: number;
   /** Fewer players than the shape asks for, for a programme in trouble. */
   hole?: number;
+  /**
+   * HOW OLD THE SQUAD IS.
+   *
+   * The default is a professional one, and it matters more than it looks: a
+   * generator that hands every club a roster of nineteen-year-olds produces a
+   * league whose thirty-one derived clubs are permanently on the up side of the
+   * age curve while the one STORED club — yours — ages for real. Measured, that
+   * was the whole of a twenty-season slide from .500 to 79-260, and none of it
+   * was visible anywhere except in the ages.
+   */
+  ages?: [min: number, max: number];
+}
+
+/**
+ * A PROFESSIONAL ROSTER'S AGE SPREAD: a few rookies, a bulge through the
+ * middle twenties where most of the football is played, and a thinning tail of
+ * men who are still good enough.
+ */
+function ageFor(rng: Rng, range: [number, number]): number {
+  const [min, max] = range;
+  const t = (rng.next() + rng.next() + rng.next()) / 3;
+  return Math.round(min + Math.pow(t, 1.35) * (max - min));
 }
 
 export function buildRoster(seed: string, opts: RosterOptions): Player[] {
@@ -396,13 +540,18 @@ export function buildRoster(seed: string, opts: RosterOptions): Player[] {
        * a starter and what makes an injury or a graduation hurt. */
       const depth = i / Math.max(1, want - 1);
       const par = opts.par + spread * (0.55 - depth) - (opts.hole ?? 0);
-      out.push(makePlayer(`${seed}:${pos}:${i}`, { pos, par: Math.max(ATTR_MIN + 6, par) }));
+      const age = ageFor(rng, opts.ages ?? [22, 34]);
+      out.push(makePlayer(`${seed}:${pos}:${i}`, {
+        pos,
+        par: Math.max(ATTR_MIN + 6, par),
+        age,
+        years: Math.max(0, age - 21),
+      }));
     }
   }
   // Best first within each position, so the depth chart reads itself.
   out.sort((a, b) => POSITIONS.indexOf(a.pos) - POSITIONS.indexOf(b.pos)
     || b.overall - a.overall);
-  void rng;
   return out;
 }
 

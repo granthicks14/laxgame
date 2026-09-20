@@ -54,6 +54,36 @@ export interface TeamSetup {
   roster: Player[];
 }
 
+/**
+ * HOW THE DEFENCE IS COACHED.
+ *
+ * The person plays offence. When the other lot have the ball he is a coach
+ * rather than a player, and this is the lever: press and blitz and live with
+ * what gets behind you, sit back and make them earn it, or stay in the middle.
+ * It is one decision before the drive instead of eleven every snap.
+ */
+export type GamePlan = 'aggressive' | 'balanced' | 'conservative';
+
+export const GAME_PLANS: { key: GamePlan; label: string; blurb: string }[] = [
+  {
+    key: 'aggressive',
+    label: 'Attack',
+    blurb: 'Press, blitz, and go and get the ball. More sacks and more takeaways, '
+      + 'and more of them behind you when it goes wrong.',
+  },
+  {
+    key: 'balanced',
+    label: 'Balanced',
+    blurb: 'Play the down and distance. Nothing given away, nothing forced.',
+  },
+  {
+    key: 'conservative',
+    label: 'Bend',
+    blurb: 'Deep help, soft cushions, keep it in front. They will move it; '
+      + 'they will have to do it eleven plays at a time.',
+  },
+];
+
 export interface FootballConfig {
   home: TeamSetup;
   away: TeamSetup;
@@ -66,6 +96,18 @@ export interface FootballConfig {
   label?: string;
   /** A small edge to the home side, as the sport has. */
   homeEdge?: number;
+  /**
+   * THE PERSON PLAYS OFFENCE.
+   *
+   * With this set he calls and plays every snap his side has the ball, and when
+   * the other lot have it his eleven play it out on their own ratings, his
+   * coordinator's coaching and his game plan. He is not asked to steer a safety.
+   * The one exception is the one that would be absurd to take away: a ball his
+   * defence has just taken off them is his to run.
+   */
+  offenseOnly?: boolean;
+  /** How he wants the defence played while he is not playing it. */
+  gamePlan?: GamePlan;
 }
 
 /* ------------------------------------------------------------- the players */

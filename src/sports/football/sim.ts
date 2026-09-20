@@ -50,7 +50,7 @@ export interface SimResult {
 }
 
 /** How long a drive's worth of clock is, in the compressed seconds the game uses. */
-const SECONDS_PER_PLAY = 6.4;
+const SECONDS_PER_PLAY = 6.7;
 
 interface Unit {
   qb: Player | null;
@@ -150,7 +150,12 @@ export function simulateGame(
   const score = { home: 0, away: 0 };
   let quarter = 1;
   let clock = quarterSeconds;
-  let offence: Side = 'home';
+  /* THE TOSS. The first version gave the ball to the home side to open BOTH
+   * halves, which is not a coin toss, it is a free possession twice a game —
+   * worth about two points and eight per cent of win rate to whoever happened
+   * to be listed first. */
+  const wonToss: Side = rng.bool(0.5) ? 'home' : 'away';
+  let offence: Side = wonToss;
 
   const addPoints = (side: Side, n: number): void => {
     score[side] += n;
@@ -197,10 +202,10 @@ export function simulateGame(
       if (isPass) {
         const qb = off.qb;
         const target = pickFrom(off.targets, rng);
-        const pressure = clamp((def.rush + 6 - off.line) / 70, -0.3, 0.55);
+        const pressure = clamp((def.rush + 6 - off.line) / 200, -0.3, 0.55);
 
         // A sack, first: the rush beating the line before anything else happens.
-        if (rng.next() < clamp(0.055 + pressure * 0.09, 0.01, 0.16)) {
+        if (rng.next() < clamp(0.058 + pressure * 0.09, 0.015, 0.14)) {
           gain = -Math.round(rng.range(4, 10));
           box[offence].sacksAllowed++;
           if (qb) lineOf(offence, qb).sacked++;
@@ -216,7 +221,7 @@ export function simulateGame(
             + qb.attrs.throwPower * 0.2) : 45;
           const hands = target ? (target.attrs.catching * 0.6 + target.attrs.routeRunning * 0.4) : 45;
           const quality = (arm * 0.55 + hands * 0.45) + boost - def.cover;
-          const complete = rng.next() < clamp(0.54 + quality / 160 - pressure * 0.2, 0.25, 0.8);
+          const complete = rng.next() < clamp(0.575 + quality / 560 - pressure * 0.2, 0.3, 0.76);
           if (qb) lineOf(offence, qb).passAttempts++;
           if (target) lineOf(offence, target).targets++;
 
@@ -225,7 +230,7 @@ export function simulateGame(
              * tail is the second half: most catches are eight yards and the
              * occasional one is sixty. */
             const air = Math.max(-2, Math.round(rng.range(2, 15) + (down >= 3 ? toGo * 0.5 : 0)));
-            const breakaway = rng.next() < clamp(0.1 + (target ? target.attrs.speed - def.cover : 0) / 260, 0.03, 0.26);
+            const breakaway = rng.next() < clamp(0.1 + (target ? target.attrs.speed - def.cover : 0) / 600, 0.04, 0.2);
             const yac = breakaway
               ? Math.round(rng.range(8, 34))
               : Math.round(rng.range(0, 6));
@@ -244,7 +249,7 @@ export function simulateGame(
             if (by) lineOf(offence === 'home' ? 'away' : 'home', by).tackles++;
           } else {
             stopClock = true;
-            const picked = rng.next() < clamp(0.055 + (def.cover - (qb?.attrs.decision ?? 50)) / 420, 0.012, 0.13);
+            const picked = rng.next() < clamp(0.055 + (def.cover - (qb?.attrs.decision ?? 50)) / 900, 0.02, 0.1);
             if (picked) {
               turnover = true;
               box[offence].turnovers++;
@@ -265,8 +270,8 @@ export function simulateGame(
         /* A RUN'S SHAPE, and it is the shape the played engine produces: a
          * cluster around three or four, a tail of losses when the front wins,
          * and one carry in twenty that breaks. */
-        const base = rng.range(-2, 7) + holes / 22 + (power - 60) / 30;
-        const broke = rng.next() < clamp(0.045 + (power - def.stop) / 420, 0.01, 0.13);
+        const base = rng.range(-2, 7) + holes / 62 + (power - 60) / 78;
+        const broke = rng.next() < clamp(0.045 + (power - def.stop) / 900, 0.015, 0.1);
         gain = Math.round(broke ? base + rng.range(9, 32) : base);
         if (back) {
           const l = lineOf(offence, back);
@@ -389,7 +394,8 @@ export function simulateGame(
       quarter++;
       clock = quarterSeconds;
       if (quarter === 3) {
-        offence = 'home';
+        // The side that kicked off to start the game receives to start the half.
+        offence = wonToss === 'home' ? 'away' : 'home';
         spot = 25;
         continue;
       }
