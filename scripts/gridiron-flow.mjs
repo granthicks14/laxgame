@@ -135,8 +135,11 @@ async function main() {
     check('a game starts', !!start, start ? `Q${start.quarter} ${start.phase}` : 'no game');
     check('twenty-two men take the field', start?.players === 22, `${start?.players}`);
 
-    const calls = await coach(page, 14);
-    check('the play-call card can be answered', calls > 2, `${calls} calls`);
+    /* LONG ENOUGH FOR SEVERAL DOWNS. A football play now includes a walk to the
+     * line and a dead ball, so a handful of seconds is one down and a tight
+     * assertion on it is measuring the wall clock rather than the game. */
+    const calls = await coach(page, 26);
+    check('the play-call card can be answered', calls >= 2, `${calls} calls`);
 
     const mid = await state(page);
     check('downs advance', mid && mid.plays > 0, `${mid?.plays} plays run`);
@@ -149,7 +152,7 @@ async function main() {
     // The pause menu and its box score.
     await page.keyboard.press('Escape');
     await page.waitForTimeout(250);
-    check('pause opens', await page.locator('.overlay__panel').count() === 1);
+    check('pause opens', await page.locator('.overlay__card').count() === 1);
     await page.locator('.seg__btn', { hasText: 'Box score' }).first().click();
     await page.waitForTimeout(250);
     check('the box score renders', await page.locator('.box').count() > 0);
@@ -216,7 +219,7 @@ async function main() {
       els.filter((e) => e.getBoundingClientRect().height < 40).length);
     check('every play row is thumb-sized', small === 0, `${small} too short`);
 
-    await coach(page, 8, true);
+    await coach(page, 20, true);
     const s = await state(page);
     check('a phone can actually run a play', s && s.plays > 0, `${s?.plays} plays`);
 

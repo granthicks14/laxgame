@@ -75,6 +75,7 @@ export class FootballGameScreen implements Screen {
   private elDown!: HTMLElement;
   private elSpot!: HTMLElement;
   private elPlayClock!: HTMLElement;
+  private elTimeouts!: HTMLElement;
   private elBanner!: HTMLElement;
   private elTicker!: HTMLElement;
   private elTouch!: HTMLElement;
@@ -149,6 +150,7 @@ export class FootballGameScreen implements Screen {
     this.elDown = h('div', { class: 'fb-down', text: '1st & 10' });
     this.elSpot = h('div', { class: 'fb-spot', text: '' });
     this.elPlayClock = h('div', { class: 'fb-playclock num', text: '25' });
+    this.elTimeouts = h('div', { class: 'fb-timeouts' });
     this.elBanner = h('div', { class: 'fb-banner' });
     this.elTicker = h('div', { class: 'fb-ticker' });
 
@@ -168,7 +170,7 @@ export class FootballGameScreen implements Screen {
       this.elStick,
       h('div', { class: 'tbtns' },
         this.touchButton('switch', 'Switch'),
-        this.touchButton('throwAway', 'Away'),
+        this.touchButton('throwAway', 'Out'),
         this.touchButton('tackle', 'Tackle'),
         this.touchButton('snap', 'Snap')),
       this.touchButton('timeout', 'T/O'),
@@ -186,7 +188,8 @@ export class FootballGameScreen implements Screen {
           this.elClock,
           h('div', { class: 'fb-hud__row' }, this.elQuarter, this.elPlayClock),
           this.elDown,
-          this.elSpot),
+          this.elSpot,
+          this.elTimeouts),
         plate(cfg.home.team.abbr, cfg.home.team.primary, cfg.home.team.secondary,
           this.elHome, 'home')),
       this.elBanner,
@@ -223,6 +226,7 @@ export class FootballGameScreen implements Screen {
     on('sack', () => { audio.play('rim', 1); this.renderer.jolt(1.3); });
     on('incomplete', () => audio.play('board'));
     on('interception', () => { audio.play('crowd', 0.8); this.renderer.jolt(1); });
+    on('fumble', () => { audio.play('crowd', 0.6); this.renderer.jolt(1.2); });
     on('touchdown', () => { audio.play('crowd', 1); this.renderer.jolt(1.6); });
     on('fieldGoal', (e: { made: boolean }) => {
       if (e.made) { audio.play('goal'); this.renderer.jolt(0.8); } else audio.play('board');
@@ -493,6 +497,13 @@ export class FootballGameScreen implements Screen {
     const spot = `${g.possession === g.humanSide ? 'Ball on' : 'Their ball,'} ${g.spot}`;
     if (this.elSpot.textContent !== spot) this.elSpot.textContent = spot;
 
+    /* THREE PIPS A SIDE. A timeout a coach has forgotten he still holds is a
+     * timeout he will not spend, and at the end of a close game that is the
+     * whole difference. */
+    const pips = (n: number): string => '●'.repeat(Math.max(0, n)) + '○'.repeat(Math.max(0, 3 - n));
+    const to = `${pips(g.timeouts.away)}  ${pips(g.timeouts.home)}`;
+    if (this.elTimeouts.textContent !== to) this.elTimeouts.textContent = to;
+
     if (this.elBanner.textContent !== g.banner) {
       this.elBanner.textContent = g.banner;
       this.elBanner.classList.toggle('is-on', g.banner.length > 0);
@@ -547,7 +558,7 @@ export class FootballGameScreen implements Screen {
 
   private showPause(): void {
     this.closeOverlay();
-    const tabs = h('div', { class: 'seg' },
+    const tabs = h('div', { class: 'seg seg--sticky' },
       ...(['menu', 'controls', 'box'] as PauseTab[]).map((t) => h('button', {
         class: `seg__btn${this.pauseTab === t ? ' is-on' : ''}`,
         text: t === 'menu' ? 'Paused' : t === 'controls' ? 'Controls' : 'Box score',
@@ -566,8 +577,14 @@ export class FootballGameScreen implements Screen {
             on: { click: () => { this.paused = false; this.opts.onQuit(); } },
           }));
 
+    /* THE TAB STRIP STAYS PUT.
+     *
+     * A football box score is five tables a side, so the panel scrolls — and a
+     * tab strip that scrolls away with it is a pause menu a player cannot get
+     * out of once he has looked at the box score. Caught by the suite, which
+     * could not find the button it had just used. */
     this.overlay = h('div', { class: 'overlay' },
-      h('div', { class: 'overlay__panel' }, tabs, body));
+      h('div', { class: 'overlay__card panel' }, tabs, body));
     this.el.appendChild(this.overlay);
   }
 

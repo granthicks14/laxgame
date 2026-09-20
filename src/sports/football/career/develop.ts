@@ -68,9 +68,13 @@ export function developPlayer(
    * regenerates every rival at full strength every season, so a coached roster
    * that improves by half a point a year is a coached roster that decays, and a
    * career mode where the coach gets worse the longer he stays is not a career
-   * mode. A first-year starter with room should gain three or four; a fourth-year
-   * one close to his ceiling should gain one. */
-  const gain = rng.range(0.25, 1) * 7.6 * work * young * played * room * multiplier;
+   * mode.
+   *
+   * The bar it is set against is the only one that matters: after twenty years
+   * the programme has to read BETTER than the same club would have read if
+   * nobody had ever managed it. A first-year starter with room gains four or
+   * five; a fourth-year one near his ceiling gains one. */
+  const gain = rng.range(0.25, 1) * 9.6 * work * young * played * room * multiplier;
 
   const keys = GROWS[p.pos];
   let left = gain;

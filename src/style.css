@@ -1397,28 +1397,6 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
   .hub__aside { grid-column: 2; grid-row: 2; order: 0; }
 }
 
-/* --- the dominance card --------------------------------------------------- */
-.dom-card {
-  border: 2px solid var(--accent); background: var(--panel);
-  padding: 9px 12px; cursor: pointer;
-  display: grid; gap: 4px;
-}
-.dom-card--done { border-color: var(--green); }
-.dom-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.dom-card__head {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
-}
-.dom-card__title { font-size: 12px; letter-spacing: .18em; color: var(--accent); }
-.dom-card--done .dom-card__title { color: var(--green); }
-.dom-card__window { color: var(--muted); white-space: nowrap; }
-.dom-card__body { display: flex; align-items: center; gap: 12px; }
-.dom-card__count { font-size: 26px; line-height: 1; }
-.dom-card__line { color: var(--text-2); }
-.dom-card__more { color: var(--accent); }
-@media (max-width: 560px) {
-  .dom-card__line { display: none; }
-}
-
 /* --- roster needs --------------------------------------------------------- */
 .need__top {
   display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
@@ -1507,34 +1485,6 @@ input[type='range'] { width: 150px; accent-color: var(--accent); }
 .champ__score-team { font-size: clamp(15px, 4vw, 20px); letter-spacing: .1em; color: var(--text-2); }
 .champ__score-num { font-size: clamp(30px, 9vw, 46px); line-height: 1; }
 .champ__score-dash { color: var(--muted); font-size: 20px; }
-
-/* --- the dominance tracker ------------------------------------------------ */
-.dom { border-color: var(--accent); }
-.dom--done { border-color: var(--green); }
-.dom-pip {
-  width: 30px; height: 30px; flex: 0 0 auto;
-  border: 2px solid var(--line); background: var(--panel-2);
-  display: grid; place-items: center; color: var(--accent-ink);
-}
-.dom-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-@media (min-width: 480px) { .dom-stats { grid-template-columns: repeat(4, 1fr); } }
-.dom-stat {
-  background: var(--panel-2); border: 1px solid var(--line-soft);
-  padding: 8px 10px; display: flex; flex-direction: column; gap: 2px;
-}
-.dom-stat__value { font-size: 22px; line-height: 1; }
-.dom-stat__label {
-  font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
-}
-.dom-timeline { display: flex; flex-wrap: wrap; gap: 3px; }
-.dom-year {
-  min-width: 24px; height: 24px; padding: 0 4px;
-  display: grid; place-items: center;
-  font: 600 11px/1 var(--mono);
-  background: var(--panel-2); border: 1px solid var(--line-soft); color: var(--muted);
-}
-.dom-year.is-window { border-color: var(--accent); color: var(--text-2); }
-.dom-year.is-title { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
 /* --- player portraits ----------------------------------------------------- */
 /* Rows that open something are controls: show focus, and a pointer. */
@@ -2987,3 +2937,21 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
 .box tr.is-mine { background: rgba(122, 209, 81, 0.12); }
 .box tr.is-cut td { border-bottom: 2px solid var(--accent); }
 .btn--sm { padding: 6px 10px; font-size: 11px; min-height: 40px; }
+/* Timeouts, as pips: away on the left, home on the right, the way the
+   scoreboard above them already reads. */
+.fb-timeouts {
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+  line-height: 1;
+}
+.fb-timeouts:empty { display: none; }
+/* A tab strip inside a scrolling panel has to stay reachable, or the first long
+   tab a player opens is one he cannot navigate back out of. */
+.seg--sticky {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  padding-bottom: 6px;
+}

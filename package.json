@@ -43,7 +43,6 @@
     "abuse": "esbuild src/dev/abuse.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-abuse.mjs --log-level=error && node node_modules/.cache/lsl-abuse.mjs",
     "hierarchy": "esbuild src/dev/hierarchy.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-hierarchy.mjs --log-level=error && node node_modules/.cache/lsl-hierarchy.mjs",
     "gameplay": "esbuild src/dev/gameplay.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-gameplay.mjs --log-level=error && node node_modules/.cache/lsl-gameplay.mjs",
-    "dominance": "esbuild src/dev/dominance.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/lsl-dominance.mjs --log-level=error && node node_modules/.cache/lsl-dominance.mjs",
     "sounds": "node scripts/sounds.mjs",
     "hoops": "esbuild src/dev/hoops.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops.mjs --log-level=warning && node node_modules/.cache/hoops.mjs",
     "hoops-world": "esbuild src/dev/hoopsWorld.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-world.mjs --log-level=warning && node node_modules/.cache/hoops-world.mjs",

@@ -170,6 +170,11 @@ export class FootballGame {
     this.messageTimer = Math.max(0, this.messageTimer - dt);
     if (this.messageTimer === 0) this.message = '';
 
+    /* A TIMEOUT IS NOT A PLAY, so it is read here rather than inside one of the
+     * phases: it is called between downs, which is when none of them is
+     * steering anybody. */
+    if (input.timeoutPressed && this.humanSide) this.callTimeout(this.humanSide);
+
     switch (this.phase) {
       case 'playcall': this.updatePlaycall(dt, input); break;
       case 'presnap': this.updatePresnap(dt, input); break;
@@ -256,21 +261,28 @@ export class FootballGame {
     this.playClock -= step;
     this.presnapTime += step;
     if (this.tickClock(step)) return;
-    for (const p of this.players) this.integrate(p, dt);
+
+    for (const p of this.players) this.walkToSpot(p, dt);
 
     if (this.playClock <= 0) {
       this.delayOfGame();
       return;
     }
+    /* NOBODY SNAPS A BALL NOBODY IS LINED UP FOR. The men are still walking on
+     * for the first moments of the play clock, and a snap taken through that is
+     * a snap taken against a defence that is not there. The play clock running
+     * low overrides it, because a delay of game is worse. */
+    const set = this.allSet() || this.playClock < 7;
+
     const mine = this.humanSide !== null && this.possession === this.humanSide;
     if (mine) {
-      if (input.snapPressed) this.snap();
+      if (input.snapPressed && set) this.snap();
       return;
     }
     /* THE COMPUTER TAKES ITS TIME, and how long is clock management: hurrying
      * when it is behind, standing over the ball when it is ahead. Snapping
      * instantly on every down would hand a trailing AI a free extra quarter. */
-    if (this.presnapTime >= aiSnapDelay(this)) this.snap();
+    if (set && this.presnapTime >= aiSnapDelay(this)) this.snap();
   }
 
   /**
@@ -462,6 +474,35 @@ export class FootballGame {
     if (sprint && mag > 0.2) p.stamina = clamp(p.stamina - FOOTBALL.sprintDrain * dt, 0, 100);
     else p.stamina = clamp(p.stamina + FOOTBALL.staminaRegen * dt * 0.2, 0, 100);
     p.pose = sprint && speed > 4 ? 'sprint' : 'run';
+  }
+
+  /**
+   * WALKING TO A SPOT, and stopping dead on it.
+   *
+   * Used by the dead ball and by the play clock alike. Quick — this is a jog
+   * back to the line, not a play — and it brakes hard at the end, because a man
+   * who jitters on his mark for the whole play clock reads worse than one who
+   * teleported onto it.
+   */
+  private walkToSpot(p: FieldPlayer, dt: number): void {
+    const gap = dist2(p.x, p.y, p.setX, p.setY);
+    if (gap > 0.4) {
+      this.drive(p, p.setX - p.x, p.setY - p.y, gap > 6, dt, clamp(gap / 3, 0.45, 1));
+      p.pose = gap > 6 ? 'run' : 'idle';
+    } else {
+      p.vx = damp(p.vx, 0, 14, dt);
+      p.vy = damp(p.vy, 0, 14, dt);
+      p.pose = 'stance';
+    }
+    this.integrate(p, dt);
+  }
+
+  /** True once everybody is standing where the call put him. */
+  private allSet(): boolean {
+    for (const p of this.players) {
+      if (dist2(p.x, p.y, p.setX, p.setY) > 1.2) return false;
+    }
+    return true;
   }
 
   /* ------------------------------------------------------------ what the AI does */
@@ -1172,6 +1213,22 @@ export class FootballGame {
       this.statFor(d).tackles++;
       const dir = attackDir(carrier.side);
       const yards = (carrier.y - this.lineOfScrimmage) * dir;
+
+      /* THE BALL COMES OUT.
+       *
+       * Rare — about one carry in sixty — and it is the hit against the hands:
+       * a big tackler arriving square on a back with poor ball security, not a
+       * dice roll bolted onto every tackle. Whoever is nearest picks it up,
+       * which is most often the defence but not always, and that is the whole
+       * reason a fumble is frightening rather than simply bad. */
+      const looseness = clamp(
+        0.012 + (da.power - ca.ballSecurity) / 2600 + (square - 0.7) * 0.02,
+        0.002, 0.055,
+      );
+      if (!this.thrown && this.kickKind === 'none' && this.rng.next() < looseness) {
+        this.forceFumble(d, carrier, yards);
+        return;
+      }
       const sack = carrier.slot === 'QB' && this.offensivePlay.family !== 'run'
         && !this.offensivePlay.handoff && !this.thrown;
       if (sack) {
@@ -1198,6 +1255,53 @@ export class FootballGame {
     d.poseTimer = FOOTBALL.missedTackleStun;
     carrier.pose = 'sprint';
     this.say(`${carrier.data.last} breaks one`, 1.2);
+  }
+
+  /**
+   * A FUMBLE, AND THE SCRAMBLE FOR IT.
+   *
+   * Whoever is closest to the carrier when it comes out has it — and the
+   * offence is closest about a third of the time, which is what keeps a fumble
+   * a moment rather than a sentence. The ball is spotted where it came out,
+   * because that is the rule.
+   */
+  private forceFumble(by: FieldPlayer, carrier: FieldPlayer, yards: number): void {
+    this.statFor(by).forcedFumbles++;
+    this.statFor(carrier).fumbles++;
+
+    let winner: FieldPlayer = by;
+    let near = Infinity;
+    for (const p of this.players) {
+      if (p === carrier || p.stunned > 0) continue;
+      const gap = dist2(p.x, p.y, carrier.x, carrier.y)
+        // A man already going the other way is slower onto a loose ball.
+        * (p.side === carrier.side ? 1.25 : 1);
+      if (gap < near) { near = gap; winner = p; }
+    }
+
+    const kept = winner.side === carrier.side;
+    this.giveBall(winner);
+    this.ball.state = 'held';
+    this.events.emit('fumble', { by: this.nameOf(carrier), recovered: winner.side });
+    this.setBanner('FUMBLE', 2);
+    if (!kept) {
+      this.possession = winner.side;
+      this.box[carrier.side].turnovers++;
+    }
+    this.say(kept ? `${carrier.data.last} fumbles — and gets it back`
+      : `${carrier.data.last} fumbles — ${winner.data.last} has it`, 2.2);
+
+    this.endPlay({
+      outcome: 'fumble',
+      yards: Math.round(yards),
+      side: winner.side,
+      by: this.nameOf(by),
+      on: this.nameOf(carrier),
+      text: kept ? 'Fumble, recovered' : 'Fumble, turned over',
+      turnover: false,
+      points: 0,
+      clockRuns: false,
+    });
   }
 
   private tackleResult(by: FieldPlayer | null, outcome: 'tackle' | 'sack'): PlayResult {
@@ -1367,6 +1471,30 @@ export class FootballGame {
 
     this.clockRunning = result.clockRuns;
     this.say(result.text, 1.8);
+    this.headToHuddle();
+  }
+
+  /**
+   * BACK TO THE BALL.
+   *
+   * Set at the whistle so the twenty-two men spend the dead ball WALKING to
+   * roughly where the next snap will want them, rather than standing where the
+   * play left them and then appearing in formation.
+   *
+   * This is the half of it that matters: a receiver twenty yards downfield
+   * cannot cover that ground inside a play clock, so if he only starts moving
+   * when the call comes in he is still jogging when the ball is snapped — and a
+   * defence that snaps out of position turns every pass into a completion. That
+   * was measured: twenty-two yards an attempt and nine touchdowns a game.
+   */
+  private headToHuddle(): void {
+    const dir = attackDir(this.possession);
+    for (const p of this.players) {
+      const off = p.side === this.possession;
+      const spread = ((p.slot.charCodeAt(0) + p.slot.charCodeAt(1)) % 9) - 4;
+      p.setX = clampToField(this.ballX + spread * 2.4);
+      p.setY = this.lineOfScrimmage - dir * (off ? 7 : -5);
+    }
   }
 
   private setFirstDown(): void {
@@ -1383,15 +1511,13 @@ export class FootballGame {
 
   private updateDead(dt: number): void {
     this.phaseTimer -= dt;
+    if (this.phase === 'dead') this.considerAiTimeout();
     if (this.phase === 'dead' && this.tickClock(dt * FOOTBALL.deadClockRate)) return;
-    // Between plays the men walk back to the huddle rather than freezing.
+    // Between plays the men walk back toward the ball rather than freezing.
     for (const p of this.players) {
-      p.vx = damp(p.vx, 0, 6, dt);
-      p.vy = damp(p.vy, 0, 6, dt);
-      p.x = clampToField(p.x + p.vx * dt);
-      p.y = clamp(p.y + p.vy * dt, -4, FIELD.length + 4);
+      this.walkToSpot(p, dt);
       p.stamina = clamp(p.stamina + FOOTBALL.staminaRegen * dt, 0, 100);
-      if (p.poseTimer <= 0) p.pose = 'idle';
+      if (p.poseTimer <= 0 && Math.hypot(p.vx, p.vy) < 0.4) p.pose = 'idle';
       p.poseTimer = Math.max(0, p.poseTimer - dt);
     }
     if (this.phaseTimer > 0) return;
@@ -1516,8 +1642,10 @@ export class FootballGame {
     const dir = attackDir(this.possession);
     const kicker = this.playerInSlot(this.possession, 'QB');
     if (kicker) {
-      kicker.x = this.ballX;
-      kicker.y = this.lineOfScrimmage - dir * (this.kickKind === 'kickoff' ? 6 : 7);
+      kicker.setX = this.ballX;
+      kicker.setY = this.lineOfScrimmage - dir * (this.kickKind === 'kickoff' ? 6 : 7);
+      kicker.x = kicker.setX;
+      kicker.y = kicker.setY;
     }
   }
 
@@ -1823,10 +1951,22 @@ export class FootballGame {
          * play in the book is its own mirror image for one of the two teams. */
         const split = (route?.splitX ?? 0) * dir;
         const back = route?.backfield ?? 0;
-        p.x = clampToField(this.ballX + split);
-        p.y = los - dir * (back || FIELD.lineSplit);
+        p.setX = clampToField(this.ballX + split);
+        p.setY = los - dir * (back || FIELD.lineSplit);
       } else {
         this.placeDefender(p);
+      }
+
+      /* HE WALKS TO THE LINE UNLESS HE IS MILES FROM IT.
+       *
+       * Between two downs of the same drive everybody is within a few yards of
+       * where the next play wants him, so he jogs there during the play clock
+       * and the picture never jumps. After a change of possession, a kick or a
+       * score he is at the wrong end of the field entirely, and walking sixty
+       * yards is not a transition, it is a wait — so that one snaps. */
+      if (dist2(p.x, p.y, p.setX, p.setY) > 22) {
+        p.x = p.setX;
+        p.y = p.setY;
       }
       p.vx = 0;
       p.vy = 0;
@@ -1848,6 +1988,10 @@ export class FootballGame {
    * the top. All three come off the play the coach called, so calling one really
    * does change the picture at the snap.
    */
+  /**
+   * Where a defender lines up. Written to his SET point rather than his
+   * position, so he walks onto it with everybody else.
+   */
   private placeDefender(p: FieldPlayer): void {
     const off = this.possession;
     const dir = attackDir(off);
@@ -1860,8 +2004,8 @@ export class FootballGame {
      * strong side of the offence meets the weak side of the defence. */
     const m = dir;
     const line = (x: number): void => {
-      p.x = clampToField(this.ballX + x * m);
-      p.y = los + dir * 1.2;
+      p.setX = clampToField(this.ballX + x * m);
+      p.setY = los + dir * 1.2;
     };
     switch (slot) {
       case 'DE1': line(-5.2); break;
@@ -1869,32 +2013,32 @@ export class FootballGame {
       case 'DT2': line(1.6); break;
       case 'DE2': line(5.2); break;
       case 'LB1':
-        p.x = clampToField(this.ballX - 5 * m);
-        p.y = los + dir * (5 - d.boxLoad * 0.9);
+        p.setX = clampToField(this.ballX - 5 * m);
+        p.setY = los + dir * (5 - d.boxLoad * 0.9);
         break;
       case 'LB2':
-        p.x = clampToField(this.ballX);
-        p.y = los + dir * (5 - d.boxLoad * 0.9);
+        p.setX = clampToField(this.ballX);
+        p.setY = los + dir * (5 - d.boxLoad * 0.9);
         break;
       case 'LB3':
-        p.x = clampToField(this.ballX + 5 * m);
-        p.y = los + dir * (5 - d.boxLoad * 0.9);
+        p.setX = clampToField(this.ballX + 5 * m);
+        p.setY = los + dir * (5 - d.boxLoad * 0.9);
         break;
       case 'CB1':
-        p.x = clampToField(this.ballX - 17 * m);
-        p.y = los + dir * d.cushion;
+        p.setX = clampToField(this.ballX - 17 * m);
+        p.setY = los + dir * d.cushion;
         break;
       case 'CB2':
-        p.x = clampToField(this.ballX + 17 * m);
-        p.y = los + dir * d.cushion;
+        p.setX = clampToField(this.ballX + 17 * m);
+        p.setY = los + dir * d.cushion;
         break;
       case 'S1':
-        p.x = clampToField(this.ballX - (d.deep >= 2 ? 12 : 0) * m);
-        p.y = los + dir * (d.deep === 0 ? 7 : 14);
+        p.setX = clampToField(this.ballX - (d.deep >= 2 ? 12 : 0) * m);
+        p.setY = los + dir * (d.deep === 0 ? 7 : 14);
         break;
       default:
-        p.x = clampToField(this.ballX + (d.deep >= 2 ? 12 : 8) * m);
-        p.y = los + dir * (d.boxLoad >= 3 ? 6 : d.deep >= 2 ? 14 : 12);
+        p.setX = clampToField(this.ballX + (d.deep >= 2 ? 12 : 8) * m);
+        p.setY = los + dir * (d.boxLoad >= 3 ? 6 : d.deep >= 2 ? 14 : 12);
         break;
     }
   }
@@ -1965,7 +2109,12 @@ export class FootballGame {
         let best = -1;
         let near = Infinity;
         for (let i = 0; i < unclaimed.length; i++) {
-          const gap = dist2(p.x, p.y, unclaimed[i].x, unclaimed[i].y);
+          /* MEASURED FROM WHERE THEY WILL LINE UP, not from where they are
+           * standing — which at the moment this runs is a huddle, because the
+           * men now walk onto their spots rather than appearing on them.
+           * Matching on the huddle put every corner on the wrong receiver and
+           * put twenty-two yards an attempt back on the board. */
+          const gap = dist2(p.setX, p.setY, unclaimed[i].setX, unclaimed[i].setY);
           if (gap < near) { near = gap; best = i; }
         }
         if (best >= 0) {
@@ -1998,7 +2147,7 @@ export class FootballGame {
     const under = cover.filter((p) => !deep.includes(p));
 
     const spreadOut = (men: FieldPlayer[], width: number, depth: number, radius: number): void => {
-      const sorted = [...men].sort((a, b) => a.x - b.x);
+      const sorted = [...men].sort((a, b) => a.setX - b.setX);
       sorted.forEach((p, idx) => {
         const t = sorted.length === 1 ? 0 : (idx / (sorted.length - 1) - 0.5) * 2;
         p.zone = {
@@ -2048,6 +2197,8 @@ export class FootballGame {
       route,
       x: FIELD.centerX,
       y: this.lineOfScrimmage,
+      setX: FIELD.centerX,
+      setY: this.lineOfScrimmage,
       vx: 0, vy: 0,
       facing: attackDir(side) > 0 ? Math.PI / 2 : -Math.PI / 2,
       pose: 'stance',
@@ -2099,6 +2250,57 @@ export class FootballGame {
   private reactionFor(p: FieldPlayer): number {
     const iq = clamp(p.data.attrs.awareness / 99, 0, 1);
     return (0.1 + (1 - iq) * 0.22) * clamp(this.cfg.difficulty.reaction, 0.4, 2.2);
+  }
+
+  /**
+   * A TIMEOUT.
+   *
+   * Three a half, and the whole of their value is that they STOP THE CLOCK —
+   * which is only worth anything because the clock otherwise runs through the
+   * huddle. Callable when the ball is dead, which is when a real one is called,
+   * and never when there is nothing to stop.
+   */
+  canCallTimeout(side: Side): boolean {
+    if (this.timeouts[side] <= 0) return false;
+    if (this.phase !== 'dead' && this.phase !== 'presnap' && this.phase !== 'playcall') return false;
+    return this.clockRunning || this.phase === 'presnap';
+  }
+
+  callTimeout(side: Side): boolean {
+    if (!this.canCallTimeout(side)) return false;
+    this.timeouts[side] -= 1;
+    this.clockRunning = false;
+    this.playClock = FOOTBALL.playClock;
+    this.presnapTime = 0;
+    this.setBanner('TIMEOUT', 1.6);
+    this.say(`${side === 'home' ? this.cfg.home.team.name : this.cfg.away.team.name} take one`, 2);
+    this.events.emit('whistle', {});
+    return true;
+  }
+
+  /**
+   * AND THE COMPUTER SPENDS ITS OWN.
+   *
+   * Two cases, and they are the only two that matter: stopping the clock when
+   * it is behind late, and stopping it on defence to get the ball back. How
+   * well it judges the moment is its clock sense, which is coaching.
+   */
+  private considerAiTimeout(): void {
+    if (this.clock > 150 || this.quarter < 2) return;
+    const sense = clamp(this.cfg.difficulty.clockSense, 0, 1);
+    for (const side of ['home', 'away'] as const) {
+      if (side === this.humanSide) continue;
+      if (!this.canCallTimeout(side)) continue;
+      const margin = this.score[side] - this.score[otherSide(side)];
+      const attacking = this.possession === side;
+      const wants = attacking
+        ? margin <= 0 && this.clock < 80
+        : margin < 0 && this.clock < 120;
+      if (!wants) continue;
+      if (this.rng.next() > sense * 0.7) continue;
+      this.callTimeout(side);
+      return;
+    }
   }
 
   /** Take the defender nearest the ball. */

@@ -149,15 +149,33 @@ function runDynasty(years: number): void {
     career.roster.filter((x) => x.pos === p).length > shape[p] + 7);
   check('no position runs away', overstuffed.length === 0, overstuffed.join(', '));
 
-  /* THE ONE COMPARISON THAT EXPLAINS A RECORD. A coached programme that reads
-   * five points below every club it plays is not unlucky, it is mis-generated. */
+  /* THE ONE COMPARISON THAT EXPLAINS A RECORD, and it is against the club he
+   * TOOK OVER rather than against the league.
+   *
+   * "Did twenty years of recruiting and development leave this programme better
+   * than the one that was handed to him" is the question a career mode has to
+   * answer yes to. "Is he above the average of a league that contains the best
+   * clubs in it" is a different question, and a mid-table programme is supposed
+   * to answer it no. */
   const rivals = teamsAtLevel(career.level)
     .filter((t) => t.id !== career.teamId)
     .map((t) => teamRatings(rosterFor(t, career.year)).overall);
   const rivalAvg = rivals.reduce((a, b) => a + b, 0) / rivals.length;
   const mine = teamRatings(career.roster).overall;
-  check('the coach keeps up with the league', mine >= rivalAvg - 2,
-    `coach ${mine} v league ${rivalAvg.toFixed(1)} (${Math.min(...rivals)}-${Math.max(...rivals)})`);
+  const club = teamsAtLevel(career.level).find((t) => t.id === career.teamId)!;
+  const untouched = teamRatings(rosterFor(club, career.year)).overall;
+  check('twenty years left the programme better than he found it',
+    mine >= untouched,
+    `coach ${mine} v the same club unmanaged ${untouched} (league ${rivalAvg.toFixed(1)})`);
+
+  // Where the difference is, position by position, so a gap can be fixed.
+  const theirs = rosterFor(club, career.year);
+  const topAt = (list: typeof theirs, pos: string): string => {
+    const at = list.filter((p) => p.pos === pos).sort((a, b) => b.overall - a.overall);
+    return at.length ? `${at[0].overall}/${at.length}` : '--';
+  };
+  console.log(`    coach:     ${POSITIONS.map((p) => `${p} ${topAt(career.roster, p)}`).join('  ')}`);
+  console.log(`    unmanaged: ${POSITIONS.map((p) => `${p} ${topAt(theirs, p)}`).join('  ')}`);
 
   // Where the gap is, if there is one, so it can be fixed rather than guessed at.
   const r1 = teamRatings(career.roster);

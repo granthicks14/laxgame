@@ -275,6 +275,20 @@ export function simulateGame(
         }
         const by = pickFrom(def.defenders.slice(0, 8), rng);
         if (by) lineOf(offence === 'home' ? 'away' : 'home', by).tackles++;
+
+        /* AND THE BALL CAN COME OUT, at the same rate the played engine lets it:
+         * about one carry in sixty, against the carrier's hands. A simulated
+         * season with no fumbles in it and a played one with them is two
+         * different leagues. */
+        if (back && rng.next() < clamp(0.016 - (back.attrs.ballSecurity - 60) / 3000, 0.004, 0.04)) {
+          lineOf(offence, back).fumbles++;
+          const got = pickFrom(def.defenders, rng);
+          if (got && rng.next() < 0.62) {
+            lineOf(offence === 'home' ? 'away' : 'home', got).forcedFumbles++;
+            box[offence].turnovers++;
+            turnover = true;
+          }
+        }
       }
 
       // Yardage on the board.

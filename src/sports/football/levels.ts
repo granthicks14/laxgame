@@ -78,7 +78,7 @@ export const LEVELS: Record<FootballLevel, LevelInfo> = {
     blurb: 'Forty boys, one bus and a field with a scoreboard that sticks. '
       + 'Everybody plays both ways and half of them have never lifted.',
     ageSystem: 'class',
-    par: 41, spread: 9, rosterSize: 28, games: 9, playoffTeams: 4,
+    par: 41, spread: 9, rosterSize: 30, games: 9, playoffTeams: 4,
     title: 'District title', pointsPerWin: 3,
   },
   'hs-big': {
@@ -118,7 +118,7 @@ export const LEVELS: Record<FootballLevel, LevelInfo> = {
     blurb: 'Eighty thousand people and a television contract. The best players '
       + 'in the country who are not being paid to play.',
     ageSystem: 'class',
-    par: 71, spread: 11, rosterSize: 34, games: 11, playoffTeams: 8,
+    par: 71, spread: 11, rosterSize: 36, games: 11, playoffTeams: 8,
     title: 'National championship', pointsPerWin: 8,
   },
   semipro: {
@@ -138,7 +138,7 @@ export const LEVELS: Record<FootballLevel, LevelInfo> = {
     blurb: 'The top of the sport. Every man on the field was the best player in '
       + 'his town, his county and his university, and half of them are cut by June.',
     ageSystem: 'pro',
-    par: 83, spread: 9, rosterSize: 34, games: 11, playoffTeams: 8,
+    par: 83, spread: 9, rosterSize: 36, games: 11, playoffTeams: 8,
     title: 'Championship', pointsPerWin: 12,
   },
 };

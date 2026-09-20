@@ -2,6 +2,7 @@ import { Rng } from '../../../core/rng';
 import { clamp } from '../../../core/math';
 import { POSITIONS, makePlayer, type Player, type Position } from '../data';
 import { LEVELS, shapeFor, teamPar } from '../levels';
+import { rosterNeeds, standingOf } from './needs';
 import { worldTeam } from '../world';
 import { perksOf } from './coach';
 import type { FootballCareer, Recruit } from './types';
@@ -59,19 +60,6 @@ function starFor(rng: Rng, pull: number): number {
  */
 const MEAN_STARS = 2.25;
 
-/**
- * WHERE THE PROGRAMME ACTUALLY STANDS, which is not where it was written.
- *
- * A coach who has won for a decade is recruiting for a different programme from
- * the one he took over, and this is where that is said. Without it a dynasty has
- * no compounding in it at all: the twentieth season recruits exactly as well as
- * the first, and the whole point of building something is missing.
- */
-export function standingOf(career: FootballCareer): number {
-  const club = worldTeam(career.teamId);
-  return clamp((club?.standing ?? 50) + (career.standingDrift[career.teamId] ?? 0), 1, 99);
-}
-
 function parFor(career: FootballCareer, stars: number): number {
   const info = LEVELS[career.level];
   const base = teamPar(career.level, standingOf(career));
@@ -107,15 +95,12 @@ export function generateClass(career: FootballCareer): Recruit[] {
   const pull = (club?.recruiting ?? 50) + perks.recruitingPull + risen;
   const size = classSize(career) * 3;
 
-  // Weighted toward the positions the roster is actually short of, but never
-  // exclusively: the board shows the sport, not a shopping list.
-  const shape = shapeFor(career.level);
-  const have: Record<string, number> = {};
-  for (const p of career.roster) have[p.pos] = (have[p.pos] ?? 0) + 1;
-  const weights = POSITIONS.map((pos) => {
-    const short = Math.max(0, shape[pos] - (have[pos] ?? 0));
-    return 1 + short * 1.6;
-  });
+  /* Weighted toward what the roster is actually short of — and "short" includes
+   * a position that is FULL of somebody poor, which is how a programme stops
+   * carrying the same walk-on punter for twenty years. Never exclusively: the
+   * board shows the sport, not a shopping list. */
+  const needs = new Map(rosterNeeds(career).map((n) => [n.pos, n]));
+  const weights = POSITIONS.map((pos) => 1 + (needs.get(pos)?.weight ?? 0) * 4.2);
 
   /* EVERY POSITION IS ON THE BOARD, ALWAYS.
    *
@@ -153,6 +138,12 @@ export function generateClass(career: FootballCareer): Recruit[] {
       years: 1,
       age: 18,
     });
+    /* STARS ARE A CEILING AS MUCH AS A FLOOR. What a recruiting service is
+     * actually claiming about a five-star is that he will be very good, not
+     * that he already is — so the rating buys headroom, which is the thing
+     * development then has somewhere to go into. */
+    player.potential = Math.min(99, player.potential + Math.round((stars - MEAN_STARS) * 2.6));
+
     out.push({
       id: player.id,
       first: player.first,
@@ -237,32 +228,44 @@ export function signingDay(career: FootballCareer): { signed: Player[]; lost: Re
   const signed: Player[] = [];
   const lost: Recruit[] = [];
 
-  const offered = career.recruits
-    .filter((r) => r.offered && !r.committedTo)
-    .sort((a, b) => interestOf(career, b) - interestOf(career, a));
+  /* EVERYBODY WITH AN OFFER DECIDES FOR HIMSELF, and then the coach takes the
+   * ones he needs.
+   *
+   * Both halves matter, and the first version only had the second. Sorting by
+   * how keen they are and cutting at the class size means a coach with sixteen
+   * offers out and room for six signs the six warmest — which are whatever
+   * positions happened to like him, and is how a programme ends up twenty years
+   * in with six receivers and one tight end rated sixty-two. A recruit's answer
+   * is his; which of the yeses to take is the coach's.
+   *
+   * THE PLAYERS AT THE BOTTOM OF THE BOARD TAKE THE OFFER. A two-star with one
+   * offer signs it; a five-star has six programmes calling and can afford to say
+   * no. Without that difference the bottom of a class never fills.
+   */
+  const yeses: Recruit[] = [];
+  for (const r of career.recruits.filter((x) => x.offered && !x.committedTo)) {
+    const chance = clamp(interestOf(career, r) / 100 + (4 - r.stars) * 0.13, 0.05, 0.96);
+    if (rng.next() < chance) yeses.push(r);
+    else { r.committedTo = 'elsewhere'; lost.push(r); }
+  }
 
-  for (const r of offered) {
+  const needs = new Map(rosterNeeds(career).map((n) => [n.pos, n.weight]));
+  const taking = new Map<Position, number>();
+  const rank = (r: Recruit): number =>
+    (needs.get(r.pos) ?? 0) * 100 - (taking.get(r.pos) ?? 0) * 26 + r.overall * 0.4;
+  while (yeses.length) {
+    yeses.sort((a, b) => rank(b) - rank(a));
+    const r = yeses.shift()!;
     if (signed.length >= limit) {
       r.committedTo = 'elsewhere';
       lost.push(r);
       continue;
     }
-    /* THE PLAYERS AT THE BOTTOM OF THE BOARD TAKE THE OFFER.
-     *
-     * A two-star with one offer on the table signs it; a five-star has six
-     * programmes calling and can afford to say no. Without that difference every
-     * recruit is equally hard to sign, the bottom of the class never fills, and
-     * a programme loses eight players a year and replaces five — which over
-     * twenty seasons is a roster of twenty-five men going 0-11 for ever. */
-    const chance = clamp(interestOf(career, r) / 100 + (4 - r.stars) * 0.13, 0.05, 0.96);
-    if (rng.next() < chance) {
-      r.committedTo = career.teamId;
-      signed.push(r.player);
-    } else {
-      r.committedTo = 'elsewhere';
-      lost.push(r);
-    }
+    r.committedTo = career.teamId;
+    signed.push(r.player);
+    taking.set(r.pos, (taking.get(r.pos) ?? 0) + 1);
   }
+
   for (const r of career.recruits) {
     if (!r.committedTo) r.committedTo = 'elsewhere';
   }

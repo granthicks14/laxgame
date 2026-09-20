@@ -38,7 +38,7 @@ export const UPGRADES: Upgrade[] = [
     name: 'Offensive line coach',
     blurb: 'The pocket holds longer and the run game has a crease. Every rank is '
       + 'about a tenth of a second of protection.',
-    per: 0.09, base: 22, growth: 1.35, group: 'offence',
+    per: 0.09, base: 18, growth: 1.35, group: 'offence',
   },
   {
     id: 'qb',
@@ -50,7 +50,7 @@ export const UPGRADES: Upgrade[] = [
     id: 'skill',
     name: 'Skill position coach',
     blurb: 'Backs and receivers get off the line cleaner and hold onto more of it.',
-    per: 1, base: 24, growth: 1.35, group: 'offence',
+    per: 1, base: 20, growth: 1.35, group: 'offence',
   },
   {
     id: 'front',
@@ -169,7 +169,16 @@ export function pointsForSeason(
   const info = LEVELS[career.level];
   const games = Math.max(1, wins + losses);
   const rate = wins / games;
-  let pts = wins * info.pointsPerWin;
+
+  /* A SEASON COACHED IS WORTH SOMETHING, whatever the record.
+   *
+   * Not much — winning is still nearly all of it — but enough that the first
+   * offseason of a career always has a decision in it. A coach who takes over a
+   * bad programme, goes 2-9 and then finds he cannot afford a single rank of
+   * anything has been handed a screen with nothing on it at the exact moment the
+   * mode is trying to show him what it is for.
+   */
+  let pts = info.pointsPerWin * 2.5 + wins * info.pointsPerWin;
   // Beating expectations is the part that is actually coaching.
   if (rate > 0.6) pts += Math.round((rate - 0.6) * info.pointsPerWin * games * 0.8);
   if (champion) pts += info.pointsPerWin * 6;

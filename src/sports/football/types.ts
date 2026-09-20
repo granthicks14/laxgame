@@ -89,6 +89,14 @@ export interface FieldPlayer {
   y: number;
   vx: number;
   vy: number;
+  /**
+   * Where the call says he lines up. He WALKS to it during the play clock
+   * rather than appearing on it, because twenty-two men teleporting into
+   * position between every down is the single most artificial thing a football
+   * game can put on screen.
+   */
+  setX: number;
+  setY: number;
   /** Which way he is facing, radians. */
   facing: number;
 

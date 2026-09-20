@@ -40,6 +40,7 @@ export function newChallenge(teamId: string, level: FootballLevel): ChallengeSta
     rungIndex: LEVEL_ORDER.indexOf(level),
     seasonsHere: 0,
     heat: 20,
+    over: 0,
     offers: [],
     jobs: [{ teamId, level, from: 1, to: null }],
   };
@@ -65,6 +66,7 @@ export function updateHeat(
    * not, and a mode that cannot tell the difference is a mode that punishes you
    * for taking the hard job. */
   const over = rate - expected;
+  ch.over = over;
   let heat = ch.heat - over * 90;
   if (champion) heat -= 45;
   ch.heat = clamp(Math.round(heat), 0, 100);
@@ -112,7 +114,15 @@ export function jobOffers(career: FootballCareer, champion: boolean): string[] {
    * twenty-four seasons, which is not a career, it is a commute. He has to have
    * been somewhere long enough to have done something, and even then it is not
    * every year. */
-  if (rep > 66 && here && ch.seasonsHere >= 2 && rng.next() < 0.45) {
+  /* A COACH WHO IS DOING MORE THAN THE JOB ASKS GETS CALLS.
+   *
+   * Measured against what the PROGRAMME should manage, not against .500 and not
+   * against his reputation — a man holding the worst club in the district above
+   * water will never have a good record and is the best coach on the board, and
+   * a job market that cannot see that leaves him there for twenty-four seasons.
+   * That is exactly what it did. */
+  const earned = ch.over > 0.1 || rep > 70;
+  if (earned && here && ch.seasonsHere >= 2 && rng.next() < 0.55) {
     const pool = teamsAtLevel(career.level)
       .filter((t) => t.id !== career.teamId && t.standing > here.standing + 10
         && t.standing < here.standing + 30 + rep * 0.2);
@@ -165,6 +175,7 @@ export function takeJob(career: FootballCareer, teamId: string): boolean {
   ch.rungIndex = LEVEL_ORDER.indexOf(team.level);
   ch.seasonsHere = 0;
   ch.heat = 25;
+  ch.over = 0;
   ch.offers = [];
   ch.jobs.push({ teamId: team.id, level: team.level, from: career.year, to: null });
   return true;

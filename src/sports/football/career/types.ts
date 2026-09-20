@@ -156,6 +156,13 @@ export interface ChallengeState {
   seasonsHere: number;
   /** How close the board is to acting. 0-100, and 100 is the sack. */
   heat: number;
+  /**
+   * How far the last season beat what the programme had a right to expect, as a
+   * win rate. THIS is what gets a coach looked at — a man going 6-4 at the worst
+   * club in the district has done something a man going 6-4 at the best one has
+   * not, and a job market that reads raw reputation cannot tell them apart.
+   */
+  over: number;
   /** Jobs currently on the table, by club id. */
   offers: string[];
   /** Every job he has held, oldest first. */
