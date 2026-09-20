@@ -8,6 +8,9 @@ import { footballSettings, FOOTBALL_SPORT } from '../../../sports/football/setti
 import { allTeams } from '../../../sports/football/world';
 import { getPref } from '../../../state/sportPrefs';
 import { FootballSetupScreen } from './FootballSetup';
+import { careerHeadline, loadFootballCareer } from '../../../sports/football/career/save';
+import { ChallengeStartScreen, DynastyStartScreen } from './career/CareerStart';
+import { FootballCareerHub } from './career/CareerHub';
 import { FootballTeamsScreen } from './FootballTeams';
 import { FootballHowToScreen } from './FootballHowTo';
 
@@ -35,6 +38,8 @@ export class FootballMenuScreen implements Screen {
 
   constructor(app: App) {
     const firstTime = !getPref(app, FOOTBALL_SPORT, 'seenHowTo', false);
+    const dynasty = loadFootballCareer('dynasty');
+    const challenge = loadFootballCareer('challenge');
 
     const items: Item[] = [
       {
@@ -48,6 +53,27 @@ export class FootballMenuScreen implements Screen {
         note: 'START HERE',
         go: (a: App) => a.push((b) => new FootballHowToScreen(b)),
       } as Item] : []),
+      {
+        label: 'Dynasty',
+        desc: dynasty
+          ? careerHeadline(dynasty)
+          : 'Take a programme anywhere in the sport and build it for as long as you like.',
+        note: dynasty ? 'CONTINUE' : 'NEW',
+        go: (a) => (dynasty
+          ? a.push((b) => new FootballCareerHub(b, dynasty))
+          : a.push((b) => new DynastyStartScreen(b))),
+      },
+      {
+        label: 'Challenge',
+        desc: challenge
+          ? careerHeadline(challenge)
+          : 'Start at the bottom of the sport with nothing. Only a championship '
+            + 'moves you up, and only for as long as they keep you.',
+        note: challenge ? 'CONTINUE' : 'THE CLIMB',
+        go: (a) => (challenge
+          ? a.push((b) => new FootballCareerHub(b, challenge))
+          : a.push((b) => new ChallengeStartScreen(b))),
+      },
       {
         label: 'Clubs',
         desc: 'Seven tiers of football, and what every roster in them is made of.',

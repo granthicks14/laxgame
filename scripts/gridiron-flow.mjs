@@ -235,6 +235,99 @@ async function main() {
     await ctx.close();
   }
 
+  /* ------------------------------------------------------- a whole career */
+  {
+    const { ctx, page } = await newPage(browser, { viewport: { width: 1280, height: 900 } });
+    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await enterSport(page, 'football', { title: 'Gridiron' });
+
+    await menu(page, 'Dynasty');
+    await page.waitForTimeout(450);
+    check('the dynasty start screen offers programmes',
+      await page.locator('.pick').count() > 6,
+      `${await page.locator('.pick').count()} clubs`);
+    await page.locator('.pick').nth(5).click();
+    await page.locator('button', { hasText: 'Take the job' }).first().click();
+    await page.locator('.career-head').first().waitFor({ timeout: 8000 });
+    check('the career hub opens', true);
+
+    // Simulate a season and get into the offseason.
+    await page.locator('button', { hasText: 'Simulate the rest of the season' }).first().click();
+    await page.waitForTimeout(1600);
+    const hub = () => page.evaluate(() => {
+      const raw = localStorage.getItem('lsl.gridiron.career.dynasty.v1');
+      if (!raw) return null;
+      const c = JSON.parse(raw);
+      return {
+        year: c.year, stage: c.stage, roster: c.roster.length,
+        played: c.schedule.filter((f) => f.played).length,
+        total: c.schedule.length,
+        history: c.history.length, points: c.coach.points,
+        recruits: c.recruits.length,
+      };
+    });
+    const afterSeason = await hub();
+    check('a season saves', !!afterSeason, JSON.stringify(afterSeason));
+    check('every fixture was played',
+      afterSeason && afterSeason.played === afterSeason.total,
+      `${afterSeason?.played}/${afterSeason?.total}`);
+    check('the season is in the history', (afterSeason?.history ?? 0) === 1);
+    check('the coach was paid', (afterSeason?.points ?? 0) > 0, `${afterSeason?.points} points`);
+
+    // The league screen.
+    await page.locator('button', { hasText: 'League and standings' }).first().click();
+    await page.waitForTimeout(400);
+    check('the table renders', await page.locator('.box tbody tr').count() > 6,
+      `${await page.locator('.box tbody tr').count()} rows`);
+    await page.locator('.seg__opt', { hasText: 'Schedule' }).first().click();
+    await page.waitForTimeout(250);
+    check('the fixture list renders', await page.locator('.fixture').count() > 8);
+    await page.getByRole('button', { name: 'Back' }).first().click();
+    await page.waitForTimeout(300);
+
+    // The roster and the coaching tree.
+    await page.locator('button', { hasText: 'Roster and coaching' }).first().click();
+    await page.waitForTimeout(400);
+    check('the depth chart renders', await page.locator('.roster-row').count() > 18,
+      `${await page.locator('.roster-row').count()} players`);
+    await page.locator('.seg__opt', { hasText: 'Coaching' }).first().click();
+    await page.waitForTimeout(250);
+    const before = (await hub())?.points ?? 0;
+    const buyable = page.locator('.upgrade:not(.is-off)');
+    if (await buyable.count()) await buyable.first().click();
+    await page.waitForTimeout(300);
+    const after = (await hub())?.points ?? 0;
+    check('an upgrade can be bought', after < before, `${before} -> ${after}`);
+    await page.getByRole('button', { name: 'Back' }).first().click();
+    await page.waitForTimeout(300);
+
+    // The offseason and recruiting.
+    await page.locator('button', { hasText: 'Work the offseason' }).first().click();
+    await page.waitForTimeout(450);
+    check('the offseason opens', await page.locator('.panel').count() > 1);
+    await page.locator('.seg__opt', { hasText: 'Recruiting' }).first().click();
+    await page.waitForTimeout(350);
+    const offers = page.locator('button', { hasText: /^Offer/ });
+    check('there is a recruiting board', await offers.count() > 4,
+      `${await offers.count()} recruits`);
+    for (let i = 0; i < Math.min(5, await offers.count()); i++) {
+      const b = offers.nth(i);
+      if (await b.isEnabled()) await b.click();
+      await page.waitForTimeout(90);
+    }
+    await page.locator('.seg__opt', { hasText: 'What happened' }).first().click();
+    await page.waitForTimeout(250);
+    await page.locator('button', { hasText: /^Sign the class/ }).first().click();
+    await page.waitForTimeout(900);
+
+    const next = await hub();
+    check('the next season starts', (next?.year ?? 0) === 2, `year ${next?.year}`);
+    check('the squad is still viable', (next?.roster ?? 0) >= 22, `${next?.roster} players`);
+    check('a new schedule was drawn', (next?.played ?? 1) === 0, `${next?.played} played`);
+
+    await ctx.close();
+  }
+
   await browser.close();
 
   console.log(`\n${passed} checks passed`);

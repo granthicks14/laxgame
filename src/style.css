@@ -2902,3 +2902,88 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
 .meter__track { height: 7px; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line); }
 .meter__fill { height: 100%; background: var(--accent); }
 .meter__num { font-family: var(--mono); font-size: 12px; text-align: right; color: var(--text-2); }
+
+/* --- the football career ------------------------------------------------ */
+.career-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.5);
+}
+.career-head__rec {
+  font-family: var(--mono);
+  font-size: clamp(26px, 7vw, 38px);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+}
+.career-head__bits { display: flex; flex-direction: column; gap: 2px; }
+
+.kv { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; font-size: 12px; }
+.kv__k { color: var(--muted); }
+.kv__v { color: var(--text); text-align: right; }
+
+/* A fixture reads left to right the way a scoreboard does: away, score, home. */
+.fixture {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.fixture__team { color: var(--text-2); font-family: var(--display); letter-spacing: 0.06em; }
+.fixture__team:last-of-type { text-align: right; }
+.fixture__score { font-family: var(--mono); color: var(--text); min-width: 46px; text-align: center; }
+.fixture__tag { color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+.fixture.is-mine { color: var(--accent); }
+.fixture.is-mine .fixture__team { color: var(--accent); }
+
+/* The depth chart. The starter is the row that matters, so it is the one that
+   looks different — everybody below him is cover. */
+.roster-row {
+  display: grid;
+  grid-template-columns: 38px 1fr 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-left: 2px solid transparent;
+}
+.roster-row.is-starter { border-left-color: var(--accent); background: rgba(255, 255, 255, 0.03); }
+.roster-row__num { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.roster-row__name { font-size: 12px; }
+.roster-row__note { color: var(--muted); }
+.roster-row__ovr { font-family: var(--mono); font-size: 13px; text-align: right; color: var(--text-2); }
+.roster-row.is-starter .roster-row__ovr { color: var(--accent); }
+
+.upgrade {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  min-height: 46px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+.upgrade:hover { border-color: var(--accent); }
+.upgrade.is-off { opacity: 0.5; cursor: not-allowed; }
+.upgrade__name { font-family: var(--display); font-size: 12px; font-weight: 700; }
+.upgrade__blurb { color: var(--muted); }
+.upgrade__cost { font-family: var(--mono); font-size: 14px; color: var(--accent); }
+
+.pick { display: block; width: 100%; text-align: left; padding: 2px; background: none; border: 2px solid transparent; cursor: pointer; }
+.pick.is-on { border-color: var(--accent); background: rgba(255, 255, 255, 0.04); }
+
+.grew { color: var(--accent); font-family: var(--mono); }
+.box tr.is-mine { background: rgba(122, 209, 81, 0.12); }
+.box tr.is-cut td { border-bottom: 2px solid var(--accent); }
+.btn--sm { padding: 6px 10px; font-size: 11px; min-height: 40px; }

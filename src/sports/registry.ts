@@ -257,7 +257,7 @@ export const SPORTS: SportManifest[] = [
     blurb: 'Call the play, throw the ball, and live with it. Routes that are '
       + 'really run, coverage that reads what you keep calling, and a pass rush '
       + 'that has to beat a block to reach you.',
-    modes: ['Play Now'],
+    modes: ['Play Now', 'Dynasty', 'Challenge'],
     theme: {
       accent: '#7ad151', accentInk: '#08160a',
       surface: '#2c6b3f', surfaceLine: '#d8e6dc', backdrop: '#0a0f0b',
