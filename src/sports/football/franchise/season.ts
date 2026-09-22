@@ -590,6 +590,11 @@ export function beginOffseason(fr: Franchise): void {
   const expiring = tickContracts(fr);
   void expiring;
 
+  /* PICKS THAT HAVE BEEN USED ARE NOT PICKS. Without this the ledger keeps
+   * every slot it ever issued and a twenty-season save carries eighty-eight
+   * entries for four picks a year. */
+  fr.picks = fr.picks.filter((p) => p.year >= fr.year);
+
   fr.staffMarket = staffMarket(fr.seed, fr.year, 46 + teamOr(fr.teamId).prestige * 4);
   fr.scoutPoints = scoutBudget(fr.facilities.scouting);
   fr.draftClass = [];

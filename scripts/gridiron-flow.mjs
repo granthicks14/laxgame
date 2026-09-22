@@ -364,6 +364,15 @@ async function main() {
     await page.getByRole('button', { name: 'Back' }).first().click();
     await page.waitForTimeout(300);
 
+    await page.locator('button', { hasText: 'Franchise history' }).first().click();
+    await page.waitForTimeout(350);
+    await page.locator('.seg__opt', { hasText: 'The record' }).first().click();
+    await page.waitForTimeout(250);
+    check('the franchise record renders', await page.locator('.tile').count() >= 4,
+      `${await page.locator('.tile').count()} totals`);
+    await page.getByRole('button', { name: 'Back' }).first().click();
+    await page.waitForTimeout(250);
+
     /* ------------------------------------------------------- play the season */
     await page.locator('button', { hasText: 'Simulate the rest of the season' }).first().click();
     await page.waitForTimeout(2600);
@@ -373,6 +382,15 @@ async function main() {
     check('the season is in the history', (afterSeason?.history ?? 0) === 1,
       `${afterSeason?.history} seasons`);
     check('and the offseason is open', afterSeason?.stage === 'offseason', afterSeason?.stage);
+
+    await page.locator('button', { hasText: 'Franchise history' }).first().click();
+    await page.waitForTimeout(350);
+    await page.locator('.seg__opt', { hasText: 'Leaders' }).first().click();
+    await page.waitForTimeout(300);
+    check('career leaders are kept', await page.locator('.leader').count() >= 5,
+      `${await page.locator('.leader').count()} entries`);
+    await page.getByRole('button', { name: 'Back' }).first().click();
+    await page.waitForTimeout(250);
 
     /* ---------------------------------------------------------- the offseason */
     await page.locator('button', { hasText: 'Work the offseason' }).first().click();
@@ -465,6 +483,97 @@ async function main() {
     await coach(page, 14);
     const after = await state(page);
     check('plays run in a franchise game', (after?.plays ?? 0) > 0, `${after?.plays} plays`);
+
+    await ctx.close();
+  }
+
+  /* ------------------------------- the franchise, by thumb, on a phone */
+  {
+    /* MOBILE FIRST IS A CLAIM THAT HAS TO BE CHECKED. A management screen is
+     * where a phone layout actually breaks — tables, two-column rows, long club
+     * names — and none of it is visible from a desktop viewport. So every
+     * franchise screen is walked at 412 pixels wide and asked the two questions
+     * that matter: does anything run off the side, and can a thumb hit it. */
+    const { ctx, page } = await newPage(browser, {
+      ...devices['Pixel 7'],
+      hasTouch: true,
+      isMobile: true,
+    });
+    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await enterSport(page, 'football', { title: 'Gridiron', tap: true });
+    await page.locator('.menu-btn__label').filter({ hasText: 'Dynasty' }).first().tap();
+    await page.waitForTimeout(500);
+
+    const overflow = async (where) => {
+      const n = await page.evaluate(() =>
+        document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      check(`${where}: nothing runs off the side`, n <= 1, `${n}px`);
+    };
+    const thumbs = async (where) => {
+      const small = await page.locator('button:visible').evaluateAll((els) => els
+        .filter((e) => {
+          const r = e.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && r.height < 36;
+        })
+        .map((e) => `${e.className.split(' ')[0]}:${Math.round(e.getBoundingClientRect().height)}`));
+      check(`${where}: every control is thumb-sized`, small.length === 0,
+        small.slice(0, 4).join(', '));
+    };
+
+    await overflow('the club picker');
+    await thumbs('the club picker');
+
+    await page.locator('.club-line').nth(2).tap();
+    await page.waitForTimeout(200);
+    await page.locator('button', { hasText: 'Take the job' }).first().tap();
+    await page.locator('.career-head').first().waitFor({ timeout: 8000 });
+    await overflow('the hub');
+    await thumbs('the hub');
+
+    const visit = async (label, name) => {
+      await page.locator('button', { hasText: label }).first().tap();
+      await page.waitForTimeout(500);
+      await overflow(name);
+      await thumbs(name);
+      await page.getByRole('button', { name: 'Back' }).first().tap();
+      await page.waitForTimeout(300);
+    };
+    await visit('Roster and depth', 'the roster');
+    await visit('League, standings and bracket', 'the league');
+    await visit('Coaching staff', 'the staff room');
+    await visit('Facilities and finances', 'facilities');
+    await visit('Franchise history', 'history');
+
+    await page.locator('button', { hasText: 'Trade desk' }).first().tap();
+    await page.waitForTimeout(450);
+    await page.locator('.club-line').first().tap();
+    await page.waitForTimeout(500);
+    await overflow('the trade desk');
+    await thumbs('the trade desk');
+    await page.getByRole('button', { name: 'Back' }).first().tap();
+    await page.waitForTimeout(250);
+    await page.getByRole('button', { name: 'Back' }).first().tap();
+    await page.waitForTimeout(300);
+
+    // Into an offseason, which is the densest screen in the game.
+    await page.locator('button', { hasText: 'Simulate the rest of the season' }).first().tap();
+    await page.waitForTimeout(3200);
+    await page.locator('button', { hasText: 'Work the offseason' }).first().tap();
+    await page.waitForTimeout(500);
+    await overflow('the offseason');
+    await thumbs('the offseason');
+    for (const step of ['On to the staff', 'On to your contracts', 'On to free agency']) {
+      await page.locator('button', { hasText: step }).first().tap();
+      await page.waitForTimeout(400);
+    }
+    await overflow('free agency');
+    await thumbs('free agency');
+    await page.locator('button', { hasText: 'On to the draft' }).first().tap();
+    await page.waitForTimeout(500);
+    await page.locator('button', { hasText: /the draft room/ }).first().tap();
+    await page.waitForTimeout(800);
+    await overflow('the draft room');
+    await thumbs('the draft room');
 
     await ctx.close();
   }

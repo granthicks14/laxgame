@@ -19,7 +19,7 @@ import { SALARY_CAP, capUsed, fanMood } from '../../../../sports/football/franch
 import { boardLine, careerOver, takeJob } from '../../../../sports/football/franchise/challenge';
 import { recentNews } from '../../../../sports/football/franchise/news';
 import { saveFranchise } from '../../../../sports/football/franchise/save';
-import type { Franchise } from '../../../../sports/football/franchise/types';
+import type { Fixture, Franchise } from '../../../../sports/football/franchise/types';
 import { FootballGameScreen } from '../FootballGameScreen';
 import { FootballPostGameScreen } from '../FootballPostGame';
 import { RosterScreen } from './RosterScreen';
@@ -184,8 +184,21 @@ export class FranchiseHub implements Screen {
     const theirRec = recordOf(fr.standings[otherId]);
     const theirRating = teamRatings(configFor(fr, f)[home ? 'away' : 'home'].roster).overall;
 
+    /* JANUARY ESCALATES, and the screen should say so. A divisional game that
+     * reads like week six is a divisional game that feels like week six. */
+    const stakes = f.round === 'superbowl'
+      ? 'One game. Everything.'
+      : f.round === 'conference'
+        ? 'Win this and you play in February.'
+        : f.round === 'divisional'
+          ? 'Two wins from the Super Bowl. Lose and the season is over.'
+          : f.round === 'wildcard'
+            ? 'Win or go home.'
+            : this.stakesLine(f);
+
     return panel(
       f.round ? playoffLabel(f) : `Week ${f.week}${f.rivalry ? ' — the rivalry' : ''}`,
+      stakes ? h('div', { class: `small${f.round ? ' accent' : ''}`, text: stakes }) : null,
       clubLine(
         otherId,
         `${home ? 'v' : 'at'} ${other.city} ${other.name}`,
@@ -208,6 +221,27 @@ export class FranchiseHub implements Screen {
           text: 'Simulate the rest of the season',
           on: { click: () => { simulateSeason(fr); this.reload(); } },
         })));
+  }
+
+  /**
+   * WHAT THIS ONE IS WORTH, in the regular season. Only said when it is worth
+   * saying: a line on every fixture is a line nobody reads by week four.
+   */
+  private stakesLine(f: Fixture): string | null {
+    const fr = this.fr;
+    const team = teamOr(fr.teamId);
+    const played = (fr.standings[fr.teamId]?.wins ?? 0)
+      + (fr.standings[fr.teamId]?.losses ?? 0) + (fr.standings[fr.teamId]?.ties ?? 0);
+    if (f.rivalry) return 'The one the town circles.';
+    if (played < 10) return f.division ? 'A division game. These are the ones that decide it.' : null;
+    const seeds = seedsFor(fr.standings, fr.schedule, team.conference);
+    const mine = seeds.find((s) => s.teamId === fr.teamId);
+    if (mine && mine.seed === 1) return 'You are holding the bye. Keep it.';
+    if (mine) return 'You are in, on today\u2019s numbers. Nothing is signed.';
+    const table = conferenceTable(fr.standings, fr.schedule, team.conference);
+    const place = table.findIndex((s) => s.teamId === fr.teamId) + 1;
+    if (place > 0 && place <= 10) return 'On the outside, and close enough to matter.';
+    return null;
   }
 
   private play(): void {

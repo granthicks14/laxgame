@@ -170,6 +170,7 @@ export class PlayerScreen implements Screen {
       h('div', { class: 'scroll' }, h('div', { class: 'wrapper stack' },
         panel('What he does', attrGrid(p)),
         panel('The man', playerFacts(p)),
+        statLinePanel(fr, p),
         panel('Release him',
           h('div', {
             class: 'tiny',
@@ -197,6 +198,32 @@ export class PlayerScreen implements Screen {
       )),
     );
   }
+}
+
+/** His numbers, this year and altogether, when he has any. */
+function statLinePanel(fr: Franchise, p: Player): HTMLElement | null {
+  const season = fr.seasonStats[p.id];
+  const career = fr.careerStats[p.id];
+  if (!career) return null;
+  const line = (l: typeof career): string => {
+    const bits: string[] = [];
+    if (l.passAttempts) {
+      bits.push(`${l.completions}/${l.passAttempts} for ${l.passYards}, `
+        + `${l.passTD} TD, ${l.interceptions} int`);
+    }
+    if (l.carries) bits.push(`${l.carries} carries, ${l.rushYards} yds, ${l.rushTD} TD`);
+    if (l.catches) bits.push(`${l.catches} catches, ${l.recYards} yds, ${l.recTD} TD`);
+    if (l.tackles) bits.push(`${l.tackles} tackles`);
+    if (l.sacks) bits.push(`${l.sacks} sacks`);
+    if (l.picks) bits.push(`${l.picks} interceptions`);
+    if (l.fgAttempts) bits.push(`${l.fgMade}/${l.fgAttempts} field goals`);
+    if (l.punts) bits.push(`${l.punts} punts, ${Math.round(l.puntYards / l.punts)} average`);
+    return bits.length ? bits.join(' · ') : 'Nothing yet.';
+  };
+  return panel('His numbers',
+    season ? kv('This season', line(season)) : null,
+    kv('For this club', line(career)),
+    kv('Snaps', `${career.snaps} played`));
 }
 
 export const positionOrder: Position[] = POSITIONS;

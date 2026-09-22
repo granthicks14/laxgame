@@ -412,6 +412,79 @@ console.log('\nMONEY AND APPEAL\n');
     Object.values(FACILITIES).every((f) => f.cost.length === 4));
 }
 
+/* ============================================================== integrity */
+
+console.log('\nDOES A LONG SAVE STILL ADD UP?\n');
+
+{
+  /* TWENTY SEASONS IS WHERE A FRANCHISE BREAKS, and it breaks quietly: a
+   * player on two rosters at once, a contract that went negative, a schedule
+   * that lost a fixture, a stat line belonging to somebody who retired eleven
+   * years ago. None of it throws. All of it is wrong. */
+  const long = createFranchise({
+    mode: 'dynasty', teamId: 'min', coachName: 'Integrity', difficulty: 'allpro', seed: 2468,
+  });
+  for (let i = 0; i < 20; i++) {
+    simulateSeason(long);
+    startNextSeason(long);
+  }
+
+  const ids = long.roster.map((p) => p.id);
+  check('nobody is on the roster twice', new Set(ids).size === ids.length,
+    `${ids.length} players, ${new Set(ids).size} distinct`);
+  check('every contract is legal',
+    long.roster.every((p) => p.salary >= 0.8 && p.contractYears >= 1 && p.contractYears <= 5),
+    long.roster.filter((p) => p.contractYears < 1 || p.contractYears > 5).length + ' bad deals');
+  check('every player is a plausible age',
+    long.roster.every((p) => p.age >= 20 && p.age <= 42),
+    `${Math.min(...long.roster.map((p) => p.age))}-${Math.max(...long.roster.map((p) => p.age))}`);
+  check('every rating is in range',
+    long.roster.every((p) => p.overall >= 20 && p.overall <= 99
+      && p.potential >= p.overall && p.potential <= 99));
+  check('nobody is hurt in the summer', long.roster.every((p) => p.injury === null));
+  check('every squad number is one somebody could wear',
+    long.roster.every((p) => p.number >= 1 && p.number <= 99));
+  check('the schedule is a full one', long.schedule.length === 272, `${long.schedule.length}`);
+  check('the table has thirty-two clubs in it',
+    Object.keys(long.standings).length === 32, `${Object.keys(long.standings).length}`);
+  check('twenty seasons are on the record', long.history.length === 20,
+    `${long.history.length}`);
+  check('the wire did not grow without bound', long.news.length <= 60, `${long.news.length}`);
+  check('career statistics belong to real people',
+    Object.keys(long.careerStats).length > 0
+    && Object.values(long.careerStats).every((line) => line.snaps >= 0 && line.passYards >= -500));
+  check('the trade ledger only names clubs it has dealt with',
+    Object.keys(long.rosterEdits).every((id) => !!nflTeam(id)));
+  check('the drift stayed inside its bounds',
+    Object.values(long.prestigeDrift).every((d) => Math.abs(d) <= 5.01),
+    `${Math.max(...Object.values(long.prestigeDrift).map(Math.abs)).toFixed(1)}`);
+  check('the club still holds picks to make',
+    long.picks.filter((p) => p.ownerId === long.teamId).length >= 4,
+    `${long.picks.filter((p) => p.ownerId === long.teamId).length}`);
+  check('fan support never fell through the floor',
+    long.fanSupport >= 20 && long.fanSupport <= 100, `${long.fanSupport}`);
+  check('the books never went absurd',
+    long.funds > -60 && long.funds < 500, `${long.funds}M`);
+
+  /* AND IT SURVIVES A ROUND TRIP THROUGH A SAVE FILE, which is the only form
+   * anybody else will ever see it in. */
+  const json = JSON.stringify(long);
+  const back = JSON.parse(json) as Franchise;
+  check('a save round-trips', back.roster.length === long.roster.length
+    && back.history.length === long.history.length
+    && back.schedule.length === long.schedule.length,
+    `${(json.length / 1024).toFixed(0)}kB`);
+  check('and it is small enough to keep', json.length < 900_000,
+    `${(json.length / 1024).toFixed(0)}kB`);
+
+  /* A LOADED SAVE HAS TO BE PLAYABLE, not merely readable. */
+  simulateSeason(back);
+  startNextSeason(back);
+  check('a loaded franchise plays on', back.history.length === 21
+    && back.roster.length >= 30,
+    `${back.history.length} seasons, ${back.roster.length} players`);
+}
+
 console.log(`\n${passed}/${passed + failures.length} checks passed`);
 if (failures.length) {
   console.log(`\n${failures.length} FAILED:`);

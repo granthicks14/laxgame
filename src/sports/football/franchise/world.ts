@@ -26,12 +26,40 @@ import type { Franchise } from './types';
 export const driftOf = (fr: Franchise, teamId: string): number =>
   fr.prestigeDrift[teamId] ?? 0;
 
+/**
+ * A SMALL CACHE, because a screen asks for the same roster forty times.
+ *
+ * Building one is thirty-four generated players and the trade desk wants a
+ * value for every man on both sides of a deal every time anything is tapped.
+ * The key carries everything that can change the answer — the club, the year,
+ * its drift and the size of the edit list — so a trade that moves somebody
+ * invalidates it without anybody having to remember to.
+ */
+const CACHE = new Map<string, Player[]>();
+
 /** Any club's squad for a season, with everything you have done to it applied. */
 export function rosterOf(fr: Franchise, teamId: string, year: number): Player[] {
   if (teamId === fr.teamId) return gameRoster(fr);
-  const team = teamOr(teamId);
-  let squad = rosterFor(team, fr.seed, year, driftOf(fr, teamId));
+  const drift = driftOf(fr, teamId);
   const edit = fr.rosterEdits[teamId];
+  const key = `${fr.seed}:${teamId}:${year}:${drift}:${edit?.out.length ?? 0}:${edit?.in.length ?? 0}`;
+  const hit = CACHE.get(key);
+  if (hit) return hit;
+  const built = buildRosterFor(fr, teamId, year, drift, edit);
+  /* A FRANCHISE ONLY EVER LOOKS AT A FEW SEASONS AT ONCE, so the cache is
+   * cleared wholesale rather than aged. Thirty-two clubs times a season is the
+   * working set; anything past that is a screen nobody has open. */
+  if (CACHE.size > 160) CACHE.clear();
+  CACHE.set(key, built);
+  return built;
+}
+
+function buildRosterFor(
+  fr: Franchise, teamId: string, year: number, drift: number,
+  edit: { out: string[]; in: Player[] } | undefined,
+): Player[] {
+  const team = teamOr(teamId);
+  let squad = rosterFor(team, fr.seed, year, drift);
   if (edit) {
     if (edit.out.length) {
       const gone = new Set(edit.out);

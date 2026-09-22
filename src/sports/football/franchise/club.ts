@@ -260,13 +260,27 @@ export function expensesFor(fr: Franchise): number {
   return Math.round((staff + facilityUpkeep(fr) + 8) * 10) / 10;
 }
 
-/** Close the books for the year. Called once, in the offseason. */
+/** What the owner leaves in the club's account before he takes the rest. */
+export const FUNDS_COMFORT = 150;
+
+/**
+ * Close the books for the year. Called once, in the offseason.
+ *
+ * THE OWNER TAKES HIS CUT of anything sitting idle, and that is not flavour: a
+ * club with every building finished has nothing left to spend on, and without
+ * this the balance simply climbs until it is a four-hundred-million-pound
+ * number on a screen that means nothing at all. Skimming the surplus keeps the
+ * money a decision — spend it or lose most of it — right through a twenty-
+ * season franchise.
+ */
 export function settleFinances(fr: Franchise, playoffRounds: number, champion: boolean): void {
   const revenue = revenueFor(fr, playoffRounds, champion);
   const expenses = expensesFor(fr);
   fr.lastRevenue = revenue;
   fr.lastExpenses = expenses;
-  fr.funds = Math.round(clamp(fr.funds + revenue - expenses, -40, 400) * 10) / 10;
+  let funds = fr.funds + revenue - expenses;
+  if (funds > FUNDS_COMFORT) funds = FUNDS_COMFORT + (funds - FUNDS_COMFORT) * 0.4;
+  fr.funds = Math.round(clamp(funds, -40, 260) * 10) / 10;
 }
 
 /* ------------------------------------------------------------- the home field */

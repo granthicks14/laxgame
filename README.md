@@ -6,7 +6,7 @@ A hub of original retro sports games. Opening it puts you in the hub, not in a
 sport: **Play Now**, choose a sport, and that sport loads — its own branding, its
 own engine, its own rules, its own controls.
 
-Two are playable.
+Three are playable.
 
 - **Lacrosse — _Lone Star Lax_.** Start in the **THSLL North District**, play the
   games yourself, and — if you want the long version — coach your way from the
@@ -15,6 +15,13 @@ Two are playable.
 - **Basketball — _Hardwood_.** Half-court five-on-five with a real ball in three
   dimensions, a rim you can rattle, and a release window you either hit or do
   not. Exhibition games and a twenty-two game season with a bracket at the end.
+- **Football — _Gridiron_.** You play offence and coach defence: call it, snap
+  it, throw it, run it, and when the other lot have the ball your eleven play it
+  out on their own ratings and the game plan you set. Underneath is a
+  thirty-two club league — the real cities, names, divisions and conferences,
+  with **every single player invented** — a seventeen game season, the real
+  playoff bracket, a salary cap, a scouted draft, free agency, a trade desk, a
+  coaching staff and five buildings worth investing in.
 
 Runs entirely in the browser. No accounts, no servers, no paid APIs, no asset
 downloads — everything from the pixel field to the crowd noise is generated in
@@ -92,9 +99,11 @@ over. Writing one camera for both would have made both worse.
 The same rule decides everything else. Lacrosse has Dynasty, Challenge and Super
 Challenge; basketball does not, because empty copies of them would be worse than
 leaving them out. Basketball has a shot-clock, a release window and a bonus;
-lacrosse has none of those.
+lacrosse has none of those. Football has a salary cap, a draft and a kick meter,
+and it is the only one of the three where you coach half the game rather than
+play it — because that is what makes a football game short enough to finish.
 
-Sports still being built (football, soccer, hockey, baseball, tennis, volleyball)
+Sports still being built (soccer, hockey, baseball, tennis, volleyball)
 appear on the selection screen as a roadmap strip that says what each one needs.
 They are not buttons, because a button that does nothing is a lie.
 
@@ -128,6 +137,50 @@ score, clubs, season, reload, back to the hub, then the same on a phone with
 touch controls.
 
 ---
+
+### Football — Gridiron
+
+**The clubs are the real ones. Every player is invented.** The cities, names,
+divisions and conference structure are the ones people already know, because a
+franchise game whose league you have to learn before you can care about it has
+thrown away the one thing it got for free. Not one name, likeness or career in
+the game belongs to a real person: every roster, draft class and free agent is
+generated from the club's id, the save's seed and the year. Nothing in it is
+anybody's artwork either — a club is drawn from two colours and its own three
+letters.
+
+**You play offence and coach defence.** Between downs the game stops and asks
+what you are running; then you take the snap, and the throw is a tap at the
+receiver you want. When the other lot have the ball your eleven play it out on
+their own ratings, your coordinator's coaching and the plan on the chip —
+attack, balanced or bend — at three and a half times speed, with a button to
+skip straight to the end of the series. Nobody ever hands you a safety to steer.
+The one exception is the one it would be absurd to take away: a ball your
+defence has just taken off them is yours to run.
+
+A field goal is a kick, not a dice roll: one pass of a marker, one press, and a
+band to hit whose width is your kicker's accuracy and whose centre the wind has
+moved. From forty-five yards a good leg makes 96% struck and 34% shanked; from
+fifty-two a good leg makes 85% and a poor one 34%. Timing is about a third of
+it. The leg on the roster is the rest.
+
+**Underneath it is a franchise.** Seventeen games over eighteen weeks with the
+real rotation — six in your division, four against one division in each
+conference, and three against the clubs that finished where you finished.
+Fourteen clubs in January, reseeded between rounds, and one game in February
+that gets a screen of its own. A two hundred million salary cap, four rounds of
+a draft you scout before you pick (the report is wrong by an amount that shrinks
+as you spend on it, and never reaches certainty), three waves of free agency
+where a club nobody wants to join pays over the odds, a trade desk where the
+other side is not an idiot, a head coach and two coordinators, five buildings,
+and a town whose support you earn.
+
+Dynasty is one club for as long as you like. Challenge is the hot seat: the
+owner has a number in his head before the season starts, missing it for long
+enough ends the job, and beating it gets you a phone call from somewhere better.
+
+Whatever you skip in an offseason, the club does for you — a real organisation
+re-signs its own and bids on the market whether or not anybody is watching.
 
 ## What's in it
 
@@ -798,6 +851,36 @@ back out to the hub — then the whole game again on a phone, where it checks th
 all five touch buttons exist, are a thumb's size, are on the screen, do not sit
 on each other, and leave nothing held down.
 
+`npm run gridiron` plays whole football games headlessly at every difficulty and
+prints the numbers the sport is actually described by — yards per carry,
+completion percentage, sack rate, points, drives, where the yards come from —
+next to what those numbers are in the real thing. It also measures the kick: a
+good leg from forty-five makes 96% struck and 34% shanked, a good leg from
+fifty-two makes 85% where a poor one makes 34%, and a twenty-three yarder is
+routine. Those four numbers are the whole design of the kick meter, and the
+harness fails if timing stops mattering or starts mattering more than the leg.
+
+`npm run gridiron-nfl` builds the league and then lives in it: twelve seasons of
+fixtures checked for legality (seventeen games each, six in the division,
+nobody twice in a week, everybody a bye), twenty seasons of a franchise with the
+cap, the roster size, the average age and the scoring watched the whole way, the
+seeding and the bracket, a draft class, the trade desk refusing a robbery, three
+seasons replayed from the same seed to prove determinism, a Challenge career
+with its sackings, and a twenty-season save taken apart afterwards to check that
+nobody is on the roster twice, every contract is legal, the drift stayed in
+bounds and the whole thing survives a round trip through JSON and plays on.
+
+`npm run test:gridiron` drives a browser through football end to end: the menu,
+the clubs, a game coached by keys through to the final whistle and its box
+score, the same game by thumb on a phone, then a whole franchise — the league
+and its playoff picture, the roster and a player's page, the staff room, the
+trade desk, a season simulated, an offseason walked step by step through
+contracts, three waves of free agency, a scouted draft and the buildings, into
+the next season and a game actually played in it. Then every one of those
+management screens again at 412 pixels wide, checking that nothing runs off the
+side and every control is a thumb's size, because mobile-first is a claim that
+has to be checked.
+
 `npm run shots` photographs the screens that matter at phone and desktop width
 into a folder, on a real save with real content in it, so a UI pass can be done
 by looking at the screens rather than at the source.
@@ -869,6 +952,10 @@ src/
     registry.ts   every sport's manifest, card art, and lazy loader
     lacrosse/     its controls, sounds, settings and entry point
     basketball/   court, ball, rim, shot model, AI, camera, renderer, season
+    football/     field, engine, AI, playbook, camera, renderer, fast simulator
+      nfl.ts      thirty-two clubs, and the band each one's players come from
+      franchise/  schedule, playoffs, staff, cap, draft, free agency, trades,
+                  development, injuries, facilities, money, news, save
   data/      lacrosse: teams, rosters, players, ratings, difficulty, tactics
   match/     lacrosse: the simulation — Match, ai, faceoff, commentary, replay
   world/     lacrosse: conference tournaments, national brackets, auto-bids
@@ -880,7 +967,8 @@ scripts/     browser end-to-end and feature-audit suites
 ```
 
 Each sport is a separate chunk: the hub is about 12 kB gzipped, basketball about
-35 kB, lacrosse about 148 kB, and none of them is fetched until it is chosen.
+35 kB, football about 74 kB, lacrosse about 145 kB, and none of them is fetched
+until it is chosen.
 
 Gameplay renders to a low-resolution pixel buffer that is upscaled with
 nearest-neighbour filtering; menus and HUD are DOM so text stays crisp and
@@ -933,5 +1021,20 @@ is not this game's league.
 See [docs/EDITING-DATA.md](docs/EDITING-DATA.md) to change teams, ratings,
 rosters or difficulty.
 
+**Football.** The thirty-two clubs use real professional team cities, names,
+divisions and conference structure, because a franchise game whose league you
+have to learn before you can care about it has thrown away the one thing it got
+for free. **Every single player in them is invented.** Not one name, likeness,
+photograph, statistic or career in the football section belongs to a real
+person: every roster, draft class and free agent in the game is generated at
+runtime from the club's id, the save's seed and the year, and the draft
+prospects' colleges are made up too. No logo, wordmark or other artwork
+belonging to anybody is used, reproduced or approximated — a club is drawn from
+two colours and its own three letters, by this game's own renderer — and the
+venues are original names rather than sponsors'. See
+[`src/sports/football/nfl.ts`](src/sports/football/nfl.ts), which states all of
+this at the top of the file.
+
 This game is not affiliated with, endorsed by, or sponsored by the Texas High
-School Lacrosse League or any school.
+School Lacrosse League, the National Football League, any of its clubs, or any
+school.
