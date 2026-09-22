@@ -2955,3 +2955,172 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
   background: var(--panel);
   padding-bottom: 6px;
 }
+
+/* --------------------------------------------------------------------------
+ * GRIDIRON — the defensive strip
+ * --------------------------------------------------------------------------
+ * Up only while the other lot have the ball. It holds the two things a coach
+ * can do about a series he is not playing: say how he wants it played, and
+ * decide whether to sit through it.
+ * ----------------------------------------------------------------------- */
+
+.fb-defence {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgba(10, 13, 20, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  z-index: 6;
+  max-width: calc(100vw - 24px);
+}
+
+.fb-defence.is-off { display: none; }
+
+.fb-defence__tag {
+  font: 700 10px/1 var(--font-ui, system-ui, sans-serif);
+  letter-spacing: 0.14em;
+  color: var(--dim, #9aa4b5);
+  padding-left: 6px;
+  white-space: nowrap;
+}
+
+.fb-plan__chip {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-radius: 999px;
+  padding: 7px 13px;
+  font: 700 12px/1 var(--font-ui, system-ui, sans-serif);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  min-height: 34px;
+  white-space: nowrap;
+}
+
+.fb-plan__chip:active { transform: translateY(1px); }
+.fb-plan__chip--ghost { background: transparent; color: var(--dim, #9aa4b5); }
+
+.fb-plan__card {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 58px);
+  transform: translateX(-50%);
+  width: min(360px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(10, 13, 20, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+  z-index: 7;
+}
+
+.fb-plan__opt {
+  appearance: none;
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  border-radius: 10px;
+  padding: 9px 11px;
+  cursor: pointer;
+}
+
+.fb-plan__opt.is-on {
+  border-color: var(--accent, #f2b73d);
+  background: rgba(242, 183, 61, 0.14);
+}
+
+.fb-plan__name {
+  font: 700 13px/1.2 var(--font-ui, system-ui, sans-serif);
+  margin-bottom: 2px;
+}
+
+.fb-plan__blurb {
+  font: 400 11px/1.35 var(--font-ui, system-ui, sans-serif);
+  color: var(--dim, #9aa4b5);
+}
+
+@media (max-width: 420px) {
+  .fb-defence__tag { display: none; }
+}
+
+/* --------------------------------------------------------------------------
+ * GRIDIRON — the kick
+ * --------------------------------------------------------------------------
+ * The whole strip is the button, because on a phone the thing you are looking
+ * at should be the thing you press. The band is the kicker's accuracy; its
+ * centre is where the wind has put it.
+ * ----------------------------------------------------------------------- */
+
+.fb-kick {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 74px);
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 28px));
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 13, 20, 0.92);
+  border-radius: 14px;
+  padding: 10px 12px 8px;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  z-index: 8;
+  touch-action: none;
+}
+
+.fb-kick.is-off { display: none; }
+
+.fb-kick__label {
+  font: 700 12px/1.2 var(--font-ui, system-ui, sans-serif);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+}
+
+.fb-kick__track {
+  position: relative;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.fb-kick__band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent, #f2b73d);
+  opacity: 0.85;
+}
+
+.fb-kick__mark {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 4px;
+  margin-left: -2px;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+}
+
+.fb-kick.is-struck .fb-kick__mark { background: #7ef2a1; }
+.fb-kick.is-struck .fb-kick__band { opacity: 0.4; }
+
+.fb-kick__hint {
+  margin-top: 6px;
+  color: var(--dim, #9aa4b5);
+  letter-spacing: 0.08em;
+}

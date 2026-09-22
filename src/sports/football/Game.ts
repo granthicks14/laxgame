@@ -96,6 +96,27 @@ export class FootballGame {
   /** How he wants his defence played while he is not playing it. */
   gamePlan: GamePlan;
 
+  /**
+   * THE KICK, WHEN IT IS HIS TO TAKE.
+   *
+   * A football game that resolves its field goals with a dice roll has taken
+   * the most tense forty-five seconds in the sport and made it a loading
+   * screen. So a kick the person is taking is a kick he takes: one pass of a
+   * marker, one press, and a band to hit whose WIDTH is his kicker's accuracy
+   * and whose CENTRE is moved by the wind.
+   *
+   * His timing is worth about a third either way. The rest is the leg on the
+   * roster — which is the same bargain the throw makes, and the reason a good
+   * kicker is worth paying for.
+   */
+  kickMeter: KickMeter | null = null;
+
+  /**
+   * THE WEATHER, fixed for the game and the same for both sides.
+   * Negative pushes a kick left, positive right, as a fraction of the meter.
+   */
+  readonly wind: number;
+
   /* --- what is being run ------------------------------------------------- */
   offensivePlay: OffensivePlay;
   defensivePlay: DefensivePlay;
@@ -161,6 +182,7 @@ export class FootballGame {
     this.humanSide = cfg.humanSide;
     this.offenseOnly = cfg.offenseOnly === true && cfg.humanSide !== null;
     this.gamePlan = cfg.gamePlan ?? 'balanced';
+    this.wind = Math.round(new Rng(`wind:${cfg.seed}`).range(-1, 1) * 100) / 100;
     this.rng = new Rng(`football:${cfg.seed}`);
     this.clock = cfg.quarterSeconds;
     this.rosters = { home: cfg.home.roster, away: cfg.away.roster };
@@ -189,7 +211,10 @@ export class FootballGame {
       case 'presnap': this.updatePresnap(dt, input); break;
       case 'live': this.updateLive(dt, input); break;
       case 'dead': this.updateDead(dt); break;
-      case 'special': this.updateDead(dt); break;
+      case 'special':
+        if (this.kickMeter) this.updateKickMeter(dt, input);
+        else this.updateDead(dt);
+        break;
       case 'quarterBreak': this.updateBreak(dt); break;
       default: break;
     }
@@ -1678,6 +1703,11 @@ export class FootballGame {
     if (this.kickKind === 'fieldGoal' || this.kickKind === 'extraPoint') {
       const distance = this.kickKind === 'extraPoint'
         ? 33 : fieldGoalDistance(this.lineOfScrimmage, side);
+      /* HIS KICK IS HIS. Anybody else's is resolved where it always was. */
+      if (this.humanSide === side) {
+        this.openKickMeter(distance, leg, acc);
+        return;
+      }
       const made = this.rng.next() < this.fieldGoalChance(distance, leg, acc);
       if (specialist && this.kickKind === 'fieldGoal') {
         const s = this.statForId(specialist.id);
@@ -1707,6 +1737,88 @@ export class FootballGame {
     const land = this.lineOfScrimmage + dir * (FOOTBALL.kickoffDistance + this.rng.range(-4, 6));
     this.events.emit('kickoff', { side });
     this.finishKickAt(land, 'kickoff', 'Kickoff');
+  }
+
+  /**
+   * PUT THE MARKER UP.
+   *
+   * The band he has to hit is his kicker's accuracy, narrowed by distance; the
+   * middle of it is moved off centre by the wind, and the marker runs faster
+   * the longer the kick is. All three are shown on screen, because a timing
+   * mechanic whose target is invisible is a coin toss with extra steps.
+   */
+  private openKickMeter(distance: number, leg: number, accuracy: number): void {
+    this.clockRunning = false;
+    const width = clamp(0.055 + accuracy / 1100 - Math.max(0, distance - 22) / 900, 0.022, 0.13);
+    this.kickMeter = {
+      t: 0,
+      dir: 1,
+      speed: clamp(0.62 + Math.max(0, distance - 20) / 78, 0.6, 1.35),
+      /* THE WIND MOVES THE TARGET, not the ball after the fact: a kicker aims
+       * off in a crosswind, and so does the person taking it. */
+      sweet: clamp(0.5 + this.wind * 0.22, 0.14, 0.86),
+      width,
+      distance,
+      leg,
+      accuracy,
+      taken: false,
+      quality: 0,
+      timeout: 7,
+    };
+    this.phase = 'special';
+    this.setBanner(`${Math.round(distance)}-YARD ATTEMPT`, 1.4);
+  }
+
+  private updateKickMeter(dt: number, input: FootballInput): void {
+    const m = this.kickMeter;
+    if (!m) return;
+    if (m.taken) {
+      m.timeout -= dt;
+      if (m.timeout <= 0) this.resolveHumanKick();
+      return;
+    }
+    m.t += m.dir * m.speed * dt;
+    if (m.t >= 1) { m.t = 1; m.dir = -1; }
+    if (m.t <= 0) { m.t = 0; m.dir = 1; }
+    m.timeout -= dt;
+
+    /* ANY OF THE THREE BUTTONS A PERSON MIGHT REACH FOR. Snapping, throwing and
+     * the touch kick button all mean the same thing here, because a mechanic
+     * that only answers one key is a mechanic half the players cannot find. */
+    const pressed = input.snapPressed || input.throwPressed || input.tacklePressed;
+    if (pressed || m.timeout <= 0) {
+      const offBy = Math.abs(m.t - m.sweet);
+      m.quality = clamp(1 - offBy / m.width, -1.6, 1);
+      if (!pressed) m.quality = -1.6;
+      m.taken = true;
+      m.timeout = 0.75;
+    }
+  }
+
+  private resolveHumanKick(): void {
+    const m = this.kickMeter;
+    if (!m) return;
+    this.kickMeter = null;
+    const side = this.possession;
+    const specialist = starterAt(this.rosters[side], 'K');
+    /* HIS TIMING IS WORTH ABOUT A THIRD EITHER WAY and the leg on the roster is
+     * the rest — the same bargain the throw makes. A perfect strike does not
+     * make a sixty-yarder from a poor kicker, and a poor strike from a great
+     * one is still often good. */
+    const base = this.fieldGoalChance(m.distance, m.leg, m.accuracy);
+    const chance = clamp(base * (0.78 + 0.27 * m.quality), 0.01, 0.995);
+    const made = this.rng.next() < chance;
+    if (specialist && this.kickKind === 'fieldGoal') {
+      const s = this.statForId(specialist.id);
+      s.fgAttempts++;
+      if (made) s.fgMade++;
+    }
+    this.resolveKickResult(made, m.distance);
+  }
+
+  /** What the screen draws, in one object, so it never reaches into the engine. */
+  get kickReadout(): KickMeter | null {
+    return this.kickMeter;
   }
 
   /**
@@ -2475,6 +2587,26 @@ export class FootballGame {
   get rngForAi(): Rng {
     return this.rng;
   }
+}
+
+/** The kick a person is taking, as the screen needs to draw it. */
+export interface KickMeter {
+  /** Where the marker is, 0 to 1. */
+  t: number;
+  dir: number;
+  speed: number;
+  /** The middle of the band, moved off centre by the wind. */
+  sweet: number;
+  /** Half the width of the band, which is the kicker's accuracy. */
+  width: number;
+  distance: number;
+  leg: number;
+  accuracy: number;
+  /** True once he has hit it and the ball is on its way. */
+  taken: boolean;
+  /** -1.6 (awful) to 1 (perfect), set when he takes it. */
+  quality: number;
+  timeout: number;
 }
 
 export { SLOT_COUNT };

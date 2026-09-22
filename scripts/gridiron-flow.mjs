@@ -68,6 +68,16 @@ async function coach(page, seconds, tap = false) {
   const until = Date.now() + seconds * 1000;
   let calls = 0;
   while (Date.now() < until) {
+    /* SKIP STRAIGHT THROUGH THEIR POSSESSION. He plays offence; a suite that
+     * sits through the defensive series is measuring the wall clock rather than
+     * the game, and it exercises the skip button while it is there. */
+    const skip = page.locator('.fb-defence:not(.is-off) .fb-plan__chip--ghost');
+    if (await skip.count()) {
+      if (tap) await skip.first().tap();
+      else await skip.first().click();
+      await page.waitForTimeout(150);
+      continue;
+    }
     const card = page.locator('.callcard__play');
     if (await card.count()) {
       const n = await card.count();
@@ -125,10 +135,11 @@ async function main() {
 
     await menu(page, 'Play Now');
     await page.waitForTimeout(350);
-    check('the setup screen offers a level', await page.locator('.seg__opt').count() > 6,
+    check('the setup screen offers both conferences and every club',
+      await page.locator('.seg__opt').count() > 6,
       `${await page.locator('.seg__opt').count()} options`);
 
-    await page.locator('button', { hasText: 'Coach the home side' }).first().click();
+    await page.locator('button', { hasText: 'Kick off' }).first().click();
     await page.waitForTimeout(700);
 
     const start = await state(page);
@@ -143,6 +154,15 @@ async function main() {
 
     const mid = await state(page);
     check('downs advance', mid && mid.plays > 0, `${mid?.plays} plays run`);
+    /* THE POINT OF THE WHOLE REBUILD: he is never asked to coach a defence.
+     * The card only ever comes up on his own ball, and the defensive strip is
+     * what is on screen when it is not. */
+    const askedOnDefence = await page.evaluate(() => {
+      const g = window.gridiron?.game;
+      return !!g && g.offenseOnly && g.phase === 'playcall' && g.possession !== g.humanSide
+        && document.querySelector('.callcard') !== null;
+    });
+    check('he is never asked to call a defence', !askedOnDefence);
     check('the ball moves', mid && mid.los !== start.los,
       `${start?.los?.toFixed(1)} -> ${mid?.los?.toFixed(1)}`);
     check('the clock runs', mid && mid.clock < start.clock,
@@ -153,10 +173,10 @@ async function main() {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(250);
     check('pause opens', await page.locator('.overlay__card').count() === 1);
-    await page.locator('.seg__btn', { hasText: 'Box score' }).first().click();
+    await page.locator('.seg__opt', { hasText: 'Box score' }).first().click();
     await page.waitForTimeout(250);
     check('the box score renders', await page.locator('.box').count() > 0);
-    await page.locator('.seg__btn', { hasText: 'Paused' }).first().click();
+    await page.locator('.seg__opt', { hasText: 'Paused' }).first().click();
     await page.locator('.btn', { hasText: 'Resume' }).first().click();
     await page.waitForTimeout(200);
 
@@ -198,7 +218,7 @@ async function main() {
     await enterSport(page, 'football', { title: 'Gridiron', tap: true });
     await page.locator('.menu-btn__label').filter({ hasText: 'Play Now' }).first().tap();
     await page.waitForTimeout(400);
-    await page.locator('button', { hasText: 'Coach the home side' }).first().tap();
+    await page.locator('button', { hasText: 'Kick off' }).first().tap();
     await page.waitForTimeout(700);
 
     /* THE GAME OPENS ON A KICKOFF, so the first play call is a couple of
@@ -238,7 +258,7 @@ async function main() {
     await ctx.close();
   }
 
-  /* ------------------------------------------------------- a whole career */
+  /* ---------------------------------------------------- a whole franchise */
   {
     const { ctx, page } = await newPage(browser, { viewport: { width: 1280, height: 900 } });
     await page.goto(BASE, { waitUntil: 'networkidle' });
@@ -246,87 +266,205 @@ async function main() {
 
     await menu(page, 'Dynasty');
     await page.waitForTimeout(450);
-    check('the dynasty start screen offers programmes',
-      await page.locator('.pick').count() > 6,
-      `${await page.locator('.pick').count()} clubs`);
-    await page.locator('.pick').nth(5).click();
+    const clubLines = await page.locator('.club-line').count();
+    check('the dynasty start screen lists a conference of clubs', clubLines >= 16,
+      `${clubLines} clubs`);
+    await page.locator('.club-line').nth(5).click();
+    await page.waitForTimeout(200);
     await page.locator('button', { hasText: 'Take the job' }).first().click();
     await page.locator('.career-head').first().waitFor({ timeout: 8000 });
-    check('the career hub opens', true);
+    check('the franchise hub opens', true);
 
-    // Simulate a season and get into the offseason.
-    await page.locator('button', { hasText: 'Simulate the rest of the season' }).first().click();
-    await page.waitForTimeout(1600);
-    const hub = () => page.evaluate(() => {
-      const raw = localStorage.getItem('lsl.gridiron.career.dynasty.v1');
+    const save = () => page.evaluate(() => {
+      const raw = localStorage.getItem('lsl.gridiron.nfl.dynasty.v1');
       if (!raw) return null;
-      const c = JSON.parse(raw);
+      const f = JSON.parse(raw);
       return {
-        year: c.year, stage: c.stage, roster: c.roster.length,
-        played: c.schedule.filter((f) => f.played).length,
-        total: c.schedule.length,
-        history: c.history.length, points: c.coach.points,
-        recruits: c.recruits.length,
+        year: f.year,
+        stage: f.stage,
+        step: f.offseasonStep,
+        roster: f.roster.length,
+        played: f.schedule.filter((x) => x.played).length,
+        total: f.schedule.length,
+        history: f.history.length,
+        funds: f.funds,
+        picks: f.picks.length,
+        staff: [f.staff.HC.overall, f.staff.OC.overall, f.staff.DC.overall],
+        draftClass: f.draftClass.length,
+        freeAgents: f.freeAgents.length,
+        cap: f.roster.reduce((n, p) => n + p.salary, 0),
       };
     });
-    const afterSeason = await hub();
-    check('a season saves', !!afterSeason, JSON.stringify(afterSeason));
-    check('every fixture was played',
-      afterSeason && afterSeason.played === afterSeason.total,
-      `${afterSeason?.played}/${afterSeason?.total}`);
-    check('the season is in the history', (afterSeason?.history ?? 0) === 1);
-    check('the coach was paid', (afterSeason?.points ?? 0) > 0, `${afterSeason?.points} points`);
 
-    // The league screen.
-    await page.locator('button', { hasText: 'League and standings' }).first().click();
+    const opening = await save();
+    check('a franchise saves', !!opening, JSON.stringify(opening));
+    check('the schedule is seventeen games a club',
+      opening && opening.total === 272, `${opening?.total} fixtures`);
+    check('the squad is legal and under the cap',
+      opening && opening.roster >= 30 && opening.cap <= 200.01,
+      `${opening?.roster} players, ${opening?.cap.toFixed(1)}M`);
+    check('there are four picks in hand this year',
+      (opening?.picks ?? 0) >= 4, `${opening?.picks} picks`);
+
+    /* ------------------------------------------------------------ the league */
+    await page.locator('button', { hasText: 'League, standings and bracket' }).first().click();
     await page.waitForTimeout(400);
-    check('the table renders', await page.locator('.box tbody tr').count() > 6,
-      `${await page.locator('.box tbody tr').count()} rows`);
-    await page.locator('.seg__opt', { hasText: 'Schedule' }).first().click();
+    check('the division tables render', await page.locator('.standings tbody tr').count() >= 16,
+      `${await page.locator('.standings tbody tr').count()} rows`);
+    await page.locator('.seg__opt', { hasText: 'Picture' }).first().click();
     await page.waitForTimeout(250);
-    check('the fixture list renders', await page.locator('.fixture').count() > 8);
+    check('the playoff picture renders', await page.locator('.fixture').count() >= 7,
+      `${await page.locator('.fixture').count()} lines`);
+    await page.locator('.seg__opt', { hasText: 'Your games' }).first().click();
+    await page.waitForTimeout(250);
+    check('your seventeen are listed', await page.locator('.fixture').count() >= 17,
+      `${await page.locator('.fixture').count()} fixtures`);
     await page.getByRole('button', { name: 'Back' }).first().click();
     await page.waitForTimeout(300);
 
-    // The roster and the coaching tree.
-    await page.locator('button', { hasText: 'Roster and coaching' }).first().click();
+    /* ------------------------------------------------------------ the roster */
+    await page.locator('button', { hasText: 'Roster and depth' }).first().click();
     await page.waitForTimeout(400);
-    check('the depth chart renders', await page.locator('.roster-row').count() > 18,
+    check('the depth chart renders', await page.locator('.roster-row').count() > 24,
       `${await page.locator('.roster-row').count()} players`);
-    await page.locator('.seg__opt', { hasText: 'Coaching' }).first().click();
+    await page.locator('.seg__opt', { hasText: 'Needs' }).first().click();
     await page.waitForTimeout(250);
-    const before = (await hub())?.points ?? 0;
-    const buyable = page.locator('.upgrade:not(.is-off)');
-    if (await buyable.count()) await buyable.first().click();
+    check('needs are named', await page.locator('.kv').count() >= 11,
+      `${await page.locator('.kv').count()} positions`);
+    await page.locator('.seg__opt', { hasText: 'Depth' }).first().click();
+    await page.waitForTimeout(200);
+    await page.locator('.roster-row').first().click();
     await page.waitForTimeout(300);
-    const after = (await hub())?.points ?? 0;
-    check('an upgrade can be bought', after < before, `${before} -> ${after}`);
+    check('a player page opens', await page.locator('.meter').count() >= 4,
+      `${await page.locator('.meter').count()} attributes`);
+    await page.getByRole('button', { name: 'Back' }).first().click();
+    await page.waitForTimeout(200);
     await page.getByRole('button', { name: 'Back' }).first().click();
     await page.waitForTimeout(300);
 
-    // The offseason and recruiting.
+    /* ------------------------------------------------------------- the staff */
+    await page.locator('button', { hasText: 'Coaching staff' }).first().click();
+    await page.waitForTimeout(350);
+    check('all three coaches are rated', await page.locator('.meter').count() >= 9,
+      `${await page.locator('.meter').count()} ratings`);
+    await page.getByRole('button', { name: 'Back' }).first().click();
+    await page.waitForTimeout(250);
+
+    /* -------------------------------------------------------- the trade desk */
+    await page.locator('button', { hasText: 'Trade desk' }).first().click();
+    await page.waitForTimeout(400);
+    check('every other club can be called', await page.locator('.club-line').count() >= 31,
+      `${await page.locator('.club-line').count()} clubs`);
+    await page.locator('.club-line').first().click();
+    await page.waitForTimeout(450);
+    check('the desk opens with both sides', await page.locator('.roster-row').count() > 10,
+      `${await page.locator('.roster-row').count()} rows`);
+    await page.getByRole('button', { name: 'Back' }).first().click();
+    await page.waitForTimeout(200);
+    await page.getByRole('button', { name: 'Back' }).first().click();
+    await page.waitForTimeout(300);
+
+    /* ------------------------------------------------------- play the season */
+    await page.locator('button', { hasText: 'Simulate the rest of the season' }).first().click();
+    await page.waitForTimeout(2600);
+    const afterSeason = await save();
+    check('the season plays out', afterSeason && afterSeason.played === afterSeason.total,
+      `${afterSeason?.played}/${afterSeason?.total}`);
+    check('the season is in the history', (afterSeason?.history ?? 0) === 1,
+      `${afterSeason?.history} seasons`);
+    check('and the offseason is open', afterSeason?.stage === 'offseason', afterSeason?.stage);
+
+    /* ---------------------------------------------------------- the offseason */
     await page.locator('button', { hasText: 'Work the offseason' }).first().click();
     await page.waitForTimeout(450);
-    check('the offseason opens', await page.locator('.panel').count() > 1);
-    await page.locator('.seg__opt', { hasText: 'Recruiting' }).first().click();
-    await page.waitForTimeout(350);
-    const offers = page.locator('button', { hasText: /^Offer/ });
-    check('there is a recruiting board', await offers.count() > 4,
-      `${await offers.count()} recruits`);
-    for (let i = 0; i < Math.min(5, await offers.count()); i++) {
-      const b = offers.nth(i);
-      if (await b.isEnabled()) await b.click();
-      await page.waitForTimeout(90);
-    }
-    await page.locator('.seg__opt', { hasText: 'What happened' }).first().click();
-    await page.waitForTimeout(250);
-    await page.locator('button', { hasText: /^Sign the class/ }).first().click();
-    await page.waitForTimeout(900);
+    check('the offseason opens on the review', await page.locator('.panel').count() > 2);
 
-    const next = await hub();
+    await page.locator('button', { hasText: 'On to the staff' }).first().click();
+    await page.waitForTimeout(300);
+    await page.locator('button', { hasText: 'On to your contracts' }).first().click();
+    await page.waitForTimeout(300);
+    check('contracts are shown', await page.locator('.tile').count() >= 4);
+    await page.locator('button', { hasText: 'On to free agency' }).first().click();
+    await page.waitForTimeout(500);
+    const market = await save();
+    check('a market is generated', (market?.freeAgents ?? 0) > 10,
+      `${market?.freeAgents} free agents`);
+    const offer = page.locator('button', { hasText: /^Offer / });
+    if (await offer.count()) {
+      await offer.first().click();
+      await page.waitForTimeout(300);
+    }
+    check('an offer can be made', await offer.count() > 0, `${await offer.count()} bids available`);
+    const close = page.locator('button', { hasText: /Close (this wave|the market)/ });
+    for (let i = 0; i < 3 && await close.count(); i++) {
+      await close.first().click();
+      await page.waitForTimeout(450);
+    }
+
+    await page.locator('button', { hasText: 'On to the draft' }).first().click();
+    await page.waitForTimeout(500);
+    const withClass = await save();
+    check('a draft class is generated', (withClass?.draftClass ?? 0) === 140,
+      `${withClass?.draftClass} prospects`);
+    await page.locator('button', { hasText: /the draft room/ }).first().click();
+    await page.waitForTimeout(700);
+    check('the draft room opens', await page.locator('.job').count() > 4,
+      `${await page.locator('.job').count()} prospects listed`);
+    const scoutBtn = page.locator('button', { hasText: /^Scout \(/ });
+    if (await scoutBtn.count()) {
+      await scoutBtn.first().click();
+      await page.waitForTimeout(350);
+    }
+    const draftBtn = page.locator('button', { hasText: /^Draft at #/ });
+    check('you go on the clock', await draftBtn.count() > 0,
+      `${await draftBtn.count()} draftable`);
+    if (await draftBtn.count()) {
+      await draftBtn.first().click();
+      await page.waitForTimeout(600);
+    }
+    await page.getByRole('button', { name: 'Back' }).first().click();
+    await page.waitForTimeout(350);
+
+    await page.locator('button', { hasText: 'On to the buildings' }).first().click();
+    await page.waitForTimeout(300);
+    await page.locator('button', { hasText: 'Open facilities' }).first().click();
+    await page.waitForTimeout(400);
+    const buildBtn = page.locator('button', { hasText: /^Build — / }).filter({ hasNot: page.locator('[disabled]') });
+    check('facilities can be built', await page.locator('.upgrade').count() === 5,
+      `${await page.locator('.upgrade').count()} buildings`);
+    if (await buildBtn.count()) {
+      const fundsBefore = (await save())?.funds ?? 0;
+      await buildBtn.first().click();
+      await page.waitForTimeout(400);
+      const fundsAfter = (await save())?.funds ?? 0;
+      check('building one spends the budget', fundsAfter < fundsBefore,
+        `${fundsBefore} -> ${fundsAfter}`);
+    }
+    await page.getByRole('button', { name: 'Back' }).first().click();
+    await page.waitForTimeout(250);
+
+    await page.locator('button', { hasText: 'Ready for camp' }).first().click();
+    await page.waitForTimeout(350);
+    await page.locator('button', { hasText: 'Start the season' }).first().click();
+    await page.waitForTimeout(1200);
+
+    const next = await save();
     check('the next season starts', (next?.year ?? 0) === 2, `year ${next?.year}`);
-    check('the squad is still viable', (next?.roster ?? 0) >= 22, `${next?.roster} players`);
+    check('the squad is still viable', (next?.roster ?? 0) >= 30, `${next?.roster} players`);
+    check('the new season is under the cap', (next?.cap ?? 999) <= 200.01,
+      `${next?.cap?.toFixed(1)}M`);
     check('a new schedule was drawn', (next?.played ?? 1) === 0, `${next?.played} played`);
+
+    /* --------------------------------------------- and a game you actually play */
+    await page.locator('button', { hasText: /^Play$/ }).first().click();
+    await page.waitForTimeout(1200);
+    const live = await state(page);
+    check('a franchise game starts', !!live, live ? `Q${live.quarter} ${live.phase}` : 'no game');
+    const offOnly = await page.evaluate(() => !!window.gridiron?.game?.offenseOnly);
+    check('and it is an offence-only game', offOnly);
+    await coach(page, 14);
+    const after = await state(page);
+    check('plays run in a franchise game', (after?.plays ?? 0) > 0, `${after?.plays} plays`);
 
     await ctx.close();
   }

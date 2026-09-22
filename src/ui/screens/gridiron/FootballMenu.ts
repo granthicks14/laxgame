@@ -5,12 +5,12 @@ import { hubButton } from '../../hub';
 import { HubTitleScreen } from '../HubTitle';
 import { SettingsScreen } from '../Settings';
 import { footballSettings, FOOTBALL_SPORT } from '../../../sports/football/settings';
-import { allTeams } from '../../../sports/football/world';
+import { TEAMS } from '../../../sports/football/nfl';
 import { getPref } from '../../../state/sportPrefs';
 import { FootballSetupScreen } from './FootballSetup';
-import { careerHeadline, loadFootballCareer } from '../../../sports/football/career/save';
-import { ChallengeStartScreen, DynastyStartScreen } from './career/CareerStart';
-import { FootballCareerHub } from './career/CareerHub';
+import { franchiseHeadline, loadFranchise } from '../../../sports/football/franchise/save';
+import { ChallengeStartScreen, DynastyStartScreen } from './nfl/FranchiseStart';
+import { FranchiseHub } from './nfl/FranchiseHub';
 import { FootballTeamsScreen } from './FootballTeams';
 import { FootballHowToScreen } from './FootballHowTo';
 
@@ -38,13 +38,13 @@ export class FootballMenuScreen implements Screen {
 
   constructor(app: App) {
     const firstTime = !getPref(app, FOOTBALL_SPORT, 'seenHowTo', false);
-    const dynasty = loadFootballCareer('dynasty');
-    const challenge = loadFootballCareer('challenge');
+    const dynasty = loadFranchise('dynasty');
+    const challenge = loadFranchise('challenge');
 
     const items: Item[] = [
       {
         label: 'Play Now',
-        desc: 'Pick two clubs and kick off.',
+        desc: 'Any two clubs in the league, one game, no consequences.',
         go: (a) => a.push((b) => new FootballSetupScreen(b)),
       },
       ...(firstTime ? [{
@@ -56,27 +56,28 @@ export class FootballMenuScreen implements Screen {
       {
         label: 'Dynasty',
         desc: dynasty
-          ? careerHeadline(dynasty)
-          : 'Take a programme anywhere in the sport and build it for as long as you like.',
+          ? franchiseHeadline(dynasty)
+          : 'Take a club and build it: the draft, the cap, free agency, a staff '
+            + 'and as many seasons as you like.',
         note: dynasty ? 'CONTINUE' : 'NEW',
         go: (a) => (dynasty
-          ? a.push((b) => new FootballCareerHub(b, dynasty))
-          : a.push((b) => new DynastyStartScreen(b))),
+          ? a.push((b) => new FranchiseHub(b, dynasty))
+          : a.push((b) => DynastyStartScreen(b))),
       },
       {
         label: 'Challenge',
         desc: challenge
-          ? careerHeadline(challenge)
-          : 'Start at the bottom of the sport with nothing. Only a championship '
-            + 'moves you up, and only for as long as they keep you.',
-        note: challenge ? 'CONTINUE' : 'THE CLIMB',
+          ? franchiseHeadline(challenge)
+          : 'The hot seat. The owner has a number in his head before the season '
+            + 'starts, and missing it for long enough ends the job.',
+        note: challenge ? 'CONTINUE' : 'THE HOT SEAT',
         go: (a) => (challenge
-          ? a.push((b) => new FootballCareerHub(b, challenge))
-          : a.push((b) => new ChallengeStartScreen(b))),
+          ? a.push((b) => new FranchiseHub(b, challenge))
+          : a.push((b) => ChallengeStartScreen(b))),
       },
       {
         label: 'Clubs',
-        desc: 'Seven tiers of football, and what every roster in them is made of.',
+        desc: 'All thirty-two, and what every roster in them is made of.',
         muted: true,
         go: (a) => a.push((b) => new FootballTeamsScreen(b)),
       },
@@ -98,7 +99,7 @@ export class FootballMenuScreen implements Screen {
       h('div', { class: 'topbar' },
         hubButton(() => app.reset((a) => new HubTitleScreen(a))),
         h('div', { class: 'topbar__title display', text: 'Gridiron' }),
-        h('div', { class: 'topbar__sub', text: `${allTeams().length} clubs` })),
+        h('div', { class: 'topbar__sub', text: `${TEAMS.length} clubs` })),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
           ...items.map((it) => h('button', {
@@ -113,8 +114,8 @@ export class FootballMenuScreen implements Screen {
           h('div', {
             class: 'tiny center',
             style: 'margin-top:10px',
-            text: 'An original football game. Every club, player and result in it is '
-              + 'invented for this game.',
+            text: 'The clubs are the ones you know. Every player, name, rating and '
+              + 'result in the game is generated and belongs to nobody.',
           }),
         )),
     );

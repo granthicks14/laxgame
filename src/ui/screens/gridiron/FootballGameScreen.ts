@@ -17,7 +17,7 @@ import {
 } from '../../../sports/football/playbook';
 import { attackDir, dist2, fieldGoalDistance, yardsToGoal } from '../../../sports/football/field';
 import { FOOTBALL } from '../../../sports/football/tuning';
-import type { FootballConfig, FieldPlayer } from '../../../sports/football/types';
+import { GAME_PLANS, type FootballConfig, type FieldPlayer, type GamePlan } from '../../../sports/football/types';
 import type { Side } from '../../../sports/football/field';
 import { footballBoxScore } from './boxScore';
 
@@ -48,6 +48,8 @@ export interface FootballGameOptions {
   onComplete: (game: FootballGame) => void;
   onQuit: () => void;
   subtitle?: string;
+  /** So a franchise remembers the plan he switched to mid-game. */
+  onPlanChange?: (plan: GamePlan) => void;
 }
 
 type PauseTab = 'menu' | 'controls' | 'box';
@@ -88,6 +90,28 @@ export class FootballGameScreen implements Screen {
 
   /** The play-call card, up whenever the coach owes an answer. */
   private callCard: HTMLElement | null = null;
+  /** The defensive strip, up whenever the other lot have the ball. */
+  private elDefence!: HTMLElement;
+  private elPlanChip!: HTMLElement;
+  private elKick!: HTMLElement;
+  private elKickFill!: HTMLElement;
+  private elKickBand!: HTMLElement;
+  private elKickMark!: HTMLElement;
+  private elKickLabel!: HTMLElement;
+  private lastKickOn = false;
+  private planCard: HTMLElement | null = null;
+  /**
+   * HOW FAST A SERIES HE IS NOT PLAYING RUNS.
+   *
+   * He is watching his own defence, not operating it, and watching it in real
+   * time doubles the length of a game for a part he has no buttons in. At three
+   * and a half it reads as football on fast-forward — fast enough that a ten
+   * play drive is fifteen seconds rather than a minute, slow enough to see a
+   * sack happen. There is a button next to it for people who would rather not
+   * watch at all.
+   */
+  private watchSpeed = 3.5;
+  private lastAuto = false;
   private lastScore = { home: -1, away: -1 };
   private lastClockText = '';
 
@@ -168,13 +192,51 @@ export class FootballGameScreen implements Screen {
     this.elStick = h('div', { class: 'stick' }, this.elStickNub);
     this.elTouch = h('div', { class: `touch${this.touchMode ? '' : ' is-off'}` },
       this.elStick,
+      /* NO SWITCH AND NO TACKLE WHEN HE IS NOT ON DEFENCE. A button that does
+       * nothing all game is a button that makes the ones that matter slower to
+       * find, and it is also a lie about what the game is. */
       h('div', { class: 'tbtns' },
-        this.touchButton('switch', 'Switch'),
+        this.opts.config.offenseOnly ? null : this.touchButton('switch', 'Switch'),
         this.touchButton('throwAway', 'Out'),
-        this.touchButton('tackle', 'Tackle'),
+        this.opts.config.offenseOnly ? null : this.touchButton('tackle', 'Tackle'),
         this.touchButton('snap', 'Snap')),
       this.touchButton('timeout', 'T/O'),
     );
+
+    /* THE DEFENSIVE STRIP. Up only while the other lot have the ball, and it
+     * holds the two things a coach can actually do about that: say how he wants
+     * it played, and decide whether to watch it. */
+    this.elPlanChip = h('button', {
+      class: 'fb-plan__chip',
+      text: 'Balanced',
+      on: { click: () => this.showPlanCard() },
+    });
+    this.elDefence = h('div', { class: 'fb-defence is-off' },
+      h('span', { class: 'fb-defence__tag', text: 'THEIR BALL' }),
+      this.elPlanChip,
+      h('button', {
+        class: 'fb-plan__chip fb-plan__chip--ghost',
+        text: 'Sim drive',
+        on: { click: () => this.skipDefensiveSeries() },
+      }));
+
+    /* THE KICK.
+     *
+     * A field goal is the most tense forty-five seconds in the sport and a dice
+     * roll turns it into a loading screen. The band is the kicker's accuracy,
+     * its centre is moved by the wind, and the whole strip is the button —
+     * because on a phone the thing you are looking at should be the thing you
+     * press. */
+    this.elKickBand = h('div', { class: 'fb-kick__band' });
+    this.elKickMark = h('div', { class: 'fb-kick__mark' });
+    this.elKickFill = h('div', { class: 'fb-kick__track' }, this.elKickBand, this.elKickMark);
+    this.elKickLabel = h('div', { class: 'fb-kick__label', text: '' });
+    this.elKick = h('button', {
+      class: 'fb-kick is-off',
+      ariaLabel: 'Kick',
+    }, this.elKickLabel, this.elKickFill,
+    h('div', { class: 'fb-kick__hint tiny', text: 'Hit the band' }));
+    this.input.registerButton('snap', this.elKick);
 
     this.elHints = h('div', { class: 'hint-strip' });
     const hints = this.app.settings.showHints && !this.touchMode ? this.elHints : null;
@@ -193,6 +255,8 @@ export class FootballGameScreen implements Screen {
         plate(cfg.home.team.abbr, cfg.home.team.primary, cfg.home.team.secondary,
           this.elHome, 'home')),
       this.elBanner,
+      this.elKick,
+      this.opts.config.offenseOnly ? this.elDefence : null,
       this.elTicker,
       this.elTouch,
       hints,
@@ -281,14 +345,17 @@ export class FootballGameScreen implements Screen {
      * the card — which is also why the play clock can be a real rule during the
      * part that follows it. */
     if (!this.paused && !this.finished && !this.callCard) {
-      this.acc += delta;
+      /* A SERIES HE IS NOT PLAYING RUNS FAST. Same engine, same rules, same
+       * twenty-two men — the clock on the wall is simply wound on. */
+      this.acc += delta * (this.game.autoPlaying ? this.watchSpeed : 1);
       let steps = 0;
-      while (this.acc >= FIXED_DT && steps < 5) {
+      const budget = this.game.autoPlaying ? 14 : 5;
+      while (this.acc >= FIXED_DT && steps < budget) {
         this.step(FIXED_DT);
         this.acc -= FIXED_DT;
         steps++;
       }
-      if (steps === 5) this.acc = 0;
+      if (steps === budget) this.acc = 0;
     }
 
     if (!this.finished && this.game.isFinal()) this.finish();
@@ -343,9 +410,73 @@ export class FootballGameScreen implements Screen {
    */
   private syncCallCard(): void {
     const g = this.game;
-    const mine = g.humanSide !== null && g.phase === 'playcall';
+    /* HE IS ASKED ONLY WHEN IT IS HIS BALL. `autoPlaying` is the engine's own
+     * word for "nobody is waiting on a button", so there is exactly one opinion
+     * about whose turn it is rather than two that can disagree. */
+    const mine = g.humanSide !== null && g.phase === 'playcall' && !g.autoPlaying;
     if (mine && !this.callCard) this.showCallCard();
     if (!mine && this.callCard) this.hideCallCard();
+    this.syncDefenceStrip();
+  }
+
+  /** The strip that says the other lot have it, and what to do about that. */
+  private syncDefenceStrip(): void {
+    if (!this.opts.config.offenseOnly) return;
+    const on = this.game.autoPlaying && !this.finished;
+    if (on !== this.lastAuto) {
+      this.lastAuto = on;
+      this.elDefence.classList.toggle('is-off', !on);
+      if (!on) this.closePlanCard();
+    }
+  }
+
+  private showPlanCard(): void {
+    if (this.planCard) { this.closePlanCard(); return; }
+    audio.play('click');
+    const card = h('div', { class: 'fb-plan__card' },
+      ...GAME_PLANS.map((p) => h('button', {
+        class: `fb-plan__opt${this.game.gamePlan === p.key ? ' is-on' : ''}`,
+        on: {
+          click: () => {
+            audio.play('click');
+            this.game.gamePlan = p.key;
+            this.opts.onPlanChange?.(p.key);
+            this.elPlanChip.textContent = p.label;
+            this.closePlanCard();
+          },
+        },
+      },
+      h('div', { class: 'fb-plan__name', text: p.label }),
+      h('div', { class: 'fb-plan__blurb', text: p.blurb }))));
+    this.planCard = card;
+    this.el.appendChild(card);
+  }
+
+  private closePlanCard(): void {
+    this.planCard?.remove();
+    this.planCard = null;
+  }
+
+  /**
+   * RUN THE REST OF THEIR POSSESSION AT ONCE.
+   *
+   * The same engine stepped as fast as the machine can, not a different model:
+   * a coach who skips the series still gets the series his defence actually
+   * played. It stops the moment the ball comes back, the quarter ends, or a
+   * sanity budget runs out — which is what stops a bug here from hanging the
+   * tab rather than merely being wrong.
+   */
+  private skipDefensiveSeries(): void {
+    if (!this.game.autoPlaying || this.finished) return;
+    audio.play('click');
+    const idle = neutralFootballInput();
+    for (let i = 0; i < 12_000; i++) {
+      if (!this.game.autoPlaying || this.game.isFinal()) break;
+      this.game.update(FIXED_DT, idle);
+    }
+    this.acc = 0;
+    this.input.releaseAll();
+
   }
 
   private hideCallCard(): void {
@@ -509,6 +640,31 @@ export class FootballGameScreen implements Screen {
       this.elBanner.classList.toggle('is-on', g.banner.length > 0);
     }
     if (this.elTicker.textContent !== g.message) this.elTicker.textContent = g.message;
+    this.syncKick();
+  }
+
+  /** The kick meter, driven straight off the engine's own readout. */
+  private syncKick(): void {
+    const m = this.game.kickReadout;
+    const on = !!m;
+    if (on !== this.lastKickOn) {
+      this.lastKickOn = on;
+      this.elKick.classList.toggle('is-off', !on);
+    }
+    if (!m) return;
+    const pct = (n: number): string => `${(n * 100).toFixed(1)}%`;
+    this.elKickBand.style.left = pct(Math.max(0, m.sweet - m.width));
+    this.elKickBand.style.width = pct(Math.min(1, m.width * 2));
+    this.elKickMark.style.left = pct(m.t);
+    this.elKick.classList.toggle('is-struck', m.taken);
+    const wind = this.game.wind;
+    const windText = Math.abs(wind) < 0.12
+      ? 'no wind'
+      : `${Math.abs(wind) > 0.6 ? 'strong' : 'light'} wind ${wind < 0 ? 'left' : 'right'}`;
+    const label = m.taken
+      ? (m.quality > 0.6 ? 'Struck it' : m.quality > 0 ? 'Caught it' : 'Pushed it')
+      : `${Math.round(m.distance)} yards · ${windText}`;
+    if (this.elKickLabel.textContent !== label) this.elKickLabel.textContent = label;
   }
 
   private renderHints(): void {
@@ -528,8 +684,10 @@ export class FootballGameScreen implements Screen {
       pair(key('throw'), 'Throw'),
       pair(key('throwAway'), 'Throw it away'),
       pair(key('snap'), 'Snap'),
-      pair(key('tackle'), 'Tackle'),
-      pair(key('switch'), 'Switch'),
+      ...(this.opts.config.offenseOnly ? [] : [
+        pair(key('tackle'), 'Tackle'),
+        pair(key('switch'), 'Switch'),
+      ]),
     );
   }
 
@@ -560,7 +718,11 @@ export class FootballGameScreen implements Screen {
     this.closeOverlay();
     const tabs = h('div', { class: 'seg seg--sticky' },
       ...(['menu', 'controls', 'box'] as PauseTab[]).map((t) => h('button', {
-        class: `seg__btn${this.pauseTab === t ? ' is-on' : ''}`,
+        /* `.seg__opt`, which is the class the stylesheet actually styles. The
+         * first version said `seg__btn`, which nothing in the CSS has ever
+         * matched — so football's pause menu had three naked browser buttons at
+         * the top of it, on every platform, for as long as it has existed. */
+        class: `seg__opt${this.pauseTab === t ? ' is-on' : ''}`,
         text: t === 'menu' ? 'Paused' : t === 'controls' ? 'Controls' : 'Box score',
         on: { click: () => { this.pauseTab = t; this.showPause(); } },
       })));

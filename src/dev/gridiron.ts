@@ -20,6 +20,7 @@ import { FootballGame } from '../sports/football/Game';
 import { buildRoster, teamRatings, type Team } from '../sports/football/data';
 import { DIFFICULTIES, DIFFICULTY_ORDER, GAME_LENGTHS } from '../sports/football/tuning';
 import { FIELD } from '../sports/football/field';
+import { neutralFootballInput } from '../sports/football/input';
 import type { DifficultyKey } from '../sports/football/types';
 
 const DT = 1 / 60;
@@ -239,3 +240,108 @@ console.log('  yards 350 per team, 2.3 touchdowns, 11 drives');
 
 console.log(`\n${problems.length === 0 ? 'No broken rules.' : `${problems.length} PROBLEM(S):`}`);
 for (const p of problems) console.log(`  ! ${p}`);
+
+/* ===========================================================================
+ * THE KICK
+ * ===========================================================================
+ * A field goal is the most tense forty-five seconds in the sport and a dice
+ * roll turns it into a loading screen. So a kick a PERSON is taking is a kick
+ * he takes — and the thing that has to be true of it is the same thing that has
+ * to be true of the throw:
+ *
+ *   HIS TIMING MATTERS, AND THE LEG ON THE ROSTER MATTERS MORE.
+ *
+ * Perfect timing must not make a great kicker out of a poor one, and poor
+ * timing must not make a poor kicker out of a great one. Both of those are
+ * measured below, over enough attempts that the dice cancel.
+ * ========================================================================= */
+
+console.log('\nTHE KICK\n');
+
+{
+  const neutral = neutralFootballInput;
+
+  const attempt = (
+    legPar: number, distance: number, timing: 'perfect' | 'edge' | 'miss', n: number,
+  ): number => {
+    let made = 0;
+    for (let i = 0; i < n; i++) {
+      const game = new FootballGame({
+        home: { team: team('a', 'A', 'A', 'AAA'), roster: buildRoster(`k:${legPar}:${i}`, { par: legPar, spread: 4 }) },
+        away: { team: team('b', 'B', 'B', 'BBB'), roster: buildRoster(`k2:${i}`, { par: 62, spread: 4 }) },
+        humanSide: 'home',
+        quarterSeconds: 210,
+        difficulty: DIFFICULTIES.pro,
+        seed: 900 + i,
+        offenseOnly: true,
+      });
+      game.setSituationForTest({
+        side: 'home',
+        down: 4,
+        toGo: 8,
+        los: FIELD.awayGoal - (distance - 17),
+      });
+      game.callKick('fieldGoal');
+      // Snap it, which opens the meter.
+      for (let f = 0; f < 600 && !game.kickReadout; f++) {
+        game.update(DT, { ...neutral(), snapPressed: f > 30 });
+      }
+      const m = game.kickReadout;
+      if (!m) continue;
+      // Walk the marker to where this timing wants it, then press.
+      const target = timing === 'perfect' ? m.sweet
+        : timing === 'edge' ? Math.min(0.99, m.sweet + m.width * 0.95)
+          : Math.min(0.99, m.sweet + m.width * 6);
+      for (let f = 0; f < 4000; f++) {
+        const before = game.kickReadout;
+        if (!before || before.taken) break;
+        const close = Math.abs(before.t - target) < before.speed * DT * 1.2;
+        game.update(DT, { ...neutral(), snapPressed: close });
+      }
+      const scoreBefore = game.score.home;
+      for (let f = 0; f < 600 && game.score.home === scoreBefore && game.phase === 'special'; f++) {
+        game.update(DT, neutral());
+      }
+      if (game.score.home > scoreBefore) made++;
+    }
+    return made / n;
+  };
+
+  const N = 110;
+
+  /* AT FORTY-FIVE, TIMING IS THE STORY. Everybody's kicker can reach it, so
+   * what separates a make from a miss is whether he struck it. */
+  const struck45 = attempt(78, 45, 'perfect', N);
+  const edge45 = attempt(78, 45, 'edge', N);
+  const shank45 = attempt(78, 45, 'miss', N);
+
+  /* AT FIFTY-TWO, THE LEG IS THE STORY. Perfect timing does not grow one. */
+  const goodLeg52 = attempt(78, 52, 'perfect', N);
+  const poorLeg52 = attempt(46, 52, 'perfect', N);
+
+  /* AND A CHIP SHOT IS A CHIP SHOT. A game where a twenty-three yarder is a
+   * coin toss is a game nobody will ever kick a field goal in. */
+  const chip = attempt(62, 23, 'perfect', N);
+  const chipEdge = attempt(62, 23, 'edge', N);
+
+  const pct = (n: number): string => `${(n * 100).toFixed(0)}%`.padStart(4);
+  console.log(`  45 yards, good leg:   struck ${pct(struck45)}   edge of the band ${pct(edge45)}   shanked ${pct(shank45)}`);
+  console.log(`  52 yards, struck:     good leg ${pct(goodLeg52)}   poor leg ${pct(poorLeg52)}`);
+  console.log(`  23 yards, good leg:   struck ${pct(chip)}   edge of the band ${pct(chipEdge)}`);
+
+  if (!(struck45 > shank45 + 0.15)) {
+    problems.push(`timing does not matter: ${pct(struck45)} struck vs ${pct(shank45)} shanked`);
+  }
+  if (!(struck45 >= edge45)) {
+    problems.push('the middle of the band is not better than the edge of it');
+  }
+  if (!(goodLeg52 > poorLeg52 + 0.18)) {
+    problems.push(`the leg on the roster does not matter: ${pct(goodLeg52)} vs ${pct(poorLeg52)}`);
+  }
+  if (chip < 0.85) problems.push(`a twenty-three yarder is not routine: ${pct(chip)}`);
+  if (chipEdge < 0.6) problems.push(`a slightly mistimed chip shot is punished too hard: ${pct(chipEdge)}`);
+  if (shank45 > 0.6) problems.push(`a shank is not punished enough: ${pct(shank45)}`);
+
+  console.log(`\n${problems.length === 0 ? 'The kick is a skill and a rating, in that order.' : `${problems.length} PROBLEM(S):`}`);
+  for (const p of problems) console.log(`  ! ${p}`);
+}

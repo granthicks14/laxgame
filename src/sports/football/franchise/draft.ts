@@ -5,6 +5,7 @@ import {
   type AttrKey, type Player, type Position,
 } from '../data';
 import { TEAMS, teamOr } from '../nfl';
+import { DIFFICULTIES } from '../tuning';
 import { MIN_SALARY, starterBar } from './club';
 import { rosterOf } from './world';
 import { sortStandings, winPct } from './schedule';
@@ -236,8 +237,8 @@ const POSITION_VALUE: Record<Position, number> = {
   QB: 14, RB: -6, WR: 3, TE: -3, OL: 4, DL: 5, LB: -2, CB: 4, S: -2, K: -20, P: -22,
 };
 
-function cpuValue(p: Prospect, need: number, rng: Rng): number {
-  const read = p.player.overall * 0.72 + p.player.potential * 0.28 + rng.gauss(0, 4.5);
+function cpuValue(p: Prospect, need: number, rng: Rng, blur = 4.5): number {
+  const read = p.player.overall * 0.72 + p.player.potential * 0.28 + rng.gauss(0, blur);
   /* WHAT THE POSITION IS WORTH, and this is not decoration. A specialist's
    * overall is four-fifths of one attribute, so the best kicker in a class
    * reads higher than the best tackle — and a board that sorts on the number
@@ -333,11 +334,18 @@ function bestAvailable(
     need = needsOf(roster);
     cache.set(teamId, need);
   }
+  /* HOW GOOD THE OTHER ROOMS ARE IS A DIFFICULTY SETTING, and it is a fair one:
+   * a Rookie league's scouts misread a prospect by six points and a Legend
+   * league's by two, so the man who falls to you at the end of round one is a
+   * very different man. Not one rating on any roster has changed. */
+  const d = DIFFICULTIES[fr.difficulty];
+  const blur = 7.2 - d.playRead * 5.4;
+
   let best: Prospect | null = null;
   let bestScore = -Infinity;
   for (const p of fr.draftClass) {
     if (p.takenBy) continue;
-    const score = cpuValue(p, need[p.pos] ?? 0, rng);
+    const score = cpuValue(p, need[p.pos] ?? 0, rng, blur);
     if (score > bestScore) { bestScore = score; best = p; }
   }
   if (best) need[best.pos] = Math.max(0, (need[best.pos] ?? 0) - 0.9);

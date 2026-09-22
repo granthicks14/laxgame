@@ -2,122 +2,123 @@ import { h } from '../../dom';
 import type { App, Screen } from '../../App';
 import { screenEl, topbar, panel, segmented } from '../../components';
 import { teamRatings } from '../../../sports/football/data';
-import { allTeams, rosterFor, type WorldTeam } from '../../../sports/football/world';
-import { LEVELS, LEVEL_ORDER } from '../../../sports/football/levels';
+import {
+  CONFERENCES, TEAMS, badgeColours, divisionsIn, rosterFor, teamOr, teamsInDivision,
+  type Conference, type NflTeam,
+} from '../../../sports/football/nfl';
 import {
   DIFFICULTIES, DIFFICULTY_ORDER, GAME_LENGTHS, type GameLengthKey,
 } from '../../../sports/football/tuning';
 import { currentDifficulty, currentLength, FOOTBALL_SPORT } from '../../../sports/football/settings';
 import { setPref } from '../../../state/sportPrefs';
-import type { DifficultyKey } from '../../../sports/football/types';
+import { GAME_PLANS, type DifficultyKey, type GamePlan } from '../../../sports/football/types';
 import { Rng } from '../../../core/rng';
 import { FootballGameScreen } from './FootballGameScreen';
 import { FootballPostGameScreen } from './FootballPostGame';
 
 /* ---------------------------------------------------------------------------
- * SETTING UP A GAME
+ * PLAY NOW
  * ---------------------------------------------------------------------------
- * Two clubs, a difficulty and a length, and what each choice actually costs
- * shown next to it. Football adds one thing the other sports' setup screens do
- * not need: a LEVEL, because the clubs in this world are spread over seven tiers
- * and a district high school against a professional club is not a game, it is a
- * formality. Picking the tier first keeps the matchups honest without stopping
- * anybody who wants that game from scrolling to it.
+ * One game, two clubs, no consequences. Every club in the league is available
+ * because there is no ladder any more — this is one competition and a bad team
+ * playing a good one is a real fixture rather than a formality.
+ *
+ * The one choice that is not obvious is the last one, and it is the choice the
+ * whole football section is built around: YOU PLAY OFFENCE. On defence your
+ * eleven play it out on their own ratings and the plan you set. Somebody who
+ * would rather steer a safety can turn that off here, once, and the engine does
+ * the rest — but the default is the game this is.
  * ------------------------------------------------------------------------- */
 
 export class FootballSetupScreen implements Screen {
   el: HTMLElement;
 
   constructor(app: App) {
-    const year = 1;
     const seed = new Rng(`fb:setup:${Date.now()}`).int(1, 0x7fff_ffff);
-    let level = LEVEL_ORDER[LEVEL_ORDER.length - 1];
-    let pool = allTeams().filter((t) => t.level === level);
-    let homeId = pool[0].id;
-    let awayId = pool[Math.min(4, pool.length - 1)].id;
+    let conference: Conference = 'AFC';
+    let homeId = 'kc';
+    let awayId = 'buf';
     let difficulty = currentDifficulty(app);
     let length = currentLength(app);
-
-    const byId = (id: string): WorldTeam =>
-      allTeams().find((t) => t.id === id) ?? pool[0];
+    let plan: GamePlan = 'balanced';
+    let offenceOnly = true;
+    let picking: 'home' | 'away' = 'away';
 
     const diffBlurb = h('div', { class: 'small', text: DIFFICULTIES[difficulty].blurb });
     const lenBlurb = h('div', { class: 'small', text: GAME_LENGTHS[length].blurb });
+    const planBlurb = h('div', {
+      class: 'tiny',
+      text: GAME_PLANS.find((p) => p.key === plan)?.blurb ?? '',
+    });
 
-    const card = (team: WorldTeam): HTMLElement => {
-      const r = teamRatings(rosterFor(team, year));
+    const card = (team: NflTeam): HTMLElement => {
+      const r = teamRatings(rosterFor(team, seed, 1));
+      const c = badgeColours(team);
       return h('div', { class: 'club-line' },
         h('span', {
           class: 'club-line__badge',
-          style: `background:${team.primary};border-color:${team.secondary}`,
+          style: `background:${c.fill};border-color:${c.edge};color:${c.text}`,
           text: team.abbr,
         }),
         h('div', { class: 'club-line__body' },
           h('div', { class: 'club-line__name', text: `${team.city} ${team.name}` }),
           h('div', {
             class: 'club-line__note tiny',
-            text: `${team.stadium} · pass ${r.passing} / run ${r.rushing} · def ${r.defense}`,
+            text: `${team.divisionId} · pass ${r.passing} / run ${r.rushing} · def ${r.defense}`,
           })),
         h('div', { class: 'club-line__ovr num', text: String(r.overall) }));
     };
 
     const homeSlot = h('div', { class: 'stack', style: 'gap:6px' });
     const awaySlot = h('div', { class: 'stack', style: 'gap:6px' });
-    const homeSelect = h('select', { class: 'select' });
-    const awaySelect = h('select', { class: 'select' });
+    const list = h('div', { class: 'stack', style: 'gap:4px' });
 
-    const fillSelects = (): void => {
-      for (const [sel, current] of [[homeSelect, homeId], [awaySelect, awayId]] as const) {
-        sel.replaceChildren(...pool.map((t) => {
-          const opt = h('option', { value: t.id, text: `${t.city} ${t.name}` });
-          if (t.id === current) opt.selected = true;
-          return opt;
-        }));
-      }
-    };
     const paint = (): void => {
-      homeSlot.replaceChildren(card(byId(homeId)));
-      awaySlot.replaceChildren(card(byId(awayId)));
+      homeSlot.replaceChildren(card(teamOr(homeId)));
+      awaySlot.replaceChildren(card(teamOr(awayId)));
+      list.replaceChildren(...divisionsIn(conference).map((divisionId) =>
+        h('div', { class: 'stack', style: 'gap:3px' },
+          h('div', { class: 'eyebrow', text: divisionId }),
+          ...teamsInDivision(divisionId).map((t) => {
+            const c = badgeColours(t);
+            return h('button', {
+              class: `btn btn--sm${t.id === homeId || t.id === awayId ? ' btn--primary' : ''}`,
+              on: {
+                click: () => {
+                  if (picking === 'home') homeId = t.id;
+                  else awayId = t.id;
+                  paint();
+                },
+              },
+            },
+            h('span', {
+              class: 'club-line__badge club-line__badge--sm',
+              style: `background:${c.fill};border-color:${c.edge};color:${c.text}`,
+              text: t.abbr,
+            }),
+            h('span', { text: ` ${t.city} ${t.name}` }));
+          }))));
     };
-
-    homeSelect.addEventListener('change', () => {
-      homeId = homeSelect.value;
-      paint();
-    });
-    awaySelect.addEventListener('change', () => {
-      awayId = awaySelect.value;
-      paint();
-    });
-
-    const setLevel = (next: typeof level): void => {
-      level = next;
-      pool = allTeams().filter((t) => t.level === level);
-      homeId = pool[0].id;
-      awayId = pool[Math.min(4, pool.length - 1)].id;
-      fillSelects();
-      paint();
-      levelBlurb.textContent = LEVELS[level].blurb;
-    };
-
-    const levelBlurb = h('div', { class: 'small', text: LEVELS[level].blurb });
-    fillSelects();
     paint();
 
-    const kick = (humanSide: 'home' | 'away'): void => {
+    const kick = (): void => {
       if (homeId === awayId) {
         app.toast('Pick two different clubs', 'bad');
         return;
       }
-      const home = byId(homeId);
-      const away = byId(awayId);
+      const home = teamOr(homeId);
+      const away = teamOr(awayId);
+      const humanSide = picking === 'home' ? 'home' : 'away';
       app.replace((a) => new FootballGameScreen(a, {
         config: {
-          home: { team: home, roster: rosterFor(home, year) },
-          away: { team: away, roster: rosterFor(away, year) },
+          home: { team: home, roster: rosterFor(home, seed, 1) },
+          away: { team: away, roster: rosterFor(away, seed, 1) },
           humanSide,
           quarterSeconds: GAME_LENGTHS[length].quarterSeconds,
           difficulty: DIFFICULTIES[difficulty],
           seed,
+          offenseOnly: offenceOnly,
+          gamePlan: plan,
         },
         onComplete: (game) => a.replace((b) => new FootballPostGameScreen(b, game)),
         onQuit: () => a.pop(),
@@ -125,25 +126,26 @@ export class FootballSetupScreen implements Screen {
     };
 
     this.el = screenEl(
-      topbar(app, 'Play Now', 'An exhibition game'),
+      topbar(app, 'Play Now', 'One game, no consequences'),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
-          panel('The level',
-            segmented(
-              LEVEL_ORDER.map((k) => ({ value: k, label: LEVELS[k].short })),
-              level,
-              (v) => setLevel(v), true),
-            levelBlurb),
-          panel('Away',
-            h('div', { class: 'stack', style: 'gap:6px' },
-              h('div', { class: 'field-row__label', text: 'Club' }),
-              awaySelect),
-            awaySlot),
-          panel('Home',
-            h('div', { class: 'stack', style: 'gap:6px' },
-              h('div', { class: 'field-row__label', text: 'Club' }),
-              homeSelect),
-            homeSlot),
+          panel('Away', awaySlot),
+          panel('Home', homeSlot),
+          panel('Pick the clubs',
+            segmented<'away' | 'home'>([
+              { value: 'away', label: 'Choose away' },
+              { value: 'home', label: 'Choose home' },
+            ], picking, (v) => { picking = v; }, true),
+            segmented<Conference>(
+              CONFERENCES.map((c) => ({ value: c, label: c })),
+              conference,
+              (v) => { conference = v; paint(); }, true),
+            list,
+            h('div', {
+              class: 'tiny',
+              text: 'Whichever side you were last choosing is the side you coach.',
+            })),
+
           panel('The game',
             h('div', { class: 'stack', style: 'gap:6px' },
               h('div', { class: 'field-row__label', text: 'Difficulty' }),
@@ -168,17 +170,38 @@ export class FootballSetupScreen implements Screen {
                   lenBlurb.textContent = GAME_LENGTHS[v].blurb;
                 }, true),
               lenBlurb)),
-          h('div', { class: 'stack' },
-            h('button', {
-              class: 'btn btn--primary',
-              text: 'Coach the home side',
-              on: { click: () => kick('home') },
-            }),
-            h('button', {
-              class: 'btn',
-              text: 'Coach the away side',
-              on: { click: () => kick('away') },
+
+          panel('Defence',
+            segmented<'coach' | 'play'>([
+              { value: 'coach', label: 'Coach it' },
+              { value: 'play', label: 'Play it too' },
+            ], 'coach', (v) => { offenceOnly = v === 'coach'; }, true),
+            h('div', { class: 'stack', style: 'gap:6px' },
+              h('div', { class: 'field-row__label', text: 'Game plan' }),
+              segmented<GamePlan>(
+                GAME_PLANS.map((p) => ({ value: p.key, label: p.label })),
+                plan,
+                (v) => {
+                  plan = v;
+                  planBlurb.textContent = GAME_PLANS.find((p) => p.key === v)?.blurb ?? '';
+                }, true),
+              planBlurb),
+            h('div', {
+              class: 'tiny',
+              text: 'Coaching it is the game this is: you play every snap your side '
+                + 'has the ball, and theirs runs on fast-forward while your eleven '
+                + 'get on with it. Playing it too gives you a defender to steer.',
             })),
+
+          h('button', {
+            class: 'btn btn--primary btn--block',
+            text: 'Kick off',
+            on: { click: () => kick() },
+          }),
+          h('div', {
+            class: 'tiny center',
+            text: `${TEAMS.length} clubs. Every player in them is invented for this game.`,
+          }),
         )),
     );
   }

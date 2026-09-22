@@ -2,6 +2,7 @@ import { Rng } from '../../../core/rng';
 import { clamp } from '../../../core/math';
 import { PERSONALITY, POSITIONS, depthAt, makePlayer, type Player, type Position } from '../data';
 import { TEAMS, teamOr } from '../nfl';
+import { DIFFICULTIES } from '../tuning';
 import { MIN_SALARY, capRoom, marketValue, marketYears, starterBar } from './club';
 import { coachingOf } from './staff';
 import { driftOf } from './world';
@@ -62,6 +63,7 @@ export function clubAppeal(fr: Franchise): number {
 export function generateFreeAgents(fr: Franchise, released: Player[]): FreeAgent[] {
   const rng = new Rng(`nfl:fa:${fr.seed}:${fr.year}`);
   const appeal = clubAppeal(fr);
+  const competition = DIFFICULTIES[fr.difficulty].playRead * 3.2 - 0.9;
   const need = needMap(fr.roster);
   const out: FreeAgent[] = [];
 
@@ -80,8 +82,11 @@ export function generateFreeAgents(fr: Franchise, released: Player[]): FreeAgent
       )),
       /* HOW MANY OTHER CLUBS ARE IN IT. The better he is, the more of them, and
        * that is what stops the market from being a shop with prices on. */
+      /* HOW BUSY THE MARKET IS is the other half of what difficulty buys: at
+       * Legend three more clubs are in on every worthwhile free agent, so you
+       * pay over the odds or you miss. The players are identical. */
       suitors: clamp(Math.round((player.overall - starterBar(player.pos) + 8) / 4.5
-        + rng.range(0, 2.2)), 0, 7),
+        + rng.range(0, 2.2) + competition), 0, 9),
       offer: null,
       signedBy: null,
       outcome: null,

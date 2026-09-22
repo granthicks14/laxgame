@@ -2,13 +2,12 @@ import type { SportModule } from '../registry';
 import { FootballMenuScreen } from '../../ui/screens/gridiron/FootballMenu';
 import { FOOTBALL_CONTROLS } from './input';
 import { FOOTBALL_SOUNDS } from './sounds';
-import { allTeams } from './world';
-import { LEVEL_ORDER, LEVELS } from './levels';
+import { CONFERENCES, DIVISION_NAMES, TEAMS, divisionsIn, teamsInDivision } from './nfl';
 
 /**
  * GRIDIRON — football's entry point into the hub.
  *
- * Loaded on demand, like every sport: none of the engine, the AI, the world or
+ * Loaded on demand, like every sport: none of the engine, the AI, the league or
  * the renderer is downloaded by a player who came to the hub for lacrosse.
  */
 export const FOOTBALL: SportModule = {
@@ -16,28 +15,33 @@ export const FOOTBALL: SportModule = {
   controls: FOOTBALL_CONTROLS,
   sounds: FOOTBALL_SOUNDS,
   init: () => {
-    /* THE PYRAMID HAS TO CLIMB, and this is the one place that can prove it
-     * before a player is standing in it. A tier whose talent band sits level
-     * with or below the one beneath it makes the whole climb meaningless, and a
-     * warning here is a far better outcome than a career mode that quietly does
-     * not mean anything. */
+    /* THE LEAGUE HAS TO BE A LEAGUE, and this is the one place that can prove
+     * it before a player is standing in it. Thirty-two clubs, eight divisions
+     * of four, and no two sharing an id or a set of initials — because every
+     * one of those is a bug that shows up as a fixture list that will not
+     * schedule or a table with two rows for the same club in it. */
     try {
-      let last = -Infinity;
-      for (const level of LEVEL_ORDER) {
-        const info = LEVELS[level];
-        const low = info.par - info.spread / 2;
-        if (low <= last) {
-          console.warn(`[gridiron] ${level} does not sit above the tier below it`);
+      if (TEAMS.length !== 32) console.warn(`[gridiron] ${TEAMS.length} clubs, expected 32`);
+      for (const conference of CONFERENCES) {
+        const divisions = divisionsIn(conference);
+        if (divisions.length !== DIVISION_NAMES.length) {
+          console.warn(`[gridiron] ${conference} has ${divisions.length} divisions`);
         }
-        last = low;
+        for (const d of divisions) {
+          const n = teamsInDivision(d).length;
+          if (n !== 4) console.warn(`[gridiron] ${d} has ${n} clubs`);
+        }
       }
       const ids = new Set<string>();
-      for (const t of allTeams()) {
+      const abbrs = new Set<string>();
+      for (const t of TEAMS) {
         if (ids.has(t.id)) console.warn(`[gridiron] duplicate club id ${t.id}`);
+        if (abbrs.has(t.abbr)) console.warn(`[gridiron] duplicate abbreviation ${t.abbr}`);
         ids.add(t.id);
+        abbrs.add(t.abbr);
       }
     } catch (err) {
-      console.warn('[gridiron] the world could not be checked', err);
+      console.warn('[gridiron] the league could not be checked', err);
     }
   },
 };
