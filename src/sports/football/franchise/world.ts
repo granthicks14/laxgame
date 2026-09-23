@@ -3,7 +3,7 @@ import { clamp } from '../../../core/math';
 import { computeOverall, depthAt, makePlayer, type Player, type Position } from '../data';
 import { rosterFor, teamOr, type NflTeam } from '../nfl';
 import { coachingOf, type Coaching } from './staff';
-import { MINIMUM_SHAPE, ROSTER_LIMIT, marketValue, marketYears } from './club';
+import { MINIMUM_SHAPE, ROSTER_LIMIT, fitToCap, marketValue, marketYears } from './club';
 import type { Franchise } from './types';
 
 /* ---------------------------------------------------------------------------
@@ -74,8 +74,14 @@ function buildRosterFor(
    * generator happened to put on them, and the trade desk's cap arithmetic is
    * then comparing your real contracts against their invented ones — which
    * refuses sound trades and waves through silly ones. */
-  return withAvailability(squad, fr.seed, teamId, year)
+  const priced = withAvailability(squad, fr.seed, teamId, year)
     .map((p) => ({ ...p, salary: marketValue(p), contractYears: marketYears(p) }));
+  /* AND THEIR BOOKS BALANCE, the same way yours do on day one. Priced at the
+   * open market a good club's thirty-four men come to more than the cap, which
+   * left every other club in the league permanently unable to take on a dollar
+   * — and the trade desk refusing sound deals with "cannot fit that salary". */
+  fitToCap(priced);
+  return priced;
 }
 
 /**

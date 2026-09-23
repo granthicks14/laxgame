@@ -54,6 +54,11 @@ export interface FootballGameOptions {
 
 type PauseTab = 'menu' | 'controls' | 'box';
 
+/** What the scoreboard says while the kicking units are out. */
+const KICK_LABEL = {
+  fieldGoal: 'Field goal', punt: 'Punt', kickoff: 'Kickoff', extraPoint: 'Extra point',
+} as const;
+
 export class FootballGameScreen implements Screen {
   el: HTMLElement;
 
@@ -426,6 +431,9 @@ export class FootballGameScreen implements Screen {
     if (on !== this.lastAuto) {
       this.lastAuto = on;
       this.elDefence.classList.toggle('is-off', !on);
+      /* Snap and Out do nothing while he is watching, so they go; the timeout
+       * stays, because a coach can call one on defence. */
+      this.elTouch.classList.toggle('is-watching', on);
       if (!on) this.closePlanCard();
     }
   }
@@ -548,10 +556,14 @@ export class FootballGameScreen implements Screen {
       return this.cardShell('GOING FOR TWO', 'From the two. One play.', groups.slice(0, 2));
     }
 
-    const body = special.length
-      ? [...groups, h('div', { class: 'callcard__group' },
-        h('div', { class: 'callcard__family', text: 'Special teams' }), ...special)]
-      : groups;
+    /* On fourth down the kick is the question, so it goes first; on any other
+     * down it is the exception (the end of a half) and waits at the bottom. */
+    const kicks = special.length
+      ? h('div', { class: 'callcard__group' },
+        h('div', { class: 'callcard__family', text: g.down >= 4 ? 'Fourth down — kick it or go for it' : 'Special teams' }),
+        ...special)
+      : null;
+    const body = !kicks ? groups : g.down >= 4 ? [kicks, ...groups] : [...groups, kicks];
 
     return this.cardShell(
       `${g.downText}`,
@@ -623,8 +635,12 @@ export class FootballGameScreen implements Screen {
     if (this.elPlayClock.textContent !== pc) this.elPlayClock.textContent = pc;
     this.elPlayClock.classList.toggle('is-late', g.phase === 'presnap' && g.playClock < 6);
 
-    const down = g.kickKind !== 'none' ? 'Special teams' : g.downText;
-    if (this.elDown.textContent !== down) this.elDown.textContent = down;
+    const down = g.kickKind !== 'none' ? KICK_LABEL[g.kickKind] : g.downText;
+    if (this.elDown.textContent !== down) {
+      this.elDown.textContent = down;
+      // "4th & Goal" and "Field goal" are wider than the column on a phone.
+      this.elDown.classList.toggle('is-long', down.length > 8);
+    }
     const spot = `${g.possession === g.humanSide ? 'Ball on' : 'Their ball,'} ${g.spot}`;
     if (this.elSpot.textContent !== spot) this.elSpot.textContent = spot;
 
@@ -650,6 +666,8 @@ export class FootballGameScreen implements Screen {
     if (on !== this.lastKickOn) {
       this.lastKickOn = on;
       this.elKick.classList.toggle('is-off', !on);
+      // The strip is the button; the snap cluster under it would only compete.
+      this.elTouch.classList.toggle('is-kicking', on);
     }
     if (!m) return;
     const pct = (n: number): string => `${(n * 100).toFixed(1)}%`;

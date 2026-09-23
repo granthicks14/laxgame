@@ -203,8 +203,12 @@ export class OffseasonScreen implements Screen {
 
   private contracts(): HTMLElement[] {
     const fr = this.fr;
+    /* WORTH FIRST, which is not the same as highest number first — see the
+     * free-agent list. A punter reading eighty-eight is not the first contract
+     * a front office looks at. */
     const expiring = fr.roster.filter((p) => p.contractYears <= 0)
-      .sort((a, b) => b.overall - a.overall);
+      .sort((a, b) => (b.overall - starterBar(b.pos)) - (a.overall - starterBar(a.pos))
+        || marketValue(b) - marketValue(a));
 
     return [
       panel('Cap',

@@ -51,8 +51,13 @@ export class FacilitiesScreen implements Screen {
       tileGrid(
         tile('Funds', money(fr.funds), 'To spend'),
         tile('Support', String(fr.fanSupport), fanMood(fr.fanSupport)),
-        tile('Last year in', money(fr.lastRevenue || projected), 'Gate, TV, shirts'),
-        tile('Last year out', money(fr.lastExpenses || expensesFor(fr)), 'Staff and upkeep')),
+        /* A PROJECTION IS LABELLED AS ONE. In a franchise's first year there
+         * is no last year, and a number that says "last year" when it means
+         * "probably" is a number nobody can trust afterwards. */
+        tile(fr.lastRevenue ? 'Last year in' : 'Income (projected)',
+          money(fr.lastRevenue || projected), 'Gate, TV, shirts'),
+        tile(fr.lastExpenses ? 'Last year out' : 'Costs (projected)',
+          money(fr.lastExpenses || expensesFor(fr)), 'Staff and upkeep')),
 
       panel('The books',
         kv('Market', `${team.city} — ${['tiny', 'small', 'fair', 'good', 'big'][team.market - 1]}`),

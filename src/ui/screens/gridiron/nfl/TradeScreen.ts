@@ -5,10 +5,9 @@ import { teamOr } from '../../../../sports/football/nfl';
 import type { Player } from '../../../../sports/football/data';
 import {
   assetLabel, assetValue, clubLine as clubSummary, evaluateTrade, everyOtherClub,
-  executeTrade, playerValue, theirPicks, tradeBlock,
+  executeTrade, playerValue, shortAfter, theirPicks, tradeBlock,
 } from '../../../../sports/football/franchise/trades';
 import { myPicks } from '../../../../sports/football/franchise/draft';
-import { canCut } from '../../../../sports/football/franchise/season';
 import { push } from '../../../../sports/football/franchise/news';
 import type { Franchise, TradeAsset } from '../../../../sports/football/franchise/types';
 import { clubLine, money, playerRow, teamName } from './parts';
@@ -145,26 +144,27 @@ export class TradeDeskScreen implements Screen {
       panel(`${teamOr(this.withId).name} — who they would move`,
         ...theirRoster.slice(0, 16).map((p) => this.theirRow(p)),
         h('div', { class: 'eyebrow', style: 'margin-top:8px', text: 'Their picks' }),
-        ...theirPicks(fr, this.withId).map((a) => h('button', {
-          class: `btn btn--sm${this.has(this.get, a) ? ' btn--primary' : ''}`,
-          text: `${assetLabel(fr, a, this.withId)} — worth ${assetValue(fr, a, this.withId)}`,
-          on: { click: () => this.toggle('get', a) },
-        }))),
+        h('div', { class: 'pick-grid' },
+          ...theirPicks(fr, this.withId).map((a) => this.pickChip('get', a, this.withId)))),
 
       panel('Your side',
         ...mine.slice(0, 20).map((p) => this.myRow(p)),
         h('div', { class: 'eyebrow', style: 'margin-top:8px', text: 'Your picks' }),
-        ...[...myPicks(fr), ...myPicks(fr, fr.year + 1)].map((pick) => {
-          const a: TradeAsset = {
+        h('div', { class: 'pick-grid' },
+          ...[...myPicks(fr), ...myPicks(fr, fr.year + 1)].map((pick) => this.pickChip('give', {
             kind: 'pick', year: pick.year, round: pick.round, fromId: pick.fromId,
-          };
-          return h('button', {
-            class: `btn btn--sm${this.has(this.give, a) ? ' btn--primary' : ''}`,
-            text: `${assetLabel(fr, a, fr.teamId)} — worth ${assetValue(fr, a, fr.teamId)}`,
-            on: { click: () => this.toggle('give', a) },
-          });
-        })),
+          }, fr.teamId)))),
     );
+  }
+
+  private pickChip(side: 'give' | 'get', a: TradeAsset, owner: string): HTMLElement {
+    const on = this.has(side === 'give' ? this.give : this.get, a);
+    return h('button', {
+      class: `pick-chip${on ? ' is-on' : ''}`,
+      on: { click: () => this.toggle(side, a) },
+    },
+    h('span', { class: 'pick-chip__label', text: assetLabel(this.fr, a, owner) }),
+    h('span', { class: 'pick-chip__value', text: `value ${assetValue(this.fr, a, owner)}` }));
   }
 
   private chip(side: 'give' | 'get', a: TradeAsset, owner: string): HTMLElement {
@@ -179,7 +179,7 @@ export class TradeDeskScreen implements Screen {
     const a: TradeAsset = { kind: 'player', id: p.id };
     const on = this.has(this.get, a);
     return playerRow(p, {
-      note: `${p.age} · ${money(p.salary)} · worth ${playerValue(p)}`,
+      note: `${p.age} · ${money(p.salary)} · value ${playerValue(p)}`,
       right: on ? '✓' : String(p.overall),
       onClick: () => this.toggle('get', a),
     });
@@ -188,11 +188,15 @@ export class TradeDeskScreen implements Screen {
   private myRow(p: Player): HTMLElement {
     const a: TradeAsset = { kind: 'player', id: p.id };
     const on = this.has(this.give, a);
-    const legal = canCut(this.fr, p);
+    /* LEGAL WITH EVERYTHING ALREADY ON THE TABLE, so a lineman can go the
+     * moment a lineman is coming back. */
+    const legal = on || !shortAfter(this.fr, {
+      withId: this.withId, give: [...this.give, a], get: this.get,
+    });
     return playerRow(p, {
       note: legal
-        ? `${p.age} · ${money(p.salary)} · worth ${playerValue(p)}`
-        : `Cannot move — you would be short at ${p.pos}`,
+        ? `${p.age} · ${money(p.salary)} · value ${playerValue(p)}`
+        : `Add a ${p.pos} from their side first — you would be short`,
       right: on ? '✓' : String(p.overall),
       onClick: legal ? () => this.toggle('give', a) : undefined,
     });

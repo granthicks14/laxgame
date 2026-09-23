@@ -1660,6 +1660,7 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
   position: absolute;
   left: 50%;
   bottom: calc(var(--safe-b) + 40px);
+  transform: translateX(-50%);
   z-index: 5;
   pointer-events: none;
   max-width: min(92vw, 430px);
@@ -2609,7 +2610,11 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
   text-transform: uppercase;
   color: var(--accent);
   white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.fb-down.is-long { font-size: 11px; letter-spacing: 0.03em; }
 .fb-spot {
   font-family: var(--display);
   font-size: 9px;
@@ -2648,6 +2653,7 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
   position: absolute;
   left: 50%;
   bottom: calc(var(--safe-b) + 40px);
+  transform: translateX(-50%);
   z-index: 5;
   pointer-events: none;
   max-width: min(92vw, 430px);
@@ -2662,7 +2668,9 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
   border: 1px solid var(--line);
 }
 .fb-ticker:empty { display: none; }
-.game.is-touch .fb-ticker { bottom: calc(var(--safe-b) + 238px); max-width: 74vw; }
+/* Above the timeout pill, never on it: the thumb cluster owns the bottom right. */
+.game.is-touch .fb-ticker { bottom: calc(var(--safe-b) + 292px); max-width: 74vw; }
+.touch.is-watching .tbtns, .touch.is-kicking .tbtns { display: none; }
 
 /* --- the play call ------------------------------------------------------
  * The one screen in the whole hub that a player will see four hundred times in
@@ -2847,8 +2855,11 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
 
 /* A rating with a bar beside it, so a club card is comparable at a glance
    rather than being five numbers somebody has to hold in their head. */
-.meter { display: grid; grid-template-columns: 84px 1fr 28px; align-items: center; gap: 8px; }
-.meter__label { color: var(--muted); }
+/* The label column is sized for the longest thing anybody puts in it —
+   "QB development", "Decision making" — rather than for "Speed". At 84px the
+   long ones ran straight into their own bars. */
+.meter { display: grid; grid-template-columns: minmax(96px, 34%) 1fr 28px; align-items: center; gap: 8px; }
+.meter__label { color: var(--muted); font-size: 12px; line-height: 1.2; overflow-wrap: anywhere; }
 .meter__track { height: 7px; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--line); }
 .meter__fill { height: 100%; background: var(--accent); }
 .meter__num { font-family: var(--mono); font-size: 12px; text-align: right; color: var(--text-2); }
@@ -3010,7 +3021,7 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
   gap: 6px;
   padding: 8px;
   border-radius: 14px;
-  background: rgba(10, 13, 20, 0.95);
+  background: #0a0d14;
   border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
   z-index: 7;
@@ -3306,3 +3317,39 @@ tr[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offs
   .field-row:has(> .seg) { flex-direction: column; align-items: stretch; gap: 8px; }
   .field-row > .seg { width: 100%; }
 }
+
+/* Draft picks on the trade desk: small, two to a row, selectable. */
+.pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.pick-chip {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 48px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pick-chip.is-on { border-color: var(--accent); background: rgba(255, 255, 255, 0.08); }
+.pick-chip__label { font-size: 13px; }
+.pick-chip__value { font-size: 11px; color: var(--muted); }
+
+/* A club you can pick: an edge, room to press, and a lit state once pressed. */
+.club-line--pick {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+}
+.club-line--pick:hover { background: rgba(255, 255, 255, 0.05); }
+.club-line--pick.is-on { border-color: var(--accent); background: rgba(255, 255, 255, 0.07); }
+.club-line--pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* On a keyboard the ticker sits low; lift it clear of the defensive strip. */
+.game:not(.is-touch):has(.fb-defence:not(.is-off)) .fb-ticker { bottom: calc(var(--safe-b) + 72px); }

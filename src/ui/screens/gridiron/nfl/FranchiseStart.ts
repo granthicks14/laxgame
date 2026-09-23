@@ -137,15 +137,24 @@ export class FranchiseStartScreen implements Screen {
   }
 
   private paintList(): void {
-    const groups = divisionsIn(this.conference).map((divisionId) => h('div', { class: 'stack', style: 'gap:4px' },
+    /* EACH CLUB LOOKS LIKE SOMETHING YOU CAN PRESS, and the one you pressed
+     * stays lit. The first version was a column of plain text with no edge and
+     * no selected state, and the only sign anything had happened was a line
+     * sixteen clubs further down the screen. */
+    const groups = divisionsIn(this.conference).map((divisionId) => h('div', { class: 'stack', style: 'gap:6px' },
       h('div', { class: 'eyebrow', text: divisionId }),
-      ...teamsInDivision(divisionId).map((t) => clubLine(
-        t.id,
-        `${t.city} ${t.name}`,
-        `${STRENGTH[t.prestige]}`,
-        '',
-        () => this.choose(t.id),
-      ))));
+      ...teamsInDivision(divisionId).map((t) => {
+        const line = clubLine(
+          t.id,
+          `${t.city} ${t.name}`,
+          `${STRENGTH[t.prestige]}`,
+          t.id === this.teamId ? '✓' : '',
+          () => this.choose(t.id),
+        );
+        line.classList.add('club-line--pick');
+        if (t.id === this.teamId) line.classList.add('is-on');
+        return line;
+      })));
     this.list.replaceChildren(...groups);
   }
 
@@ -157,6 +166,8 @@ export class FranchiseStartScreen implements Screen {
       h('span', { text: ` ${team.city} ${team.name} — ${team.divisionId}. ${STRENGTH[team.prestige]}` }),
     );
     this.startBtn.disabled = false;
+    this.startBtn.textContent = `Take the job — ${team.name}`;
+    this.paintList();
     this.startBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 

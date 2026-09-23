@@ -329,7 +329,12 @@ console.log('\nTHE TRADE DESK\n');
   });
   check('nobody accepts an obviously terrible trade', !robbery.accepted, robbery.reason);
   check('and the refusal is about value, not paperwork',
-    !robbery.reason.includes('cap'), robbery.reason);
+    !/cap|salary|enough at/.test(robbery.reason), robbery.reason);
+  /* EVERY CLUB IN THE LEAGUE HAS ROOM TO DO BUSINESS. */
+  const broke = TEAMS.filter((t) => t.id !== desk.teamId)
+    .filter((t) => capUsed(rosterOf(desk, t.id, desk.year)) > SALARY_CAP * 0.95);
+  check('no other club is jammed against the cap', broke.length === 0,
+    broke.map((t) => t.abbr).join(' ') || 'all have room');
 
   const fair = evaluateTrade(desk, {
     withId: other.id,
@@ -337,6 +342,24 @@ console.log('\nTHE TRADE DESK\n');
     get: [{ kind: 'player', id: theirBest.id }],
   });
   console.log(`  star-for-star: ${fair.accepted ? 'accepted' : 'refused'} (${fair.reason}, margin ${fair.margin})`);
+  /* AND A SOUND DEAL GOES THROUGH. A trade desk that refuses everything is a
+   * trade desk nobody uses, which is the same as not having one. */
+  {
+    const give = [...desk.roster].sort((a, b) => playerValue(b) - playerValue(a))
+      .find((p) => desk.roster.filter((x) => x.pos === p.pos).length > 3);
+    const want = give
+      ? theirs.filter((p) => p.pos === give.pos && playerValue(p) < playerValue(give) * 0.7)[0]
+      : undefined;
+    if (give && want) {
+      const deal = evaluateTrade(desk, {
+        withId: other.id,
+        give: [{ kind: 'player', id: give.id }],
+        get: [{ kind: 'player', id: want.id }],
+      });
+      check('a sound deal is accepted', deal.accepted,
+        `${give.pos} ${playerValue(give)} for ${playerValue(want)}: ${deal.reason}`);
+    }
+  }
   check('a lopsided ask in your favour is refused',
     !evaluateTrade(desk, {
       withId: other.id,

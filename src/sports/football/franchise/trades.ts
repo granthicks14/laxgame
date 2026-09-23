@@ -3,7 +3,7 @@ import { clamp } from '../../../core/math';
 import { POSITIONS, depthAt, type Player, type Position } from '../data';
 import { TEAMS, teamOr } from '../nfl';
 import { DIFFICULTIES } from '../tuning';
-import { SALARY_CAP, capUsed, marketValue, starterBar } from './club';
+import { MINIMUM_SHAPE, SALARY_CAP, capUsed, marketValue, starterBar } from './club';
 import { coachingOf } from './staff';
 import { rosterOf } from './world';
 import { DRAFT_ROUNDS } from './draft';
@@ -76,8 +76,9 @@ export function assetValue(fr: Franchise, a: TradeAsset, ownerId: string): numbe
 
 export function assetLabel(fr: Franchise, a: TradeAsset, ownerId: string): string {
   if (a.kind === 'pick') {
-    const who = a.fromId === fr.teamId ? 'your' : `${teamOr(a.fromId).abbr}`;
-    return `${a.year} round ${a.round} (${who})`;
+    const who = a.fromId === fr.teamId ? 'own' : `${teamOr(a.fromId).abbr}`;
+    const when = a.year === fr.year ? 'This year' : a.year === fr.year + 1 ? 'Next year' : `Year ${a.year}`;
+    return `${when} R${a.round} (${who})`;
   }
   const squad = ownerId === fr.teamId ? fr.roster : rosterOf(fr, ownerId, fr.year);
   const p = squad.find((x) => x.id === a.id);
@@ -163,6 +164,10 @@ export function evaluateTrade(fr: Franchise, prop: TradeProposal): TradeVerdict 
     + prop.get.filter((a) => a.kind === 'player').length > 40) {
     return { accepted: false, reason: 'That would leave you with too many players.', margin };
   }
+  const thin = shortAfter(fr, prop);
+  if (thin) {
+    return { accepted: false, reason: `That would leave you without enough at ${thin}.`, margin };
+  }
 
   if (margin >= 0) {
     return {
@@ -181,6 +186,34 @@ export function evaluateTrade(fr: Franchise, prop: TradeProposal): TradeVerdict 
         : `${them.name} are close, but they want a bit more.`,
     margin,
   };
+}
+
+/**
+ * WOULD THIS LEAVE YOU UNABLE TO LINE UP?
+ *
+ * Counted with BOTH sides of the deal, which is the point: the first version
+ * refused to let you move a lineman at all when you carried the minimum, even
+ * in a trade that sent one straight back. Returns the position you would be
+ * short at, or null.
+ */
+export function shortAfter(fr: Franchise, prop: TradeProposal): Position | null {
+  const theirs = rosterOf(fr, prop.withId, fr.year);
+  const counts = new Map<Position, number>();
+  for (const p of fr.roster) counts.set(p.pos, (counts.get(p.pos) ?? 0) + 1);
+  for (const a of prop.give) {
+    if (a.kind !== 'player') continue;
+    const p = fr.roster.find((x) => x.id === a.id);
+    if (p) counts.set(p.pos, (counts.get(p.pos) ?? 0) - 1);
+  }
+  for (const a of prop.get) {
+    if (a.kind !== 'player') continue;
+    const p = theirs.find((x) => x.id === a.id);
+    if (p) counts.set(p.pos, (counts.get(p.pos) ?? 0) + 1);
+  }
+  for (const [pos, need] of Object.entries(MINIMUM_SHAPE) as [Position, number][]) {
+    if ((counts.get(pos) ?? 0) < need) return pos;
+  }
+  return null;
 }
 
 /** Do it. Assumes it has already been evaluated and accepted. */

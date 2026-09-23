@@ -87,7 +87,15 @@ function playGame(seed: number, key: DifficultyKey, tally: Tally): void {
     seed,
   });
 
-  g.events.on('catch', (e) => { tally.air += e.yards; });
+  g.events.on('catch', (e) => {
+    tally.air += e.yards;
+    /* ONLY AN ELIGIBLE RECEIVER CATCHES A PASS. The quick game once went
+     * nowhere because the ball was being "caught" by the guards it flew past. */
+    const man = g.players.find((p) => p.side === g.possession && g.nameOf(p) === e.by);
+    if (man && (!man.route || man.route.kind === 'block' || man.uid === g.ball.from)) {
+      problem(`${man.slot} caught a pass`);
+    }
+  });
   g.events.on('firstDown', () => { tally.firstDownEvents++; });
   let frames = 0;
   let lastPossession = g.possession;

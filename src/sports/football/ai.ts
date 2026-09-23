@@ -620,7 +620,13 @@ function coverZone(game: FootballGame, p: FieldPlayer, dt: number): void {
 
 /* ================================================================ quarterback */
 
-interface Read { p: FieldPlayer; score: number; sep: number; depth: number }
+interface Read {
+  p: FieldPlayer; score: number; sep: number;
+  /** Where he will be when the ball arrives, in yards past the line. */
+  depth: number;
+  /** Whether that is far enough down his route to be worth throwing to early. */
+  ran: boolean;
+}
 
 /**
  * PLAYING QUARTERBACK.
@@ -692,8 +698,12 @@ export function aiQuarterback(game: FootballGame, qb: FieldPlayer, dt: number): 
    * twice as far downfield as the sport does, which is what this did. */
   const bar = (r: Read): number => need * (r.depth > 12 ? 1 + (r.depth - 12) / 22
     : r.depth < 7 ? 0.62 : 0.85);
+  /* BUT ONLY ONCE HE HAS RUN THE ROUTE. Every receiver is "wide open" half a
+   * second after the snap, because the defence gives a cushion and nobody has
+   * gone anywhere yet — and throwing then is how the quick slant, the most called
+   * pass in the book, was being caught a yard and a half past the line. */
   const gift = reads[0];
-  if (gift && gift.sep >= bar(gift) + 4.2 && game.playTime > 0.55) {
+  if (gift && gift.sep >= bar(gift) + 4.2 && game.playTime > 0.55 && gift.ran) {
     game.throwTo(qb, gift.p);
     return;
   }
@@ -792,6 +802,10 @@ function readTheField(game: FootballGame, qb: FieldPlayer, decision: number): Re
    * progression follows in the order it was written. */
   const first = Math.min(game.firstRead, Math.max(0, ordered.length - 1));
   if (first > 0) ordered.unshift(...ordered.splice(first, 1));
+  /* A SCREEN IS READ SCREEN-FIRST, whatever the look. The go routes on it are
+   * there to clear the defence out, not to be thrown to. */
+  const screen = ordered.findIndex((r) => r.route?.kind === 'screen');
+  if (screen > 0) ordered.unshift(...ordered.splice(screen, 1));
   const canSee = Math.max(2, Math.round(2 + decision * 3.2));
   ordered.length = Math.min(ordered.length, canSee);
 
@@ -826,7 +840,10 @@ function readTheField(game: FootballGame, qb: FieldPlayer, decision: number): Re
     // The misjudgement. Two yards of error at 40 decision, a third of one at 95.
     const fog = (1 - decision) * 2.4;
     const sep = Math.max(0, sepAt + rng.gauss(0, fog));
-    const depth = (r.y - game.lineOfScrimmage) * dir;
+    const depth = (ry - game.lineOfScrimmage) * dir;
+    const planned = r.route?.depth ?? 0;
+    const ran = planned <= 3 || r.route?.kind === 'screen' || r.route?.kind === 'checkdown'
+      || depth >= planned * 0.75;
     const beyond = Math.max(0, throwDist - reach);
     /* A SCREEN IS THE PLAY, not an option on it. Without this the quarterback
      * looks past the back he was supposed to throw to and finds a go route
@@ -840,7 +857,7 @@ function readTheField(game: FootballGame, qb: FieldPlayer, decision: number): Re
      * another second to arrive. Charging the throw for its own flight time is
      * what stops an offence from living entirely on forty yard touchdowns, which
      * is what it did when every throw was judged against the same two yards. */
-    out.push({ p: r, score, sep: (sep - beyond * 1.5) / (1 + flight * 0.55), depth });
+    out.push({ p: r, score, sep: (sep - beyond * 1.5) / (1 + flight * 0.55), depth, ran });
   }
   // In progression order, not best-first: the caller walks it.
   return out;

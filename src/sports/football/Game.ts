@@ -1037,8 +1037,23 @@ export class FootballGame {
     for (const p of this.players) {
       const gap = dist2(b.x, b.y, p.x, p.y);
       if (p.side === this.possession) {
+        /* ONLY AN ELIGIBLE MAN CAN CATCH IT. A ball thrown past a guard is not
+         * his: without this the linemen standing in front of the passer caught
+         * one quick throw in four, a yard past the line, and the quick game
+         * went nowhere. */
+        if (p.uid === b.from || !p.route || p.route.kind === 'block') continue;
         if (gap < recGap) { recGap = gap; rec = p; }
-      } else if (gap < defGap) { defGap = gap; def = p; }
+        continue;
+      }
+      /* AND THE BALL GOES OVER THE LINE, NOT THROUGH IT. A quick throw is low
+       * the whole way, so a rusher it passes on the way out would otherwise get
+       * a contest on every one — the tipped ball already had its roll at the
+       * release. A man locked in a block cannot play it at all, and a lineman
+       * can only where it is coming down (a zone drop that sat in the window). */
+      if (p.engagedWith) continue;
+      const lineman = p.slot.startsWith('DE') || p.slot.startsWith('DT');
+      if (lineman && dist2(b.x, b.y, b.aimX, b.aimY) > 3.5) continue;
+      if (gap < defGap) { defGap = gap; def = p; }
     }
     if (!rec && (!def || defGap > FOOTBALL.catchRadius)) return;
 
@@ -1113,7 +1128,7 @@ export class FootballGame {
     if (def) {
       /* A TIGHT BALL THAT IS NOT CAUGHT IS SOMETIMES CAUGHT BY THE OTHER MAN.
        * Tuned against the real sport's two and a bit per cent of attempts. */
-      const pick = clamp(0.03 + def.data.attrs.coverage / 1200, 0.02, 0.14) * press;
+      const pick = clamp(0.015 + def.data.attrs.coverage / 1700, 0.012, 0.09) * press;
       if (this.rng.next() < pick) { this.intercept(def); return; }
       this.statFor(def).passesDefended++;
       this.incomplete('defended');
