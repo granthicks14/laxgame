@@ -287,18 +287,69 @@ export function computeOverall(pos: Position, attrs: Attrs): number {
 
 /* --------------------------------------------------------------- generation */
 
+/* ---------------------------------------------------------------- the names
+ *
+ * WIDE ENOUGH THAT A ROSTER IS THIRTY-FOUR DIFFERENT MEN. Thirty-two first
+ * names and thirty-two surnames made a thousand combinations for a league of
+ * eleven hundred players, and a box score read like a family reunion: three
+ * Callaways on one defence, two Ulrichs and two Zabalas on the other side.
+ *
+ * Deliberately ordinary, deliberately varied, and deliberately nobody: common
+ * given names and surnames from a spread of backgrounds, with no distinctive
+ * surname belonging to a well-known player anywhere in the list. Every name the
+ * game shows is a random pairing of these two lists and describes nobody.
+ */
 const FIRST = [
   'Marcus', 'Deshawn', 'Tyler', 'Jaylen', 'Cole', 'Elijah', 'Brayden', 'Xavier',
   'Amari', 'Dominic', 'Nate', 'Rashad', 'Owen', 'Silas', 'Trey', 'Kai',
   'Jonah', 'Damir', 'Connor', 'Isaiah', 'Reggie', 'Beau', 'Malik', 'Grant',
   'Tobias', 'Hank', 'Lorenzo', 'Deion', 'Bryce', 'Quinn', 'Ezra', 'Roman',
+  'Andre', 'Caleb', 'Darnell', 'Emmett', 'Felix', 'Gideon', 'Harlan', 'Ivan',
+  'Jalen', 'Kendrick', 'Landon', 'Mateo', 'Nolan', 'Omar', 'Preston', 'Quentin',
+  'Rafael', 'Sterling', 'Terrence', 'Uriah', 'Vince', 'Wesley', 'Xander', 'Yusuf',
+  'Zane', 'Ahmad', 'Brock', 'Cedric', 'Dante', 'Everett', 'Floyd', 'Garrison',
+  'Hector', 'Ismael', 'Jerome', 'Keenan', 'Luca', 'Mason', 'Nico', 'Otis',
+  'Paxton', 'Rodney', 'Santino', 'Tavion', 'Ulysses', 'Victor', 'Warren', 'Yosef',
+  'Abel', 'Bennett', 'Cyrus', 'Desmond', 'Elias', 'Finn', 'Gavin', 'Hollis',
+  'Idris', 'Jasper', 'Kobe', 'Levi', 'Micah', 'Nathaniel', 'Orlando', 'Percy',
+  'Rhett', 'Soren', 'Theo', 'Vaughn', 'Wyatt', 'Zeke', 'Aaron', 'Blake',
+  'Carson', 'Darius', 'Emeka', 'Fernando', 'Graham', 'Hudson', 'Jamal', 'Kieran',
+  'Lamont', 'Marco', 'Nasir', 'Oscar', 'Pierce', 'Reid', 'Samson', 'Tariq',
+  'Vernon', 'Wade', 'Zion', 'Alonzo', 'Boone', 'Chidi', 'Dorian', 'Easton',
 ];
 const LAST = [
   'Whitlock', 'Okafor', 'Brightman', 'Sandoval', 'Mbeki', 'Calloway', 'Ulrich',
   'Yeboah', 'Holloway', 'Jankowski', 'Vance', 'Ashworth', 'Nakamura', 'Prentice',
   'Quill', 'Zabala', 'Lindgren', 'Redfern', 'Castellanos', 'Achebe', 'Doyle',
   'Marchetti', 'Sowell', 'Braddock', 'Kowalski', 'Ferreira', 'Osei', 'Tranter',
-  'Delgado', 'Winslow', 'Bouchard', 'Halloran',
+  'Delgado', 'Winslow', 'Bouchard', 'Halloran', 'Ashdown', 'Blackmore', 'Cardwell',
+  'Dunmore', 'Eastwick', 'Fenmore', 'Glenister', 'Harrowby', 'Inchbold', 'Jolliffe',
+  'Kettering', 'Larkworth', 'Merriam', 'Norbury', 'Oakhurst', 'Pemberton', 'Quenby',
+  'Radleigh', 'Stonebridge', 'Thackery', 'Upcott', 'Vellacott', 'Wharton', 'Yardley',
+  'Adebayo', 'Birchall', 'Cavendish', 'Dewhurst', 'Ellwood', 'Farrant', 'Gladwell',
+  'Hartigan', 'Iredale', 'Jessop', 'Kilbride', 'Langridge', 'Maddox', 'Nettleton',
+  'Ogunleye', 'Pargeter', 'Rathbone', 'Sealy', 'Tolland', 'Umberto', 'Vosper',
+  'Wetherell', 'Yelland', 'Zanetti', 'Abara', 'Boswell', 'Coltrane', 'Darrow',
+  'Everly', 'Fairweather', 'Gorski', 'Hebden', 'Ilori', 'Jarrow', 'Kendrew',
+  'Lisowski', 'Mortlake', 'Nolder', 'Okonjo', 'Penhallow', 'Ridgewell', 'Scarrow',
+  'Treloar', 'Uzoma', 'Varga', 'Wickham', 'Yoxall', 'Zielinski', 'Ansell', 'Brisco',
+  'Cruickshank', 'Delvecchio', 'Emberton', 'Fogarty', 'Gethin', 'Hollister',
+  'Idowu', 'Jaworski', 'Kerrigan', 'Loxley', 'Mallinson', 'Nkemelu', 'Ormerod',
+  'Prothero', 'Rimmer', 'Sotomayor', 'Tennant', 'Uwakwe', 'Villiers', 'Wadsworth',
+  'Yagudin', 'Zaragoza', 'Allardyce', 'Bramhall', 'Corrigan', 'Duckworth',
+  'Eggleston', 'Fitzwilliam', 'Greaves', 'Honeycutt', 'Iorio', 'Juhasz', 'Kavanagh',
+  'Lombardo', 'Macaulay', 'Northam', 'Oduya', 'Pellegrini', 'Rushworth',
+  'Satterfield', 'Tremaine', 'Urquhart', 'Vanterpool', 'Wainwright', 'Yarwood',
+  'Zoltan', 'Amberly', 'Beckford', 'Colquhoun', 'Dimitrov', 'Enright', 'Farquhar',
+  'Gostling', 'Hucknall', 'Ikpeba', 'Jelinek', 'Keighley', 'Lanyon', 'Mercado',
+  'Nuttall', 'Ottaway', 'Pardoe', 'Quartermain', 'Roebuck', 'Sherwin', 'Tuckwell',
+  'Upfield', 'Valverde', 'Whitcombe', 'Ybarra', 'Zamorano', 'Aldridge', 'Bellweather',
+  'Chisholm', 'Dalgleish', 'Esterhuizen', 'Frobisher', 'Gallacher', 'Hemsworth',
+  'Ihejirika', 'Jagielka', 'Kinsella', 'Lavelle', 'Mansergh', 'Nwachukwu',
+  'Oldroyd', 'Pickavance', 'Rennison', 'Sadiku', 'Thistlewood', 'Ugwu', 'Varley',
+  'Wolstenholme', 'Yearwood', 'Zebedee', 'Arkwright', 'Bexley', 'Cheshire',
+  'Dransfield', 'Egerton', 'Fothergill', 'Grundy', 'Haverford', 'Illingworth',
+  'Jowett', 'Kitson', 'Lumley', 'Mottram', 'Nelmes', 'Osgood', 'Pilkington',
 ];
 
 /**
@@ -457,8 +508,13 @@ export function makePlayer(seed: string, opts: PlayerOptions): Player {
     /* HEADROOM SHRINKS WITH EXPERIENCE AND NEVER GOES NEGATIVE. A ceiling
      * below a floor is a number that can only confuse a scouting screen, and
      * a nine-year professional had one. */
-    potential: Math.min(99, overall
-      + Math.round(rng.range(0, 1) ** 1.7 * Math.max(0, 24 - years * 3.4))),
+    /* AND IT IS DRIVEN BY AGE, because headroom is: a twenty-two-year-old in
+     * his first season has most of his football in front of him and a
+     * twenty-nine-year-old in his eighth has none. Keyed on years alone, a
+     * roster of young professionals came out with two or three points of room
+     * each and nobody on it ever visibly improved. */
+    potential: Math.min(99, overall + Math.round(rng.range(0, 1) ** 1.1
+      * Math.max(0, (28 - (opts.age ?? 17 + years)) * 3.2))),
     work: rng.int(25, 99),
     personality: PERSONALITIES[rng.int(0, PERSONALITIES.length - 1)],
     morale: rng.int(55, 80),
@@ -523,9 +579,13 @@ export interface RosterOptions {
  * men who are still good enough.
  */
 function ageFor(rng: Rng, range: [number, number]): number {
+  /* CENTRED ON TWENTY-SIX WITH A REAL TAIL. The first version skewed so young
+   * that a whole squad could come out with one man over twenty-nine, which is
+   * a squad with no decline stage in it and nothing for the cycle to replace.
+   * About one in eight here is thirty or older, which is what a professional
+   * roster actually carries. */
   const [min, max] = range;
-  const t = (rng.next() + rng.next() + rng.next()) / 3;
-  return Math.round(min + Math.pow(t, 1.35) * (max - min));
+  return Math.round(Math.max(min, Math.min(max, 26.2 + rng.gauss(0, 3.3))));
 }
 
 export function buildRoster(seed: string, opts: RosterOptions): Player[] {
@@ -540,7 +600,7 @@ export function buildRoster(seed: string, opts: RosterOptions): Player[] {
        * a starter and what makes an injury or a graduation hurt. */
       const depth = i / Math.max(1, want - 1);
       const par = opts.par + spread * (0.55 - depth) - (opts.hole ?? 0);
-      const age = ageFor(rng, opts.ages ?? [22, 34]);
+      const age = ageFor(rng, opts.ages ?? [21, 35]);
       out.push(makePlayer(`${seed}:${pos}:${i}`, {
         pos,
         par: Math.max(ATTR_MIN + 6, par),
@@ -548,6 +608,22 @@ export function buildRoster(seed: string, opts: RosterOptions): Player[] {
         years: Math.max(0, age - 21),
       }));
     }
+  }
+  /* NO TWO MEN ON ONE ROSTER SHARE A SURNAME. Random pairs from even a few
+   * hundred surnames collide two or three times a squad, and a box score with
+   * two Kinsellas in the secondary makes the reader stop and work out which is
+   * which. A repeat is walked along the list to the next free name — from its
+   * own stream, so no attribute on the roster moves. */
+  const taken = new Set<string>();
+  for (const p of out) {
+    let last = p.last;
+    let step = 0;
+    while (taken.has(last) && step < LAST.length) {
+      step += 1;
+      last = LAST[(LAST.indexOf(p.last) + step * 37) % LAST.length];
+    }
+    p.last = last;
+    taken.add(last);
   }
   // Best first within each position, so the depth chart reads itself.
   out.sort((a, b) => POSITIONS.indexOf(a.pos) - POSITIONS.indexOf(b.pos)

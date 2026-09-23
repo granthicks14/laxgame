@@ -121,6 +121,17 @@ export class FranchiseHub implements Screen {
     const confPlace = conf.findIndex((s) => s.teamId === fr.teamId) + 1;
     const seeds = seedsFor(fr.standings, fr.schedule, team.conference);
     const seed = seeds.find((s) => s.teamId === fr.teamId);
+    /* NO PLAYOFF PICTURE BEFORE THERE IS A SEASON. With nothing played every
+     * club is 0-0 and the tiebreakers fall through to alphabetical order, which
+     * is how week one used to open with "1st seed — first-round bye". */
+    const played = rec.wins + rec.losses + rec.ties;
+    const picture = fr.stage === 'offseason'
+      ? null
+      : played < 3
+        ? (played === 0 ? 'The season has not started' : `${played} played — too early to seed`)
+        : seed
+          ? `${ordinal(seed.seed)} seed${seed.bye ? ' — holding the bye' : ''} on today\u2019s numbers`
+          : `${ordinal(confPlace)} in the ${team.conference} — outside the picture`;
 
     return h('div', { class: 'career-head' },
       h('div', {
@@ -128,13 +139,11 @@ export class FranchiseHub implements Screen {
         text: `${rec.wins}-${rec.losses}${rec.ties ? `-${rec.ties}` : ''}`,
       }),
       h('div', { class: 'career-head__bits' },
-        h('div', { class: 'small', text: place > 0 ? `${ordinal(place)} in the ${team.division}` : '' }),
         h('div', {
           class: 'small',
-          text: seed
-            ? `${ordinal(seed.seed)} seed${seed.bye ? ' — first-round bye' : ''}`
-            : `${ordinal(confPlace)} in the ${team.conference} — outside the picture`,
+          text: place > 0 && played > 0 ? `${ordinal(place)} in the ${team.division}` : team.divisionId,
         }),
+        picture ? h('div', { class: 'small', text: picture }) : null,
         h('div', { class: 'small', text: `Team rating ${teamRatings(gameRoster(fr)).overall}` }),
         fr.finish ? h('div', { class: 'small', text: fr.finish }) : null));
   }
@@ -334,17 +343,39 @@ export class FranchiseHub implements Screen {
 
   private linksPanel(): HTMLElement {
     const fr = this.fr;
-    const go = (make: (a: App) => Screen) => () => this.app.push(make);
-    const link = (label: string, make: (a: App) => Screen): HTMLElement =>
-      h('button', { class: 'btn', text: label, on: { click: go(make) } });
+    const team = teamOr(fr.teamId);
+    const hurt = injuredList(fr).filter((p) => (p.injury?.weeks ?? 0) >= 1).length;
+    const table = divisionTable(fr.standings, fr.schedule, team.divisionId);
+    const place = table.findIndex((s) => s.teamId === fr.teamId) + 1;
+    const played = seasonRecord(fr).wins + seasonRecord(fr).losses + seasonRecord(fr).ties;
+
+    /* SIX DOORS, EACH WITH A REASON TO OPEN IT. A label alone says what a
+     * screen is; a live line under it says whether you need to go there right
+     * now — two men hurt, eleven million in the bank — which is the difference
+     * between a menu and a dashboard somebody actually reads. */
+    const link = (label: string, note: string, make: (a: App) => Screen): HTMLElement =>
+      h('button', {
+        class: 'fo-link',
+        on: { click: () => this.app.push(make) },
+      },
+      h('span', { class: 'fo-link__label', text: label }),
+      h('span', { class: 'fo-link__note', text: note }));
+
     return panel('The front office',
-      h('div', { class: 'stack' },
-        link('Roster and depth', (a) => new RosterScreen(a, fr, () => this.save())),
-        link('League, standings and bracket', (a) => new LeagueScreen(a, fr)),
-        link('Coaching staff', (a) => new StaffScreen(a, fr, () => this.save())),
-        link('Facilities and finances', (a) => new FacilitiesScreen(a, fr, () => this.save())),
-        link('Trade desk', (a) => new TradeScreen(a, fr, () => this.save())),
-        link('Franchise history', (a) => new HistoryScreen(a, fr))));
+      h('div', { class: 'fo-grid' },
+        link('Roster', `${fr.roster.length} players${hurt ? ` · ${hurt} hurt` : ''}`,
+          (a) => new RosterScreen(a, fr, () => this.save())),
+        link('League', played > 0 && place > 0 ? `${ordinal(place)} in the ${team.division}` : 'Standings and bracket',
+          (a) => new LeagueScreen(a, fr)),
+        link('Staff', `Head coach ${fr.staff.HC.overall}`,
+          (a) => new StaffScreen(a, fr, () => this.save())),
+        link('Facilities', `${money(fr.funds)} to spend`,
+          (a) => new FacilitiesScreen(a, fr, () => this.save())),
+        link('Trade desk', `${money(Math.max(0, SALARY_CAP - capUsed(fr.roster)))} cap room`,
+          (a) => new TradeScreen(a, fr, () => this.save())),
+        link('History', fr.history.length
+          ? `${fr.history.length} ${fr.history.length === 1 ? 'season' : 'seasons'}`
+          : 'Year one', (a) => new HistoryScreen(a, fr))));
   }
 
   /* ----------------------------------------------------------- the offseason */

@@ -1,15 +1,17 @@
 import { h } from '../../../dom';
 import type { App, Screen } from '../../../App';
-import { panel, screenEl } from '../../../components';
+import { panel, screenEl, segmented } from '../../../components';
 import { teamOr } from '../../../../sports/football/nfl';
-import type { Player } from '../../../../sports/football/data';
+import { POSITIONS, type Player, type Position } from '../../../../sports/football/data';
 import {
   OFFSEASON_LABEL, OFFSEASON_STEPS, type FreeAgent, type Franchise, type OffseasonStep,
 } from '../../../../sports/football/franchise/types';
 import {
   advanceOffseason, startNextSeason,
 } from '../../../../sports/football/franchise/season';
-import { SALARY_CAP, capRoom, capUsed, marketValue } from '../../../../sports/football/franchise/club';
+import {
+  SALARY_CAP, capRoom, capUsed, marketValue, starterBar,
+} from '../../../../sports/football/franchise/club';
 import {
   FA_WAVES, chanceOf, offerTo, reSign, reSignAsk, resolveWave, suggestedOffer, withdrawOffer,
 } from '../../../../sports/football/franchise/freeAgency';
@@ -47,6 +49,8 @@ export class OffseasonScreen implements Screen {
   private onChange: () => void;
   private body = h('div', { class: 'wrapper stack' });
   private head = h('div', { class: 'topbar' });
+  /** Which positions the market list shows. 'need' is the default for a reason. */
+  private faFilter: Position | 'ALL' | 'NEED' = 'NEED';
 
   constructor(app: App, fr: Franchise, onChange: () => void) {
     this.app = app;
@@ -258,8 +262,21 @@ export class OffseasonScreen implements Screen {
 
   private freeAgency(): HTMLElement[] {
     const fr = this.fr;
+    /* SORTED BY HOW GOOD HE IS FOR HIS POSITION, not by the raw number. A
+     * kicker reading eighty-four is an ordinary kicker; a corner reading
+     * eighty-four is a starter. A list sorted on the number puts the kicker
+     * first and makes the market look like it is full of specialists. */
+    const worth = (f: FreeAgent): number =>
+      f.player.overall - starterBar(f.player.pos) + needFor(fr.roster, f.player.pos) * 10;
     const open = fr.freeAgents.filter((f) => !f.signedBy)
-      .sort((a, b) => b.player.overall - a.player.overall);
+      .sort((a, b) => worth(b) - worth(a));
+    let shown = open.filter((f) => (this.faFilter === 'ALL' ? true
+      : this.faFilter === 'NEED' ? needFor(fr.roster, f.player.pos) > 0.3 || f.offer
+        : f.player.pos === this.faFilter));
+    /* A SQUAD WITH NO HOLES STILL SHOPS. "Needs" on a roster that has none is
+     * an empty list with a button above it, so it falls back to everybody. */
+    const noNeeds = this.faFilter === 'NEED' && !shown.length && open.length > 0;
+    if (noNeeds) shown = open;
     const gone = fr.freeAgents.filter((f) => f.signedBy);
     const committed = open.filter((f) => f.offer).reduce((s, f) => s + (f.offer?.salary ?? 0), 0);
 
@@ -293,9 +310,20 @@ export class OffseasonScreen implements Screen {
         })),
 
       panel('On the market',
-        ...(open.length
-          ? open.slice(0, 24).map((fa) => this.faRow(fa))
-          : [h('div', { class: 'small', text: 'The market is empty.' })])),
+        segmented<Position | 'ALL' | 'NEED'>([
+          { value: 'NEED', label: 'Needs' },
+          { value: 'ALL', label: 'All' },
+          ...POSITIONS.map((p) => ({ value: p, label: p })),
+        ], this.faFilter, (v) => { this.faFilter = v; this.paint(); }, true),
+        noNeeds ? h('div', { class: 'tiny', text: 'No obvious holes — showing everybody.' }) : null,
+        ...(shown.length
+          ? shown.slice(0, 30).map((fa) => this.faRow(fa))
+          : [h('div', {
+            class: 'small',
+            text: open.length
+              ? 'Nobody here fits that. Try All.'
+              : 'The market is empty.',
+          })])),
 
       gone.length
         ? panel('Signed elsewhere',

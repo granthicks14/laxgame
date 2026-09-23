@@ -31,13 +31,17 @@ function rowsFor(game: FootballGame, side: Side): Row[] {
 
 function table(title: string, head: string[], body: (string | number)[][]): HTMLElement | null {
   if (!body.length) return null;
+  /* `.box` is the FRAME and `.box__table` is the table, which is how the other
+   * two sports' box scores are built. The first version put the frame's class
+   * on the table itself — so it shrank to its content, the headers were
+   * unstyled and the columns drifted out from under them on a phone. */
   return h('div', { class: 'box-sec' },
     h('div', { class: 'box-sec__title', text: title }),
-    h('table', { class: 'box' },
-      h('thead', {}, h('tr', {}, ...head.map((c, i) =>
-        h('th', { class: i === 0 ? '' : 'num', text: c })))),
-      h('tbody', {}, ...body.map((r) => h('tr', {}, ...r.map((c, i) =>
-        h('td', { class: i === 0 ? '' : 'num', text: String(c) })))))));
+    h('div', { class: 'box' },
+      h('table', { class: 'box__table' },
+        h('thead', {}, h('tr', {}, ...head.map((c) => h('th', { text: c })))),
+        h('tbody', {}, ...body.map((r) => h('tr', {}, ...r.map((c, i) =>
+          h('td', { class: i === 0 ? 'box__who' : '', text: String(c) }))))))));
 }
 
 function sideBlock(game: FootballGame, side: Side, label: string): HTMLElement {
@@ -87,19 +91,20 @@ export function footballBoxScore(game: FootballGame): HTMLElement {
     const b = game.box[side];
     const team = side === 'home' ? game.cfg.home.team : game.cfg.away.team;
     return h('tr', {},
-      h('td', { text: team.abbr }),
-      ...b.byQuarter.map((q) => h('td', { class: 'num', text: String(q) })),
-      h('td', { class: 'num strong', text: String(game.score[side]) }));
+      h('td', { class: 'box__who', text: team.abbr }),
+      ...b.byQuarter.map((q) => h('td', { text: String(q) })),
+      h('td', { class: 'strong', text: String(game.score[side]) }));
   };
 
   return h('div', { class: 'stack' },
-    h('table', { class: 'box box--linescore' },
-      h('thead', {}, h('tr', {},
-        h('th', { text: '' }),
-        h('th', { class: 'num', text: '1' }), h('th', { class: 'num', text: '2' }),
-        h('th', { class: 'num', text: '3' }), h('th', { class: 'num', text: '4' }),
-        h('th', { class: 'num', text: 'T' }))),
-      h('tbody', {}, line('away'), line('home'))),
+    h('div', { class: 'box' },
+      h('table', { class: 'box__table' },
+        h('thead', {}, h('tr', {},
+          h('th', { text: '' }),
+          h('th', { text: '1' }), h('th', { text: '2' }),
+          h('th', { text: '3' }), h('th', { text: '4' }),
+          h('th', { text: 'T' }))),
+        h('tbody', {}, line('away'), line('home')))),
     sideBlock(game, 'away', game.cfg.away.team.name),
     sideBlock(game, 'home', game.cfg.home.team.name));
 }

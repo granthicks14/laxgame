@@ -58,7 +58,8 @@
     "hoops-buzzer": "esbuild src/dev/hoopsBuzzer.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/hoops-buzzer.mjs --log-level=warning && node node_modules/.cache/hoops-buzzer.mjs",
     "gridiron": "esbuild src/dev/gridiron.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/gridiron.mjs --log-level=warning && node node_modules/.cache/gridiron.mjs",
     "test:gridiron": "node scripts/gridiron-flow.mjs",
-    "gridiron-nfl": "esbuild src/dev/gridironNfl.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/gridiron-nfl.mjs --log-level=warning && node node_modules/.cache/gridiron-nfl.mjs"
+    "gridiron-nfl": "esbuild src/dev/gridironNfl.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/gridiron-nfl.mjs --log-level=warning && node node_modules/.cache/gridiron-nfl.mjs",
+    "tour": "node scripts/tour.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

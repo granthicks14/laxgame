@@ -84,7 +84,7 @@ for (const [device, width, height] of SIZES) {
 
   // Choosing a difficulty is its own screen now, and it carries a lot of text
   // and a wide table — exactly the kind of screen this suite exists to catch.
-  await click(/Choose your difficulty/);
+  await click(/Choose your difficulty|how hard a career/);
   await page.waitForTimeout(420);
   await measure(page, `${device} · Difficulty picker`);
   await click(/^Impossible Challenge/i);

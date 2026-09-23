@@ -307,7 +307,7 @@ async function main() {
       (opening?.picks ?? 0) >= 4, `${opening?.picks} picks`);
 
     /* ------------------------------------------------------------ the league */
-    await page.locator('button', { hasText: 'League, standings and bracket' }).first().click();
+    await page.locator('.fo-link', { hasText: 'League' }).first().click();
     await page.waitForTimeout(400);
     check('the division tables render', await page.locator('.standings tbody tr').count() >= 16,
       `${await page.locator('.standings tbody tr').count()} rows`);
@@ -323,7 +323,7 @@ async function main() {
     await page.waitForTimeout(300);
 
     /* ------------------------------------------------------------ the roster */
-    await page.locator('button', { hasText: 'Roster and depth' }).first().click();
+    await page.locator('.fo-link', { hasText: 'Roster' }).first().click();
     await page.waitForTimeout(400);
     check('the depth chart renders', await page.locator('.roster-row').count() > 24,
       `${await page.locator('.roster-row').count()} players`);
@@ -343,7 +343,7 @@ async function main() {
     await page.waitForTimeout(300);
 
     /* ------------------------------------------------------------- the staff */
-    await page.locator('button', { hasText: 'Coaching staff' }).first().click();
+    await page.locator('.fo-link', { hasText: 'Staff' }).first().click();
     await page.waitForTimeout(350);
     check('all three coaches are rated', await page.locator('.meter').count() >= 9,
       `${await page.locator('.meter').count()} ratings`);
@@ -351,7 +351,7 @@ async function main() {
     await page.waitForTimeout(250);
 
     /* -------------------------------------------------------- the trade desk */
-    await page.locator('button', { hasText: 'Trade desk' }).first().click();
+    await page.locator('.fo-link', { hasText: 'Trade desk' }).first().click();
     await page.waitForTimeout(400);
     check('every other club can be called', await page.locator('.club-line').count() >= 31,
       `${await page.locator('.club-line').count()} clubs`);
@@ -364,7 +364,7 @@ async function main() {
     await page.getByRole('button', { name: 'Back' }).first().click();
     await page.waitForTimeout(300);
 
-    await page.locator('button', { hasText: 'Franchise history' }).first().click();
+    await page.locator('.fo-link', { hasText: 'History' }).first().click();
     await page.waitForTimeout(350);
     await page.locator('.seg__opt', { hasText: 'The record' }).first().click();
     await page.waitForTimeout(250);
@@ -383,7 +383,7 @@ async function main() {
       `${afterSeason?.history} seasons`);
     check('and the offseason is open', afterSeason?.stage === 'offseason', afterSeason?.stage);
 
-    await page.locator('button', { hasText: 'Franchise history' }).first().click();
+    await page.locator('.fo-link', { hasText: 'History' }).first().click();
     await page.waitForTimeout(350);
     await page.locator('.seg__opt', { hasText: 'Leaders' }).first().click();
     await page.waitForTimeout(300);
@@ -531,20 +531,20 @@ async function main() {
     await thumbs('the hub');
 
     const visit = async (label, name) => {
-      await page.locator('button', { hasText: label }).first().tap();
+      await page.locator('.fo-link', { hasText: label }).first().tap();
       await page.waitForTimeout(500);
       await overflow(name);
       await thumbs(name);
       await page.getByRole('button', { name: 'Back' }).first().tap();
       await page.waitForTimeout(300);
     };
-    await visit('Roster and depth', 'the roster');
-    await visit('League, standings and bracket', 'the league');
-    await visit('Coaching staff', 'the staff room');
-    await visit('Facilities and finances', 'facilities');
-    await visit('Franchise history', 'history');
+    await visit('Roster', 'the roster');
+    await visit('League', 'the league');
+    await visit('Staff', 'the staff room');
+    await visit('Facilities', 'facilities');
+    await visit('History', 'history');
 
-    await page.locator('button', { hasText: 'Trade desk' }).first().tap();
+    await page.locator('.fo-link', { hasText: 'Trade desk' }).first().tap();
     await page.waitForTimeout(450);
     await page.locator('.club-line').first().tap();
     await page.waitForTimeout(500);

@@ -156,7 +156,7 @@ for (const size of SIZES) {
   await menu('Challenge');
   await settle(450);
   await shot('challenge-intro');
-  await tap(/Choose your difficulty|Start the climb/i);
+  await tap(/Choose your difficulty|how hard a career|Start the climb/i);
   await settle(500);
   await shot('difficulty');
   if (await tap(/Compare all \d+/i)) {

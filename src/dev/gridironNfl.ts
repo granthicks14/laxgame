@@ -120,6 +120,17 @@ console.log('\nROSTERS AND RATINGS\n');
       / ratings.filter((x) => x.t.prestige <= 2).length);
 }
 
+{
+  /* A ROSTER IS THIRTY-FOUR DIFFERENT MEN. */
+  let clashes = 0;
+  for (const t of TEAMS) {
+    const squad = rosterOf({ seed: 5, teamId: '', rosterEdits: {}, prestigeDrift: {} } as unknown as Franchise, t.id, 1);
+    const names = squad.map((p) => p.last);
+    clashes += names.length - new Set(names).size;
+  }
+  check('no roster has two men with one surname', clashes === 0, `${clashes} repeats in 32 squads`);
+}
+
 /* ================================================================ a franchise */
 
 console.log('\nTWENTY SEASONS\n');
@@ -350,6 +361,37 @@ console.log('\nDETERMINISM\n');
   check('the same seed plays the same three seasons',
     JSON.stringify(a.history) === JSON.stringify(b.history),
     a.history.map((h) => `${h.wins}-${h.losses}`).join(' '));
+}
+
+/* ============================================================= development */
+
+console.log('\nDOES ANYBODY GET BETTER?\n');
+
+{
+  /* A SQUAD HAS TO VISIBLY DEVELOP. The first version of this rounded every
+   * season's growth to the nearest whole attribute point, which threw away
+   * nearly all of it: a whole roster finished a year with nobody improved. */
+  let upN = 0;
+  let downN = 0;
+  let old = 0;
+  let young: Franchise['roster'] = [];
+  for (const [teamId, seed] of [['ari', 77], ['nyj', 78], ['sea', 79]] as const) {
+    const dev = createFranchise({ mode: 'dynasty', teamId, coachName: 'D', difficulty: 'pro', seed });
+    old += dev.roster.filter((p) => p.age >= 30).length;
+    simulateSeason(dev);
+    upN += dev.lastDevelopment.filter((d) => d.after > d.before).length;
+    downN += dev.lastDevelopment.filter((d) => d.after < d.before).length;
+    young = young.concat(dev.roster.filter((p) => p.age <= 25));
+  }
+  const up = { length: upN };
+  const down = { length: downN };
+  check('a squad carries some veterans', old >= 6, `${old} aged 30+ across three squads`);
+  console.log(`  ${up.length} improved, ${down.length} slipped, ${young.length} aged 25 or under`);
+  check('young players improve in a season', up.length >= 15, `${up.length} improved in three squads`);
+  check('old ones slip', down.length >= 5, `${down.length} slipped in three squads`);
+  check('a young pro has room to grow',
+    young.length === 0 || young.reduce((s, p) => s + p.potential - p.overall, 0) / young.length >= 3,
+    `${(young.reduce((s, p) => s + p.potential - p.overall, 0) / Math.max(1, young.length)).toFixed(1)} points`);
 }
 
 /* ============================================================== week by week */

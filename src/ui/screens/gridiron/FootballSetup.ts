@@ -42,7 +42,13 @@ export class FootballSetupScreen implements Screen {
     let length = currentLength(app);
     let plan: GamePlan = 'balanced';
     let offenceOnly = true;
+    /* TWO SEPARATE QUESTIONS, asked separately: which slot a tap on a club
+     * fills, and which side you coach. The first version folded them into one
+     * rule — "whichever side you were last choosing is the side you coach" —
+     * which nobody could be expected to guess and which picked your team for
+     * you if you chose the home club second. */
     let picking: 'home' | 'away' = 'away';
+    let mine: 'home' | 'away' = 'home';
 
     const diffBlurb = h('div', { class: 'small', text: DIFFICULTIES[difficulty].blurb });
     const lenBlurb = h('div', { class: 'small', text: GAME_LENGTHS[length].blurb });
@@ -69,35 +75,54 @@ export class FootballSetupScreen implements Screen {
         h('div', { class: 'club-line__ovr num', text: String(r.overall) }));
     };
 
-    const homeSlot = h('div', { class: 'stack', style: 'gap:6px' });
-    const awaySlot = h('div', { class: 'stack', style: 'gap:6px' });
-    const list = h('div', { class: 'stack', style: 'gap:4px' });
+    const slots = h('div', { class: 'matchup' });
+    const list = h('div', { class: 'stack', style: 'gap:8px' });
+
+    /* THE MATCHUP IS THE PICKER. Tap a side to choose who goes in it; the side
+     * being filled is lit, and the club list below fills whichever one that is.
+     * Which of the two you COACH is its own question, underneath. */
+    const slotCard = (side: 'away' | 'home'): HTMLElement => {
+      const id = side === 'home' ? homeId : awayId;
+      const el = h('button', {
+        class: `matchup__slot${picking === side ? ' is-picking' : ''}`,
+        on: { click: () => { picking = side; paint(); } },
+      },
+      h('div', { class: 'matchup__label' },
+        h('span', { text: side === 'home' ? 'Home' : 'Away' }),
+        mine === side ? h('span', { class: 'matchup__you', text: 'You' }) : null),
+      card(teamOr(id)));
+      return el;
+    };
 
     const paint = (): void => {
-      homeSlot.replaceChildren(card(teamOr(homeId)));
-      awaySlot.replaceChildren(card(teamOr(awayId)));
+      slots.replaceChildren(slotCard('away'), h('div', { class: 'matchup__at', text: 'at' }), slotCard('home'));
       list.replaceChildren(...divisionsIn(conference).map((divisionId) =>
-        h('div', { class: 'stack', style: 'gap:3px' },
+        h('div', { class: 'stack', style: 'gap:4px' },
           h('div', { class: 'eyebrow', text: divisionId }),
-          ...teamsInDivision(divisionId).map((t) => {
-            const c = badgeColours(t);
-            return h('button', {
-              class: `btn btn--sm${t.id === homeId || t.id === awayId ? ' btn--primary' : ''}`,
-              on: {
-                click: () => {
-                  if (picking === 'home') homeId = t.id;
-                  else awayId = t.id;
-                  paint();
+          h('div', { class: 'club-grid' },
+            ...teamsInDivision(divisionId).map((t) => {
+              const c = badgeColours(t);
+              const on = t.id === homeId || t.id === awayId;
+              return h('button', {
+                class: `club-grid__item${on ? ' is-on' : ''}`,
+                ariaLabel: `${t.city} ${t.name}`,
+                on: {
+                  click: () => {
+                    if (picking === 'home') homeId = t.id;
+                    else awayId = t.id;
+                    // Fill the other slot next, which is what somebody picking two clubs means.
+                    picking = picking === 'home' ? 'away' : 'home';
+                    paint();
+                  },
                 },
               },
-            },
-            h('span', {
-              class: 'club-line__badge club-line__badge--sm',
-              style: `background:${c.fill};border-color:${c.edge};color:${c.text}`,
-              text: t.abbr,
-            }),
-            h('span', { text: ` ${t.city} ${t.name}` }));
-          }))));
+              h('span', {
+                class: 'club-line__badge club-line__badge--sm',
+                style: `background:${c.fill};border-color:${c.edge};color:${c.text}`,
+                text: t.abbr,
+              }),
+              h('span', { class: 'club-grid__name', text: t.name }));
+            })))));
     };
     paint();
 
@@ -108,7 +133,7 @@ export class FootballSetupScreen implements Screen {
       }
       const home = teamOr(homeId);
       const away = teamOr(awayId);
-      const humanSide = picking === 'home' ? 'home' : 'away';
+      const humanSide = mine;
       app.replace((a) => new FootballGameScreen(a, {
         config: {
           home: { team: home, roster: rosterFor(home, seed, 1) },
@@ -129,22 +154,21 @@ export class FootballSetupScreen implements Screen {
       topbar(app, 'Play Now', 'One game, no consequences'),
       h('div', { class: 'scroll' },
         h('div', { class: 'wrapper stack' },
-          panel('Away', awaySlot),
-          panel('Home', homeSlot),
-          panel('Pick the clubs',
-            segmented<'away' | 'home'>([
-              { value: 'away', label: 'Choose away' },
-              { value: 'home', label: 'Choose home' },
-            ], picking, (v) => { picking = v; }, true),
+          panel('The matchup',
+            slots,
+            h('div', { class: 'stack', style: 'gap:6px' },
+              h('div', { class: 'field-row__label', text: 'You coach' }),
+              segmented<'away' | 'home'>([
+                { value: 'away', label: 'Away' },
+                { value: 'home', label: 'Home' },
+              ], mine, (v) => { mine = v; paint(); }, true))),
+          panel('Clubs',
+            h('div', { class: 'tiny', text: 'Tap a side above, then a club.' }),
             segmented<Conference>(
               CONFERENCES.map((c) => ({ value: c, label: c })),
               conference,
               (v) => { conference = v; paint(); }, true),
-            list,
-            h('div', {
-              class: 'tiny',
-              text: 'Whichever side you were last choosing is the side you coach.',
-            })),
+            list),
 
           panel('The game',
             h('div', { class: 'stack', style: 'gap:6px' },

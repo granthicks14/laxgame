@@ -101,8 +101,30 @@ export function generateClass(seed: number, year: number): Prospect[] {
     writeReport(p, 0, 0);
     out.push(p);
   }
+
+  /* WHERE THE ROOM EXPECTS HIM TO GO is decided by what he is WORTH, not by
+   * the order he was generated in. A punter reading eighty-two is not a first-
+   * round pick in any room anybody has ever sat in, and the first version of
+   * this board projected three of them there. */
+  const ranked = [...out].sort((a, b) => trueValue(b) - trueValue(a));
+  ranked.forEach((p, rank) => {
+    p.projectedRound = clamp(Math.floor(rank / 32) + 1, 1, DRAFT_ROUNDS + 1);
+  });
   return out;
 }
+
+/** What a prospect is actually worth to a room that could see everything. */
+const trueValue = (p: Prospect): number =>
+  p.player.overall * 0.72 + p.player.potential * 0.28 + POSITION_VALUE[p.pos];
+
+/**
+ * THE ORDER A BOARD IS READ IN: the report, not the truth, and what the
+ * position is worth. Sorting on the grade alone puts every kicker and punter in
+ * the class near the top — a specialist's overall is four-fifths of one
+ * attribute — which is a board that is lying about who the good players are.
+ */
+export const boardValue = (p: Prospect): number =>
+  p.grade * 0.72 + p.ceiling * 0.28 + POSITION_VALUE[p.pos];
 
 /** A rookie deal, which is the cheapest labour in the sport and the point of a draft. */
 export const rookieSalary = (index: number): number =>

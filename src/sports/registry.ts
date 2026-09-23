@@ -239,9 +239,9 @@ export const SPORTS: SportManifest[] = [
     title: 'Hardwood',
     tagline: 'Five on five, and a shot you have to time.',
     blurb: 'Half-court basketball with real rim physics and a release window you '
-      + 'either hit or do not. Spacing, screens, help defence and the fast break, '
-      + 'over a full season.',
-    modes: ['Play Now', 'Season'],
+      + 'either hit or do not. Spacing, screens, help defence and the fast break — '
+      + 'and a coaching career from a school gym to the top of the sport.',
+    modes: ['Play Now', 'Season', 'Dynasty', 'Challenge'],
     theme: {
       accent: '#ff8c42', accentInk: '#1a0d00',
       surface: '#b9793f', surfaceLine: '#e6c9a3', backdrop: '#0c0a09',
@@ -254,9 +254,9 @@ export const SPORTS: SportManifest[] = [
     name: 'Football',
     title: 'Gridiron',
     tagline: 'Four downs, a playbook, and ten yards.',
-    blurb: 'Call the play, throw the ball, and live with it. Routes that are '
-      + 'really run, coverage that reads what you keep calling, and a pass rush '
-      + 'that has to beat a block to reach you.',
+    blurb: 'You play offence and coach defence. Call it, snap it, throw it — then '
+      + 'run a thirty-two club franchise: the draft, the cap, free agency, a staff, '
+      + 'and one game in February.',
     modes: ['Play Now', 'Dynasty', 'Challenge'],
     theme: {
       accent: '#7ad151', accentInk: '#08160a',

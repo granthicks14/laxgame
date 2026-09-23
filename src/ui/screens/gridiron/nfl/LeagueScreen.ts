@@ -76,9 +76,9 @@ export class LeagueScreen implements Screen {
         const seed = seeds.find((x) => x.teamId === s.teamId);
         return h('tr', { class: s.teamId === fr.teamId ? 'is-mine' : '' },
           h('td', { class: 'num', text: showSeed ? String(seed?.seed ?? '') : String(i + 1) }),
-          h('td', null, badge(s.teamId, 'sm'), h('span', { text: ` ${team.abbr}` })),
+          h('td', null, badge(s.teamId, 'sm'), h('span', { text: ` ${team.name}` })),
           h('td', { class: 'num', text: String(s.wins) }),
-          h('td', { class: 'num', text: String(s.losses + (s.ties ? 0 : 0)) }),
+          h('td', { class: 'num', text: s.ties ? `${s.losses}-${s.ties}` : String(s.losses) }),
           h('td', { class: 'num', text: winPct(s).toFixed(3).slice(1) }),
           h('td', { class: 'num', text: String(s.pointsFor - s.pointsAgainst) }));
       })));

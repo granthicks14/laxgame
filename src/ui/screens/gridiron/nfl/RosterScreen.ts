@@ -84,7 +84,10 @@ export class RosterScreen implements Screen {
       return panel(`${POSITION_LABEL[pos]}${short ? ' — SHORT' : ''}`,
         h('div', { class: 'tiny', text: `League average starter: ${bar}` }),
         ...at.map((p, i) => playerRow(p, {
-          note: i === 0 ? 'Starter' : undefined,
+          starter: i === 0,
+          note: i === 0
+            ? `Starter · #${p.number} · ${p.age} · ${money(p.salary)} · ${p.contractYears}y`
+            : undefined,
           onClick: () => this.openPlayer(p),
         })));
     });

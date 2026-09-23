@@ -126,7 +126,11 @@ export class ChallengeEntryScreen implements Screen {
 
     if (!existing) {
       body.push(panel('Settings',
-        fieldRow('Difficulty', 'Higher rungs raise this floor whatever you pick here.',
+        /* TWO DIFFERENT KINDS OF HARD, and this screen used to call both of them
+         * "difficulty": this one is how well the opposition plays a game, the
+         * next screen is how hard the CAREER is. Naming them apart is the whole
+         * fix. */
+        fieldRow('On-field difficulty', 'How well the opposition plays. Higher rungs raise this floor.',
           segmented(
             DIFFICULTY_ORDER.map((k) => ({ value: k, label: DIFFICULTIES[k].label })),
             draft.difficulty,
@@ -143,7 +147,7 @@ export class ChallengeEntryScreen implements Screen {
       body.push(h('button', {
         class: 'btn btn--primary btn--block',
         style: 'min-height:54px;font-size:18px',
-        text: 'Choose your difficulty',
+        text: 'Next: how hard a career',
         on: { click: start },
       }));
     }

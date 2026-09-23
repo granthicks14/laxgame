@@ -4,8 +4,8 @@ import { panel, screenEl, segmented, topbar } from '../../../components';
 import { POSITIONS, POSITION_LABEL, type Position } from '../../../../sports/football/data';
 import { teamOr } from '../../../../sports/football/nfl';
 import {
-  autoPick, draftDone, draftOrder, draftSlots, makePick, onTheClock, roundLabel, runDraft,
-  scout, scoutLabel, type Slot,
+  autoPick, boardValue, draftDone, draftOrder, draftSlots, makePick, onTheClock, roundLabel,
+  runDraft, scout, scoutLabel, type Slot,
 } from '../../../../sports/football/franchise/draft';
 import { needFor } from '../../../../sports/football/franchise/autogm';
 import { push } from '../../../../sports/football/franchise/news';
@@ -136,10 +136,12 @@ export class DraftScreen implements Screen {
     if (this.posFilter !== 'ALL') pool = pool.filter((p) => p.pos === this.posFilter);
     if (this.filter === 'scouted') pool = pool.filter((p) => p.scouted > 0);
     if (this.filter === 'need') {
-      pool = pool.sort((a, b) => (needFor(fr.roster, b.pos) * 26 + b.grade)
-        - (needFor(fr.roster, a.pos) * 26 + a.grade));
+      pool = pool.sort((a, b) => (needFor(fr.roster, b.pos) * 26 + boardValue(b))
+        - (needFor(fr.roster, a.pos) * 26 + boardValue(a)));
+    } else if (this.filter === 'taken') {
+      pool = pool.sort((a, b) => (a.takenAt ?? 999) - (b.takenAt ?? 999));
     } else {
-      pool = pool.sort((a, b) => b.grade - a.grade);
+      pool = pool.sort((a, b) => boardValue(b) - boardValue(a));
     }
     if (!pool.length) {
       return [panel('The board', h('div', { class: 'small', text: 'Nobody here.' }))];

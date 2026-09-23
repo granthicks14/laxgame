@@ -69,7 +69,7 @@ check('the ladder is on the entry screen', await page.locator('.rung').count() =
 
 // A career now starts by choosing how hard it is, and the choice is permanent,
 // so it gets its own screen before the first job.
-await clickText(/Choose your difficulty/);
+await clickText(/Choose your difficulty|how hard a career/);
 await settle(500);
 const tiers = await page.locator('.panel, .btn').allInnerTexts();
 const tierText = tiers.join(' ').toLowerCase();

@@ -345,3 +345,47 @@ console.log('\nTHE KICK\n');
   console.log(`\n${problems.length === 0 ? 'The kick is a skill and a rating, in that order.' : `${problems.length} PROBLEM(S):`}`);
   for (const p of problems) console.log(`  ! ${p}`);
 }
+
+/* ===========================================================================
+ * THE OPENING KICKOFF, WITH SOMEBODY AT THE STICKS
+ * ===========================================================================
+ * The kicking side used to wait for the person to press snap on his own
+ * kickoff. Nobody told him to, the play clock ran out, and the delay of game
+ * turned the kickoff into a first and fifteen for the KICKING team. Every
+ * game in which the person was the away side opened that way.
+ * ========================================================================= */
+
+console.log('\nTHE OPENING KICKOFF\n');
+
+{
+  const neutral = neutralFootballInput;
+  let bad = 0;
+  const seen: string[] = [];
+  for (const human of ['home', 'away'] as const) {
+    for (let seed = 1; seed <= 6; seed++) {
+      const game = new FootballGame({
+        home: { team: team('a', 'A', 'A', 'AAA'), roster: buildRoster(`ko:h:${seed}`, { par: 66, spread: 12 }) },
+        away: { team: team('b', 'B', 'B', 'BBB'), roster: buildRoster(`ko:a:${seed}`, { par: 66, spread: 12 }) },
+        humanSide: human,
+        quarterSeconds: 210,
+        difficulty: DIFFICULTIES.pro,
+        seed,
+        offenseOnly: true,
+      });
+      let penalties = 0;
+      for (let f = 0; f < 60 * 180; f++) {
+        game.update(DT, neutral());
+        penalties = game.box.home.penalties + game.box.away.penalties;
+        if (game.phase === 'playcall' && game.possession === human) break;
+      }
+      /* Whoever kicked, the first ball the person gets is a fresh series and
+       * nobody has been flagged for standing still on a kickoff. */
+      if (game.toGo > 10.01 || penalties > 0) {
+        bad++;
+        seen.push(`${human}#${seed}: ${game.downText}, ${penalties} penalties`);
+      }
+    }
+  }
+  if (bad) problems.push(`the opening went wrong ${bad} times: ${seen.slice(0, 3).join('; ')}`);
+  console.log(bad ? `  ${bad} bad openings` : '  Twelve openings, home and away: every one a clean first and ten.');
+}

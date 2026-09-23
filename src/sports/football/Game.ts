@@ -97,6 +97,19 @@ export class FootballGame {
   gamePlan: GamePlan;
 
   /**
+   * WHERE A QUARTERBACK'S PROGRESSION STARTS ON THIS SNAP.
+   *
+   * Every pass in the book lists its routes primary-first, and a quarterback
+   * who always opens on the same man throws him two-thirds of the team's
+   * targets — measured, one receiver was catching eight of twenty-six while
+   * the other two saw six balls between them. A real first read is decided by
+   * the look the defence gives, so it moves from snap to snap: the primary
+   * most often, the second and third often enough that a defence cannot sit on
+   * one man.
+   */
+  firstRead = 0;
+
+  /**
    * THE KICK, WHEN IT IS HIS TO TAKE.
    *
    * A football game that resolves its field goals with a dice roll has taken
@@ -312,7 +325,13 @@ export class FootballGame {
      * low overrides it, because a delay of game is worse. */
     const set = this.allSet() || this.playClock < 7;
 
-    const mine = this.humanSide !== null && this.possession === this.humanSide;
+    /* A KICKOFF IS NOBODY'S DECISION. It used to wait for the person's snap
+     * like any other play, so a first-time player who did not know he had to
+     * press anything on his own kickoff stood there until the play clock ran
+     * out — and the delay-of-game below then turned the kickoff into a first
+     * and fifteen for the KICKING side. Every kickoff is taken on its own. */
+    const mine = this.humanSide !== null && this.possession === this.humanSide
+      && this.kickKind !== 'kickoff';
     if (mine) {
       if (input.snapPressed && set) this.snap();
       return;
@@ -343,6 +362,8 @@ export class FootballGame {
     this.snapSide = this.possession;
     this.playTime = 0;
     this.thrown = false;
+    const look = this.rng.next();
+    this.firstRead = look < 0.38 ? 0 : look < 0.68 ? 1 : look < 0.88 ? 2 : 3;
     this.ball.state = 'held';
     this.ball.age = 0;
 
@@ -1067,10 +1088,17 @@ export class FootballGame {
      * had no interceptions at all — coverage existed but could not do anything.
      */
     const reach = clamp(1 - recGap / FOOTBALL.catchRadius, 0, 1);
-    const hands = 0.5 + rec.data.attrs.catching / 140;
+    const hands = 0.58 + rec.data.attrs.catching / 150;
     const cover = def ? 0.35 + def.data.attrs.coverage / 150 : 0;
+    /* PRESSURE BITES HARD ONLY WHEN IT IS REALLY TIGHT. Measured over eight
+     * games, a defender was within three yards of the ball on ninety-four per
+     * cent of passes — defenders break on the throw, as they should — and a
+     * contest that punished a man two yards off as hard as one on the hip
+     * turned half of every team's passes into break-ups. Raising the pressure
+     * to a power keeps a blanket as a blanket and a trail as a trail. */
+    const squeeze = Math.pow(press, 1.5);
     const chance = clamp(
-      (0.55 + reach * 0.45) * hands * help * (1 - press * cover * 0.62),
+      (0.7 + reach * 0.3) * hands * help * (1 - squeeze * cover * 0.55),
       0.05, 0.95,
     );
     if (this.rng.next() < chance) {
@@ -1083,7 +1111,9 @@ export class FootballGame {
      * calculation and not three: a system that asks each question separately can
      * answer none of them, or all of them. */
     if (def) {
-      const pick = clamp(0.014 + def.data.attrs.coverage / 1800, 0.012, 0.1) * press;
+      /* A TIGHT BALL THAT IS NOT CAUGHT IS SOMETIMES CAUGHT BY THE OTHER MAN.
+       * Tuned against the real sport's two and a bit per cent of attempts. */
+      const pick = clamp(0.03 + def.data.attrs.coverage / 1200, 0.02, 0.14) * press;
       if (this.rng.next() < pick) { this.intercept(def); return; }
       this.statFor(def).passesDefended++;
       this.incomplete('defended');
@@ -1359,8 +1389,10 @@ export class FootballGame {
       by: by ? this.nameOf(by) : null,
       on: carrier ? this.nameOf(carrier) : null,
       text: outcome === 'sack'
-        ? `Sacked for ${Math.abs(yards)}`
-        : `${yards >= 0 ? `${yards} yard` : `${Math.abs(yards)} yard loss`}`,
+        ? `Sacked for a loss of ${Math.abs(yards)}`
+        : yards === 0 ? 'No gain'
+          : yards > 0 ? `Gain of ${yards}${outAt ? ', out of bounds' : ''}`
+            : `Loss of ${Math.abs(yards)}`,
       turnover: false,
       points: 0,
       // Out of bounds stops the clock; a tackle in the field does not.
@@ -1969,11 +2001,22 @@ export class FootballGame {
     const dir = attackDir(this.possession);
     this.lineOfScrimmage = clamp(this.lineOfScrimmage - dir * 5,
       FIELD.homeGoal + 1, FIELD.awayGoal - 1);
-    this.toGo += 5;
     this.box[this.possession].penalties++;
     this.setBanner('DELAY OF GAME', 1.8);
-    this.phase = 'playcall';
     this.playClock = FOOTBALL.playClock;
+    /* A KICKOFF STAYS A KICKOFF, five yards further back. Sending it to the
+     * play-call menu instead handed the kicking team the ball. */
+    if (this.kickKind === 'kickoff') {
+      this.setKickFormation();
+      this.phase = 'presnap';
+      this.presnapTime = 0;
+      return;
+    }
+    /* Any other kick is re-called: a field goal five yards longer is a
+     * different decision, and the coach gets to make it again. */
+    if (this.tryKind === 'none') this.toGo += 5;
+    this.kickKind = 'none';
+    this.phase = 'playcall';
   }
 
   /* ------------------------------------------------------------- the kickoff */

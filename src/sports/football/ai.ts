@@ -620,7 +620,7 @@ function coverZone(game: FootballGame, p: FieldPlayer, dt: number): void {
 
 /* ================================================================ quarterback */
 
-interface Read { p: FieldPlayer; score: number; sep: number }
+interface Read { p: FieldPlayer; score: number; sep: number; depth: number }
 
 /**
  * PLAYING QUARTERBACK.
@@ -668,7 +668,12 @@ export function aiQuarterback(game: FootballGame, qb: FieldPlayer, dt: number): 
   /* HE LETS THE PLAY HAPPEN. Throwing at eight tenths of the timing means the
    * ball is gone before the rush has had a chance to matter, and a passing game
    * with no sacks in it is a passing game with no decisions in it. */
-  const ready = game.playTime >= play.develops * (0.95 + (1 - decision) * 0.3);
+  /* ON RHYTHM. A good quarterback throws as the receiver breaks, not after he
+   * has finished his route and run another eight yards across the field — the
+   * first version waited out the full timing on every play, so the average
+   * ball travelled twenty-eight yards and a defender had arrived by the time
+   * it landed. Half of all passes were broken up. */
+  const ready = game.playTime >= play.develops * (0.84 + (1 - decision) * 0.3);
 
   /* HE WORKS THE PROGRESSION, and takes the first man who is open.
    *
@@ -681,14 +686,20 @@ export function aiQuarterback(game: FootballGame, qb: FieldPlayer, dt: number): 
    * the play with the primary uncovered is how a quarterback turns a six yard
    * completion into a sack, and it is also what keeps the average pass in this
    * game twice as deep as the real sport's. */
+  /* A DEEP BALL HAS TO BE MORE OPEN THAN A SHORT ONE BEFORE HE LETS IT GO.
+   * Real quarterbacks throw short because short is safe and they know it; one
+   * who treats a twenty-five yard window like a six yard one throws the ball
+   * twice as far downfield as the sport does, which is what this did. */
+  const bar = (r: Read): number => need * (r.depth > 12 ? 1 + (r.depth - 12) / 22
+    : r.depth < 7 ? 0.62 : 0.85);
   const gift = reads[0];
-  if (gift && gift.sep >= need + 4.2 && game.playTime > 0.55) {
+  if (gift && gift.sep >= bar(gift) + 4.2 && game.playTime > 0.55) {
     game.throwTo(qb, gift.p);
     return;
   }
 
   if (ready) {
-    const take = reads.find((r) => r.sep >= need);
+    const take = reads.find((r) => r.sep >= bar(r));
     if (take) {
       game.throwTo(qb, take.p);
       return;
@@ -777,6 +788,10 @@ function readTheField(game: FootballGame, qb: FieldPlayer, decision: number): Re
     if (man) ordered.push(man);
   }
   for (const r of eligible) if (!ordered.includes(r)) ordered.push(r);
+  /* THE LOOK DECIDES THE FIRST READ — see `firstRead`. The rest of the
+   * progression follows in the order it was written. */
+  const first = Math.min(game.firstRead, Math.max(0, ordered.length - 1));
+  if (first > 0) ordered.unshift(...ordered.splice(first, 1));
   const canSee = Math.max(2, Math.round(2 + decision * 3.2));
   ordered.length = Math.min(ordered.length, canSee);
 
@@ -825,7 +840,7 @@ function readTheField(game: FootballGame, qb: FieldPlayer, decision: number): Re
      * another second to arrive. Charging the throw for its own flight time is
      * what stops an offence from living entirely on forty yard touchdowns, which
      * is what it did when every throw was judged against the same two yards. */
-    out.push({ p: r, score, sep: (sep - beyond * 1.5) / (1 + flight * 0.55) });
+    out.push({ p: r, score, sep: (sep - beyond * 1.5) / (1 + flight * 0.55), depth });
   }
   // In progression order, not best-first: the caller walks it.
   return out;

@@ -57,33 +57,35 @@ export function clubLine(
 
 export const money = (m: number): string => `${m.toFixed(1)}M`;
 
-/** The one-line summary of a footballer: who, what, how good, how much. */
+/**
+ * THE ONE-LINE SUMMARY OF A FOOTBALLER: who, what, how good, how much.
+ *
+ * Two lines inside one row, the way basketball's rows are built — position, then
+ * his name with the detail underneath it, then the number. The first version
+ * put six things side by side and on a phone the NAME, the one thing anybody is
+ * looking for, was the one that got squeezed off the right-hand edge.
+ */
 export function playerRow(p: Player, opts: {
   note?: string;
   right?: string;
   onClick?: () => void;
+  starter?: boolean;
 } = {}): HTMLElement {
   const bar = starterBar(p.pos);
   const tone = p.overall >= bar + 4 ? ' good' : p.overall <= bar - 9 ? ' bad' : '';
   const hurt = p.injury && p.injury.weeks >= 1;
-  const el = h('div', { class: 'roster-row' },
-    h('span', { class: 'roster-row__pos', text: p.pos }),
-    h('span', { class: 'roster-row__num num', text: String(p.number) }),
-    h('span', { class: 'roster-row__name', text: `${p.first} ${p.last}` }),
-    h('span', {
-      class: `roster-row__meta tiny${hurt ? ' bad' : ''}`,
-      text: opts.note ?? (hurt ? injuryText(p) : `${p.age} · ${money(p.salary)} · ${p.contractYears}y`),
-    }),
-    h('span', { class: `roster-row__ovr num${tone}`, text: opts.right ?? String(p.overall) }));
-  if (opts.onClick) {
-    el.setAttribute('role', 'button');
-    el.tabIndex = 0;
-    el.addEventListener('click', opts.onClick);
-    el.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); opts.onClick!(); }
-    });
-  }
-  return el;
+  const detail = opts.note
+    ?? (hurt ? injuryText(p) : `#${p.number} · ${p.age} · ${money(p.salary)} · ${p.contractYears}y`);
+  const clickable = !!opts.onClick;
+  return h(clickable ? 'button' : 'div', {
+    class: `roster-row${opts.starter ? ' roster-row--on' : ''}`,
+    ...(clickable ? { on: { click: () => opts.onClick!() } } : {}),
+  },
+  h('span', { class: 'roster-row__pos', text: p.pos }),
+  h('div', { class: 'roster-row__body' },
+    h('div', { class: 'roster-row__name', text: `${p.first} ${p.last}` }),
+    h('div', { class: `roster-row__note tiny${hurt ? ' bad' : ''}`, text: detail })),
+  h('span', { class: `roster-row__ovr num${tone}`, text: opts.right ?? String(p.overall) }));
 }
 
 /** The attributes the position is actually judged on, biggest weight first. */

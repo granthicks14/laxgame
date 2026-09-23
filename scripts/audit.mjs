@@ -159,10 +159,10 @@ const routes = [
   ['Challenge', async () => {
     // "Start on ..." actually begins a career, and "Abandon" destroys one, so
     // both are skipped — everything else on these three screens gets clicked.
-    const skip = /Choose your difficulty|Start on|Abandon/i;
+    const skip = /Choose your difficulty|how hard a career|Start on|Abandon/i;
     await sweep('Challenge entry', skip);
     const openPicker = async () => {
-      const pick = page.getByRole('button', { name: /Choose your difficulty/i }).first();
+      const pick = page.getByRole('button', { name: /Choose your difficulty|how hard a career/i }).first();
       if (!(await pick.count())) return false;
       await pick.click();
       await settle(420);

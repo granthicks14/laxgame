@@ -1,7 +1,8 @@
 import { Rng } from '../../../core/rng';
 import { clamp } from '../../../core/math';
 import {
-  ATTR_MAX, ATTR_MIN, PERSONALITY, computeOverall, type AttrKey, type Player, type Position,
+  ATTR_MAX, ATTR_MIN, PERSONALITY, POSITION_WEIGHTS, computeOverall,
+  type AttrKey, type Player, type Position,
 } from '../data';
 import { trainingMult } from './club';
 import { coachingOf } from './staff';
@@ -55,7 +56,7 @@ export function ageCurve(age: number): number {
   if (age <= 26) return 0.8;
   if (age <= 28) return 0.4;
   if (age <= 29) return 0.1;
-  if (age <= 31) return -0.45;
+  if (age <= 31) return -0.6;
   if (age <= 33) return -0.95;
   if (age <= 35) return -1.5;
   return -2.2;
@@ -74,6 +75,20 @@ export interface DevNote {
 /**
  * ONE PLAYER, ONE OFFSEASON.
  *
+ * THE MODEL WORKS IN OVERALL POINTS and only then turns them into attributes,
+ * because the overall is what a coach reads. The first version grew raw
+ * attribute points and let the position weighting decide what they were worth
+ * — which meant a twenty-three-year-old with eight points of ceiling above him
+ * gained about four tenths of a point a year and would have needed two decades
+ * to reach it, while a thirty-two-year-old's decline landed on speed and
+ * agility, which a lineman's overall barely reads, and never showed at all.
+ *
+ *   growing   close a fraction of the gap to his ceiling. The fraction is the
+ *             age curve times how hard he works, whether he played, who is
+ *             coaching him and what the building is like.
+ *   fading    lose points to the age curve whatever anybody does. A rehab wing
+ *             buys a season, not a decade.
+ *
  * @param snaps  how much he played, which is the single biggest term after age
  */
 export function developPlayer(
@@ -83,27 +98,22 @@ export function developPlayer(
   const curve = ageCurve(p.age) * (SPECIALIST(p.pos) ? 0.45 : 1);
 
   if (curve > 0) {
-    /* GROWING. Room above him, how hard he works and how much he played, and
-     * then the coaching multiplies all of it — which is what makes a good
-     * coordinator and a training centre worth paying for rather than a number
-     * on a screen. */
-    const room = clamp((p.potential - p.overall) / 22, 0, 1.2);
+    const room = Math.max(0, p.potential - p.overall);
     const work = 0.55 + (p.work / 99) * 0.9;
     const played = opts.teamSnaps > 0
       ? 0.45 + clamp(opts.snaps / Math.max(1, opts.teamSnaps * 0.55), 0, 1) * 0.85
       : 0.75;
-    const gain = rng.range(0.2, 1) * 7.2 * curve * room * work * played
-      * opts.coaching * opts.facility;
-    bump(p, GROWS[p.pos], gain, rng);
+    const rate = clamp(0.2 * curve * work * played * opts.coaching * opts.facility, 0, 0.75);
+    const gain = room * rate * rng.range(0.55, 1.35);
+    shiftOverall(p, GROWS[p.pos], gain, 1, rng);
   } else {
-    /* FADING. Speed goes first and it goes whatever anybody does about it; a
-     * rehab wing buys a season, not a decade. */
-    const loss = rng.range(0.3, 1) * 5.4 * -curve / Math.max(0.8, opts.facility * 0.85);
-    bump(p, FADES, -loss, rng);
-    /* THE ONE THING THAT STILL GROWS. He has seen it all before, and an
-     * experienced player who has lost a step is a different player rather than
-     * simply a worse one. */
-    if (rng.bool(0.55)) bump(p, ['awareness'], rng.range(0.4, 1.6), rng);
+    const loss = -curve * 2 * rng.range(0.5, 1.4) / Math.max(0.8, opts.facility * 0.85);
+    /* SPEED GOES FIRST, and it goes whatever anybody does about it — but the
+     * loss is aimed at what the POSITION reads, so it actually shows up on the
+     * number a coach looks at. */
+    shiftOverall(p, Object.keys(POSITION_WEIGHTS[p.pos]) as AttrKey[], -loss, 1.7, rng);
+    /* THE ONE THING THAT STILL GROWS. He has seen it all before. */
+    if (rng.bool(0.5)) bump(p, ['awareness'], rng.range(0.4, 1.4), rng);
   }
 
   p.overall = computeOverall(p.pos, p.attrs);
@@ -113,11 +123,42 @@ export function developPlayer(
   return p.overall - before;
 }
 
+/**
+ * MOVE HIS OVERALL BY `amount`, spent on the attributes his position weighs.
+ *
+ * Each key gets a share scaled by one over the total weight of the keys chosen,
+ * which is what makes the expected change in the overall equal to `amount`.
+ * `physical` is how much more of a LOSS the four physical attributes take.
+ */
+function shiftOverall(p: Player, keys: AttrKey[], amount: number, physical: number, rng: Rng): void {
+  const weights = POSITION_WEIGHTS[p.pos];
+  const chosen = keys.filter((k) => (weights[k] ?? 0) > 0);
+  if (!chosen.length || amount === 0) return;
+  const factor = (k: AttrKey): number => (FADES.includes(k) ? physical : 1);
+  const total = chosen.reduce((s, k) => s + (weights[k] ?? 0) * factor(k), 0);
+  for (const k of chosen) {
+    const v = p.attrs[k] + (amount * factor(k) / total) * rng.range(0.6, 1.4);
+    const whole = Math.floor(v);
+    p.attrs[k] = clamp(whole + (rng.next() < v - whole ? 1 : 0), ATTR_MIN, ATTR_MAX);
+  }
+}
+
+/**
+ * SPREAD A CHANGE OVER THE ATTRIBUTES A POSITION GROWS.
+ *
+ * ROUNDED STOCHASTICALLY, and that is the whole of the fix: a season's growth
+ * spread over four attributes is often under half a point each, and rounding
+ * that to the nearest integer threw it away every time — while a decline, which
+ * comes in bigger lumps, survived. Measured, a full squad would finish a year
+ * with nobody improved and one man slipped. Carrying the fraction as a chance
+ * keeps the expected value exactly what the model asked for.
+ */
 function bump(p: Player, keys: AttrKey[], amount: number, rng: Rng): void {
   if (!keys.length) return;
   for (const k of keys) {
-    const share = (amount / keys.length) * rng.range(0.5, 1.5);
-    p.attrs[k] = clamp(Math.round(p.attrs[k] + share), ATTR_MIN, ATTR_MAX);
+    const v = p.attrs[k] + (amount / keys.length) * rng.range(0.5, 1.5);
+    const whole = Math.floor(v);
+    p.attrs[k] = clamp(whole + (rng.next() < v - whole ? 1 : 0), ATTR_MIN, ATTR_MAX);
   }
 }
 
